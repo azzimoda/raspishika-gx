@@ -7,7 +7,7 @@
 
 ---
 
-## Функционал
+## Функционал бота
 
 Для быстрого получения расписания своей группы и для рассылок необходимо задать свою группу. Бот предложит задать её сразу после начала чата (/start), а также её можно задать в меню настроек (/settings).
 
@@ -54,6 +54,8 @@
 
 ### Docker
 
+> TODO: add Docker & Compose
+
 ```sh
 docker-compose up --build --remove-orphans
 ```
@@ -84,7 +86,11 @@ docker run --rm \
    ```bash
    go build ./cmd/bot
    ```
-4. Подготовить конфигурацию, указав токен бота и другие параметры в файле `.env`, например:
+4. Скачать список прокси:
+   ```bash
+   bash ./scripts/update_proxy_list.sh
+   ```
+5. Подготовить конфигурацию, указав токен бота и другие параметры в файле `.env`, например:
    ```bash
    # Required
    BOT_TOKEN=your_bot_token_here
@@ -93,7 +99,7 @@ docker run --rm \
    ADMIN_BOT_TOKEN=your_admin_bot_token_here
    ADMIN_ID=admin_user_id_here
    ```
-5. Запустить бота:
+6. Запустить бота:
    ```bash
    ./bot
    ```
