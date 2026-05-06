@@ -45,6 +45,10 @@ func (s *ScraperService) ScrapeSchedule(url model.URL, conf model.ScheduleConfig
 		return nil, fmt.Errorf("encoding conversion failed: %w", err)
 	}
 
+	if log.Logger.GetLevel() == zerolog.TraceLevel {
+		saveScheduleCache(conf, fixedEncoding)
+	}
+
 	return parseSchedule(fixedEncoding, conf)
 }
 
@@ -166,6 +170,8 @@ func (s *ScraperService) ScrapeTeachers() (teachers []model.Teacher, err error) 
 const maxRetries = 10
 
 func (s *ScraperService) getScheduleHTML(url model.URL, conf model.ScheduleConfig) (string, error) {
+	log.Trace().Msg("")
+
 	browser := s.browser
 	var lastErr error
 	var html string
@@ -209,16 +215,28 @@ func (s *ScraperService) getScheduleHTML(url model.URL, conf model.ScheduleConfi
 	}
 
 	if log.Logger.GetLevel() == zerolog.TraceLevel {
-		// Save HTML to cache directory
-		filename := filepath.Join(viper.GetString(config.KeyCacheDir), conf.String()+".html")
-		if err := os.WriteFile(filename, []byte(html), 0644); err != nil {
-			log.Warn().Err(err).Msg("Failed to save schedule HTML to file")
-		} else {
-			log.Debug().Msgf("Saved schedule HTML to %s", filename)
-		}
+		saveScheduleCache(conf, html)
 	}
 
 	return html, nil
+}
+
+func saveScheduleCache(conf model.ScheduleConfig, html string) {
+	cacheDir := viper.GetString(config.KeyCacheDir)
+
+	// Ensure directory
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		log.Warn().Err(err).Msg("Failed to create cache directory")
+		return
+	}
+
+	// Save HTML to cache directory
+	filename := filepath.Join(cacheDir, conf.String()+".html")
+	if err := os.WriteFile(filename, []byte(html), 0644); err != nil {
+		log.Warn().Err(err).Msg("Failed to save schedule HTML to file")
+	} else {
+		log.Debug().Msgf("Saved schedule HTML to %s", filename)
+	}
 }
 
 // ScheduleURL returns formatted URL for group or teacher schedule page depending on the given schedule config.
