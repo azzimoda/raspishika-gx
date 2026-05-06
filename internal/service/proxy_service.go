@@ -79,7 +79,7 @@ func (s *ProxyService) Check(proxy string) error {
 		// Proxy is not available
 		return fmt.Errorf("%w: %w", ErrProxyUnavailable, err)
 	}
-	opts := []bot.Option{bot.WithHTTPClient(30*time.Second, httpClient)}
+	opts := []bot.Option{bot.WithHTTPClient(10*time.Second, httpClient)}
 	_, err = bot.New("faketoken", opts...)
 	if strings.Contains(err.Error(), "not found") {
 		// Telegram servers are abailable, the proxy is available
