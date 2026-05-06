@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+
+<head>
+    <style>
+        * {
+            --background: #2b2b2b;
+            --text-color: white;
+            --border-color: #444;
+            --bg-time: #333333;
+            --bg-replaced: #786c3b;
+            --bg-event: #8b3f3f;
+            --bg-iga: #3e8e41;
+            --bg-practice: #2f80b2;
+            --bg-exam: #663333;
+            --bg-consultation: #3e5943;
+            --bg-session: #444400;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text-color);
+            font-family: Arial, sans-serif;
+            font-size: 1vw;
+            margin: 1%;
+        }
+
+        table#main_table {
+            border-collapse: collapse;
+            table-layout: fixed;
+            width: 98%;
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border-color);
+            padding: 4px;
+            text-align: center;
+            min-height: 3vw;
+        }
+
+        th,
+        td.side_column_number,
+        td.side_column_time {
+            background-color: var(--bg-time);
+        }
+
+        .side_column_number {
+            width: 1%;
+        }
+
+        .side_column_time {
+            width: 3%;
+        }
+
+        .replaced {
+            background-color: var(--bg-replaced);
+        }
+
+        .title,
+        .discipline,
+        .classroom {
+            font-weight: bold;
+            word-break: break-word;
+        }
+
+        .event {
+            background-color: var(--bg-event);
+        }
+
+        .iga {
+            background-color: var(--bg-iga);
+        }
+
+        .practice {
+            background-color: var(--bg-practice);
+        }
+
+        .exam {
+            background-color: var(--bg-exam);
+        }
+
+        .consultation {
+            background-color: var(--bg-consultation);
+        }
+
+        .session {
+            background-color: var(--bg-session);
+        }
+
+        .example {
+            border: 1px solid var(--border-color);
+            padding: 0.2vw 0.4vw;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>HEADER</h2>
+    <table id="main_table">
+        <thead>
+            <tr>
+                <th class="side_column_number">№</th>
+                <th class="side_column_time">Время</th>
+                TABLE_HEAD
+            </tr>
+        </thead>
+        <tbody>
+            TABLE_BODY
+        </tbody>
+    </table>
+    <p>
+        <b>Условные обозначения:</b>
+        <span class="example replaced">замена</span>;
+        <span class="example session">сессия</span>;
+        <span class="example event">праздничный день</span>;
+        <span class="example practice">практика</span>;
+        <span class="example iga">ИГА</span>;
+        <span class="example exam">экзамен/зачёт</span>;
+        <span class="example consultation">консультация</span>;
+        <!-- <span class='example holiday'>каникулы</span>; -->
+    </p>
+    <p>Сгенерировано в TIMESTAMP</p>
+</body>
+
+</html>

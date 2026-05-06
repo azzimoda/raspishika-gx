@@ -1,0 +1,185 @@
+package mainbot
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"regexp"
+
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
+
+	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/internal/service"
+	"github.com/azzimoda/raspishika-gx/pkg/reporter"
+)
+
+var ErrNoChatContext error = errors.New("failed to get chat from context")
+
+func newHandler(s *service.Services, reporter reporter.Reporter) *handler {
+	return &handler{Services: s, Reporter: reporter}
+}
+
+type handler struct {
+	*service.Services
+	reporter.Reporter
+	Me *models.User
+}
+
+func (h *handler) registerHandlers(b *bot.Bot) {
+	// Commands
+	{
+		registerCommandHandler(b, "start", h.handleCmdStart, h.checkRegularAccess)
+		registerCommandHandler(b, "help", h.handleCmdHelp, h.checkRegularAccess)
+		registerCommandHandler(b, "stop", h.handleCmdStop, h.checkConfigAccess)
+		registerCommandHandler(b, "week", h.handleCmdWeek, h.checkRegularAccess)
+		registerCommandHandler(b, "tomorrow", h.handleCmdTomorrow, h.checkRegularAccess)
+		registerCommandHandler(b, "today", h.handleCmdToday, h.checkRegularAccess)
+		registerCommandHandler(b, "teacher", h.handleCmdTeacher, h.checkRegularAccess)
+		registerCommandHandler(b, "settings", h.handleCmdSettings, h.checkConfigAccess)
+		registerCommandHandler(b, "access", h.handleCmdAccess, h.checkConfigAccess)
+	}
+
+	// Text messages
+	{
+		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess)
+		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess)
+		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess)
+		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess)
+		registerTextHandler(b, "отмена", h.handleCmdCancel, h.checkRegularAccess)
+	}
+
+	// States
+	{
+		h.registerChatStateHandler(b, model.ChatStateSelectingGroup, h.handleTextGroup, h.checkConfigAccess)
+		h.registerChatStateHandler(b, model.ChatStateSelectingTime, h.handleTextTime, h.checkConfigAccess)
+		h.registerChatStateHandler(b, model.ChatStateSelectingTeacher, h.handleTextTeacherName, h.checkRegularAccess)
+	}
+
+	// Callback queries
+	{
+		// Regular callbacks
+		registerRegularCallbackHandler := func(callbackCommand string, handler bot.HandlerFunc) {
+			b.RegisterHandlerRegexp(bot.HandlerTypeCallbackQueryData, callbackDataRegexp(callbackCommand),
+				handler, h.checkRegularAccess)
+		}
+
+		registerRegularCallbackHandler(CallbackCommandDelete, h.handleCQDelete)
+		registerRegularCallbackHandler(CallbackCommandSelectTeacher, h.handleCQTeacher)
+		registerRegularCallbackHandler(CallbackCommandUpdateGroup, h.handleCQUpdateGroup)
+		registerRegularCallbackHandler(CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher)
+		registerRegularCallbackHandler(CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow)
+		registerRegularCallbackHandler(CallbackCommandUpdateLeft, h.handleCQUpdateToday)
+		registerRegularCallbackHandler(CallbackCommandUpdateToday, h.handleCQUpdateToday)
+
+		// Config callbacks
+		registerConfigCallbackHandler := func(callbackCommand string, handler bot.HandlerFunc) {
+			b.RegisterHandlerRegexp(bot.HandlerTypeCallbackQueryData, callbackDataRegexp(callbackCommand),
+				handler, h.checkConfigAccess)
+		}
+
+		registerConfigCallbackHandler(CallbackCommandDeleteConfig, h.handleCQDelete)
+		registerConfigCallbackHandler(CallbackCommandSelectDepartment, h.handleCQSelectDepartment)
+		registerConfigCallbackHandler(CallbackCommandConfigGroup, h.handleCQConfigGroup)
+		registerConfigCallbackHandler(CallbackCommandConfigDailyTime, h.handleCQConfigDailyTime)
+		registerConfigCallbackHandler(CallbackCommandDailyOff, h.handleCQDailyOff)
+		registerConfigCallbackHandler(CallbackCommandConfigReminder, h.handleCQConfigReminder)
+		registerConfigCallbackHandler(CallbackCommandConfigChange, h.handleCQConfigChange)
+		registerConfigCallbackHandler(CallbackCommandConfigDarkMode, h.handleCQConfigDarkMode)
+		registerConfigCallbackHandler(CallbackCommandSetAccess, h.handleCQSetAccess)
+	}
+}
+
+func registerCommandHandler(b *bot.Bot, pattern string, f bot.HandlerFunc, m ...bot.Middleware) string {
+	return b.RegisterHandlerMatchFunc(commandMatchFunc(pattern, getMe(b).Username), f, m...)
+}
+func commandMatchFunc(pattern string, username string) bot.MatchFunc {
+	re := regexp.MustCompile(fmt.Sprintf(`^/%s(@\w+)?(\s[\s\S]+)?$`, pattern))
+	return func(update *models.Update) bool {
+		return matchUpdatePatternUsername(update, username, re)
+	}
+}
+func matchUpdatePatternUsername(update *models.Update, username string, re *regexp.Regexp) bool {
+	if update.Message == nil || update.Message.Text == "" {
+		return false // Not a text message.
+	}
+
+	text := update.Message.Text
+
+	if !re.MatchString(text) {
+		return false
+	}
+	submatches := re.FindStringSubmatch(text)
+	if submatches == nil {
+		return true
+	}
+
+	if update.Message.Chat.Type == models.ChatTypeGroup || update.Message.Chat.Type == models.ChatTypeSupergroup {
+		if submatches[1] == "" {
+			// In group chats command without username are sent to last accessed bot.
+			// That means, if this bot is not the last accessed, it won't receive that message.
+			// Otherwise, it will receive it and should handle it.
+			return true
+		}
+		return submatches[1] == "@"+username
+	}
+
+	// In private chat any username is allowed.
+	return true
+}
+
+func registerTextHandler(b *bot.Bot, pattern string, f bot.HandlerFunc, m ...bot.Middleware) string {
+	re := regexp.MustCompile(fmt.Sprintf("(?i)^%s$", pattern))
+	return b.RegisterHandlerRegexp(bot.HandlerTypeMessageText, re, f, m...)
+}
+
+func (h *handler) registerChatStateHandler(b *bot.Bot, state model.ChatState, f bot.HandlerFunc, m ...bot.Middleware) string {
+	matchFunc := func(update *models.Update) bool {
+		if update.Message == nil {
+			return false
+		}
+
+		chat, err := h.Chat.GetByChatID(context.Background(), model.ChatID(update.Message.Chat.ID))
+		chatState := model.ChatStateDefault
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to get chat to match chat state; interpreting as default")
+		} else {
+			chatState = chat.State
+		}
+
+		log.Debug().Any("chat", chat).Any("state", chatState).Any("target", state).Msg("Matching chat state...")
+		return chatState == state
+	}
+	return b.RegisterHandlerMatchFunc(matchFunc, f, m...)
+}
+
+func callbackDataRegexp(s string) *regexp.Regexp {
+	return regexp.MustCompile(fmt.Sprintf("^%s(\n.*)*$", s))
+}
+
+func (h *handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.Update) {
+	if update.Message != nil {
+		log.Debug().Str("text", update.Message.Text).Msg("Unhandled message")
+	} else if update.CallbackQuery != nil {
+		log.Debug().Str("data", update.CallbackQuery.Data).Msg("Unhandled callback query")
+	} else {
+		log.Debug().Any("update", update).Msg("Unhandled update type")
+	}
+}
+
+var me *models.User
+
+func getMe(b *bot.Bot) *models.User {
+	if me != nil {
+		return me
+	}
+
+	var err error
+	me, err = b.GetMe(context.Background())
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get me")
+		return nil
+	}
+	return me
+}
