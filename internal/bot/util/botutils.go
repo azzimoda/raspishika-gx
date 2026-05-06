@@ -10,6 +10,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
+	"go.yaml.in/yaml/v3"
 )
 
 const (
@@ -98,4 +99,30 @@ func DeleteMessage(ctx context.Context, b *bot.Bot, message *models.Message) (bo
 		return false, nil
 	}
 	return b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: message.Chat.ID, MessageID: message.ID})
+}
+
+func ParseBotCommands(bytes []byte) ([]models.BotCommand, error) {
+	var node yaml.Node
+	if err := yaml.Unmarshal(bytes, &node); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal command config file: %w", err)
+	}
+
+	if node.Kind != yaml.DocumentNode {
+		return nil, fmt.Errorf("failed to parse command YAML document")
+	}
+	if len(node.Content) < 1 {
+		return nil, fmt.Errorf("failed to parse command YAML document")
+	}
+	node = *node.Content[0]
+	if node.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("failed to parse command YAML document")
+	}
+
+	var commands []models.BotCommand
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		value := node.Content[i+1].Value
+		commands = append(commands, models.BotCommand{Command: key, Description: value})
+	}
+	return commands, nil
 }

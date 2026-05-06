@@ -63,3 +63,47 @@ func (s *ChatService) Delete(ctx context.Context, id int64) error { return s.rep
 func (s *ChatService) AddChatRecentTeacher(ctx context.Context, chatID int64, teacherID int64) error {
 	return s.repo.AddRecentTeacher(ctx, chatID, teacherID)
 }
+
+func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duration) (*ChatStatsData, error) {
+	chatsTotal, err := s.repo.CountAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	chatsPrivate, err := s.repo.CountAllPrivate(ctx)
+	chatsInactive, err := s.repo.CountInactive(ctx, duration)
+	if err != nil {
+		return nil, err
+	}
+	chatsNew, err := s.repo.CountAllNew(ctx, duration)
+	if err != nil {
+		return nil, err
+	}
+	chatsPerGroup, err := s.repo.GetAvgChatPerGroup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	groupsTotal, err := s.repo.CountAllConfiguredGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := &ChatStatsData{
+		ChatsTotal:    chatsTotal,
+		ChatsPrivate:  chatsPrivate,
+		ChatsInactive: chatsInactive,
+		ChatsNew:      chatsNew,
+		ChatsPerGroup: chatsPerGroup,
+		GroupsTotal:   groupsTotal,
+	}
+	return stats, nil
+}
+
+type ChatStatsData struct {
+	ChatsTotal      int                     `json:"chats_total"`
+	ChatsPrivate    int                     `json:"chats_private"`
+	ChatsInactive   int                     `json:"chats_inactive"`
+	ChatsNew        int                     `json:"chats_new"`
+	ChatsNewGrouped map[model.GroupName]int `json:"chats_new_grouped"`
+	ChatsPerGroup   float64                 `json:"chat_per_group"`
+	GroupsTotal     int                     `json:"groups_total"`
+}

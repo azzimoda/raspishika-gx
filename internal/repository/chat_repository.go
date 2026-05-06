@@ -33,12 +33,15 @@ type ChatRepository interface {
 	GetAllWithChangeAlert(context.Context) ([]*model.Chat, error)
 	GetAllWithDarkMode(context.Context) ([]*model.Chat, error)
 
+	CountAll(context.Context) (int, error)
+	CountAllPrivate(context.Context) (int, error)
+	CountAllNew(context.Context, time.Duration) (int, error)
 	CountInactive(context.Context, time.Duration) (int, error)
 	GetAvgChatPerGroup(context.Context) (float64, error)
 
 	Delete(ctx context.Context, id int64) error
 
-	GetAllConfiguredGroups(context.Context) ([]*model.Group, error)
+	CountAllConfiguredGroups(context.Context) (int, error)
 	GetWatchedGroups(context.Context) ([]*model.Group, error)
 
 	AddRecentTeacher(ctx context.Context, chatID, teacherID int64) error
@@ -176,6 +179,25 @@ func (r *chatRepository) GetAllWithDarkMode(ctx context.Context) ([]*model.Chat,
 	return chats, err
 }
 
+func (r *chatRepository) CountAll(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats`)
+	return count, err
+}
+func (r *chatRepository) CountAllPrivate(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE tg_chat_id > 0`)
+	return count, err
+}
+func (r *chatRepository) CountAllNew(ctx context.Context, dur time.Duration) (int, error) {
+	var count int
+	period := sqlPeriod(dur)
+	err := r.db.GetContext(ctx, &count, `
+		SELECT count(*) FROM chats
+		WHERE updated_at > datetime('now', ?)
+	`, period)
+	return count, err
+}
 func (r *chatRepository) CountInactive(ctx context.Context, dur time.Duration) (int, error) {
 	var count int
 	period := sqlPeriod(dur)
@@ -209,13 +231,15 @@ func (r *chatRepository) Delete(ctx context.Context, id int64) error {
 	return err
 }
 
-func (r *chatRepository) GetAllConfiguredGroups(ctx context.Context) ([]*model.Group, error) {
-	var groups []*model.Group
-	err := r.db.SelectContext(ctx, &groups, `
-		SELECT DISTINCT g.* FROM groups g JOIN chats c ON g.group_name = c."group"
-		WHERE "group" != '' AND "group" IS NOT NULL
+func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `
+		SELECT count(*) from (
+			SELECT DISTINCT g.* FROM groups g JOIN chats c ON g.group_name = c."group"
+			WHERE "group" != '' AND "group" IS NOT NULL
+		)
 	`)
-	return groups, err
+	return count, err
 }
 func (r *chatRepository) GetWatchedGroups(ctx context.Context) ([]*model.Group, error) {
 	var groups []*model.Group

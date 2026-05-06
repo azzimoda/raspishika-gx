@@ -1,0 +1,5 @@
+stats: "Send bot stats for period (default: 24h)"
+config: Send config stats
+chat: Send chat data view
+group: Send group data view
+start: Greet the admin

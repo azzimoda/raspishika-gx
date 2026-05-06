@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/jmoiron/sqlx"
@@ -37,7 +38,7 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("failed to create container: %w", err)
 	}
 
-	appReporter := new(AppReporter)
+	appReporter := new(appReporter)
 
 	services, err := service.NewServices(container)
 	if err != nil {
@@ -48,23 +49,20 @@ func New() (*App, error) {
 		func(p string) (*bot.Bot, error) { return mainbot.New(services, p, appReporter) },
 		services.Proxy,
 	)
-
-	broadcast := service.NewBroadcastService(mainBot.Bot, services)
-
 	adminBot := service.NewBotService(
 		func(p string) (*bot.Bot, error) { return adminbot.New(services, p, appReporter) },
 		services.Proxy,
 	)
 
-	appReporter.Reporter = reporter.NewReporter(adminBot.Bot, viper.GetInt64(config.KeyAdminID))
+	broadcast := service.NewBroadcastService(mainBot.Bot, services)
 
 	return &App{
-		db:        db,
-		services:  services,
-		broadcast: broadcast,
-		mainBot:   mainBot,
-		adminBot:  adminBot,
-		Reporter:  appReporter,
+		db:          db,
+		services:    services,
+		broadcast:   broadcast,
+		mainBot:     mainBot,
+		adminBot:    adminBot,
+		appReporter: appReporter,
 	}, nil
 }
 
@@ -74,7 +72,7 @@ type App struct {
 	broadcast *service.BroadcastService
 	mainBot   *service.BotService
 	adminBot  *service.BotService
-	reporter.Reporter
+	*appReporter
 }
 
 func (a *App) Run() error {
@@ -94,7 +92,14 @@ func (a *App) Run() error {
 
 	if viper.GetInt("admin_id") != 0 {
 		go a.adminBot.Start(ctx)
+		for a.adminBot.Bot == nil {
+			log.Debug().Msg("Wating for admin bot...")
+			time.Sleep(1 * time.Second)
+		}
+		time.Sleep(1 * time.Second)
 		log.Info().Msg("Admin bot started")
+		a.appReporter.Reporter = reporter.NewReporter(a.adminBot.Bot, viper.GetInt64(config.KeyAdminID))
+		a.Report().Msg("Started on bot @" + mainbot.GetMe(a.mainBot.Bot).Username)
 	} else {
 		log.Debug().Msg("Admin bot is disabled")
 	}
@@ -113,9 +118,9 @@ func (a *App) Stop() error {
 	return errors.Join(errDB, errServices)
 }
 
-type AppReporter struct{ reporter.Reporter }
+type appReporter struct{ reporter.Reporter }
 
-func (r AppReporter) Report() reporter.ReportBuilder {
+func (r appReporter) Report() reporter.ReportBuilder {
 	if r.Reporter == nil {
 		return reporter.EmptyReportConfig()
 	}

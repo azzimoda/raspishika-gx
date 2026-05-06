@@ -29,6 +29,9 @@ const (
 	KeyAdminBotToken = "admin_bot_token"
 	KeyAdminID       = "admin_id"
 
+	KeyBotCommands      = "bot_commands"
+	KeyAdminBotCommands = "admin_bot_commands"
+
 	KeyScreenshotDir    = "screenshot_dir"
 	KeyChatStateTTL     = "chat_state_ttl"
 	KeyCacheScheduleTTL = "cache_schedule_ttl"
@@ -48,7 +51,7 @@ func Init() error {
 	viper.SetDefault(KeyLogLevel, "trace")
 	viper.SetDefault(KeyLogDir, "logs")
 
-	viper.SetDefault(KeyCacheDir, "cache")
+	viper.SetDefault(KeyCacheDir, "./storage/cache")
 
 	viper.SetDefault(KeyDBFile, "./storage/database/data.db")
 	viper.SetDefault(KeyDBMigrationDir, "./migrations")

@@ -24,7 +24,6 @@ func newHandler(s *service.Services, reporter reporter.Reporter) *handler {
 type handler struct {
 	*service.Services
 	reporter.Reporter
-	Me *models.User
 }
 
 func (h *handler) registerHandlers(b *bot.Bot) {
@@ -92,7 +91,7 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 }
 
 func registerCommandHandler(b *bot.Bot, pattern string, f bot.HandlerFunc, m ...bot.Middleware) string {
-	return b.RegisterHandlerMatchFunc(commandMatchFunc(pattern, getMe(b).Username), f, m...)
+	return b.RegisterHandlerMatchFunc(commandMatchFunc(pattern, GetMe(b).Username), f, m...)
 }
 func commandMatchFunc(pattern string, username string) bot.MatchFunc {
 	re := regexp.MustCompile(fmt.Sprintf(`^/%s(@\w+)?(\s[\s\S]+)?$`, pattern))
@@ -170,7 +169,7 @@ func (h *handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.
 
 var me *models.User
 
-func getMe(b *bot.Bot) *models.User {
+func GetMe(b *bot.Bot) *models.User {
 	if me != nil {
 		return me
 	}
