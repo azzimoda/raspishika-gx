@@ -14,12 +14,12 @@ import (
 
 	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
 	"github.com/azzimoda/raspishika-gx/internal/service"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/database"
 	"github.com/azzimoda/raspishika-gx/pkg/logger"
-	"github.com/azzimoda/raspishika-gx/pkg/reporter"
 )
 
 func New() (*App, error) {

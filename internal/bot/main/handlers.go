@@ -11,8 +11,8 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
-	"github.com/azzimoda/raspishika-gx/pkg/reporter"
 )
 
 var ErrNoChatContext error = errors.New("failed to get chat from context")

@@ -13,7 +13,7 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/service"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/proxyutil"
-	"github.com/azzimoda/raspishika-gx/pkg/reporter"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
 )
 
 //go:embed commands.yaml

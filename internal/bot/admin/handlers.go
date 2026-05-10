@@ -12,11 +12,11 @@ import (
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
-	"github.com/azzimoda/raspishika-gx/pkg/reporter"
 )
 
-var startTime = time.Now()
+var startTime = time.Now() // TODO: Use to calculate uptime
 
 func newHandler(s *service.Services, reporter reporter.Reporter) *handler {
 	return &handler{Services: s, Reporter: reporter}
