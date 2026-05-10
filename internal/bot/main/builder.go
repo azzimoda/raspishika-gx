@@ -29,7 +29,7 @@ func New(s *service.Services, p string, reporter reporter.Reporter) (*bot.Bot, e
 
 	opts := []bot.Option{
 		bot.WithHTTPClient(10*time.Second, httpClient),
-		// bot.WithCheckInitTimeout(30 * time.Second),
+		bot.WithCheckInitTimeout(10 * time.Second),
 		bot.WithMiddlewares(
 			h.ignoreOldMessage,
 			h.ignoreInaccessibleMessageCQ,
@@ -53,6 +53,7 @@ func New(s *service.Services, p string, reporter reporter.Reporter) (*bot.Bot, e
 	if err != nil {
 		panic(err)
 	}
+	log.Debug().Any("myCommands", myCommands).Msg("Settings my commands...")
 	if ok, err := b.SetMyCommands(
 		context.Background(),
 		&bot.SetMyCommandsParams{Commands: myCommands},
