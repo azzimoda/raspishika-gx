@@ -93,7 +93,7 @@ func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.
 		return
 	}
 
-	if err := h.Chat.Delete(ctx, chat.ID); err != nil {
+	if err := h.Chat.DeleteChat(ctx, chat.ID); err != nil {
 		addHandlerCtxErr(ctx, fmt.Errorf("failed to get chat from handler context"))
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:          update.Message.Chat.ID,

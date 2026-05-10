@@ -35,7 +35,7 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 		recentTeachers = []*model.Teacher{}
 	}
 
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateSelectingTeacher)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateSelectingTeacher)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
@@ -155,7 +155,7 @@ func (h *handler) sendTeacherSchedule(
 		h.Report().Err(err).Chat(chat).Msg("Failed to add recent teacher for chat")
 	}
 
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
 		return err
 	}
 

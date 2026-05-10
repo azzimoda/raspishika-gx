@@ -139,7 +139,7 @@ func (h *handler) registerChatStateHandler(b *bot.Bot, state model.ChatState, f 
 			return false
 		}
 
-		chat, err := h.Chat.GetByChatID(context.Background(), model.ChatID(update.Message.Chat.ID))
+		chat, err := h.Chat.GetChatByChatID(context.Background(), model.ChatID(update.Message.Chat.ID))
 		chatState := model.ChatStateDefault
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to get chat to match chat state; interpreting as default")

@@ -80,7 +80,7 @@ func (h *handler) handleCQConfigDailyTime(ctx context.Context, b *bot.Bot, updat
 	_, err := botutil.DeleteMessage(ctx, b, message)
 	addHandlerCtxErr(ctx, err)
 
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateSelectingTime)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateSelectingTime)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          message.Chat.ID,
@@ -132,7 +132,7 @@ func (h *handler) handleTextTime(ctx context.Context, b *bot.Bot, update *models
 	timeStr := t.Format("15:04")
 
 	chat.DailySendingTime = &timeStr
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          update.Message.Chat.ID,
@@ -165,7 +165,7 @@ func (h *handler) handleCQDailyOff(ctx context.Context, b *bot.Bot, update *mode
 	}
 
 	chat.DailySendingTime = nil
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          message.Chat.ID,
@@ -196,7 +196,7 @@ func (h *handler) handleCQConfigReminder(ctx context.Context, b *bot.Bot, update
 
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	chat.PairSending = command.Arg(0) == "true"
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
@@ -227,7 +227,7 @@ func (h *handler) handleCQConfigChange(ctx context.Context, b *bot.Bot, update *
 
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	chat.ChangeAlert = command.Arg(0) == "true"
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
@@ -258,7 +258,7 @@ func (h *handler) handleCQConfigDarkMode(ctx context.Context, b *bot.Bot, update
 
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	chat.DarkMode = command.Arg(0) == "true"
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
@@ -426,7 +426,7 @@ func (h *handler) handleCQSelectDepartment(ctx context.Context, b *bot.Bot, upda
 		return
 	}
 
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateSelectingGroup)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateSelectingGroup)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          message.Chat.ID,
@@ -481,7 +481,7 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 	chat.GroupName = &group.GroupName
 	chat.DepartmentName = &group.DepartmentName
 
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          update.Message.Chat.ID,
@@ -560,7 +560,7 @@ func (h *handler) handleCQSetAccess(ctx context.Context, b *bot.Bot, update *mod
 		chat.Access = model.ChatAccessLevel(accessLevel)
 	}
 
-	if err := h.Chat.Update(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
 		addHandlerCtxErr(ctx, ErrNoChatContext)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,

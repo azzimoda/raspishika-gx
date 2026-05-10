@@ -14,67 +14,69 @@ type ChatService struct {
 	repo repository.ChatRepository
 }
 
-func (s *ChatService) Create(ctx context.Context, chat *model.Chat) error {
-	return s.repo.Create(ctx, chat)
+func (s *ChatService) CreateChat(ctx context.Context, chat *model.Chat) error {
+	return s.repo.CreateChat(ctx, chat)
 }
-func (s *ChatService) CreateOrUpdate(ctx context.Context, chat *model.Chat) (created bool, err error) {
-	return s.repo.CreateOrUpdate(ctx, chat)
-}
-
-func (s *ChatService) Update(ctx context.Context, chat *model.Chat) error {
-	return s.repo.Update(ctx, chat)
+func (s *ChatService) CreateOrUpdateChat(ctx context.Context, chat *model.Chat) (created bool, err error) {
+	return s.repo.CreateOrUpdateChat(ctx, chat)
 }
 
-func (s *ChatService) Get(ctx context.Context, id int64) (*model.Chat, error) {
-	return s.repo.Get(ctx, id)
-}
-func (s *ChatService) GetByChatID(ctx context.Context, chatID model.ChatID) (*model.Chat, error) {
-	return s.repo.GetByChatID(ctx, chatID)
+func (s *ChatService) UpdateChat(ctx context.Context, chat *model.Chat) error {
+	return s.repo.UpdateChat(ctx, chat)
 }
 
-func (s *ChatService) All(ctx context.Context) ([]*model.Chat, error) { return s.repo.GetAll(ctx) }
-func (s *ChatService) AllPrivate(ctx context.Context) ([]*model.Chat, error) {
-	return s.repo.GetAllPrivate(ctx)
+func (s *ChatService) GetChat(ctx context.Context, id int64) (*model.Chat, error) {
+	return s.repo.GetChat(ctx, id)
 }
-func (s *ChatService) AllNew(ctx context.Context, duration time.Duration) ([]*model.Chat, error) {
-	return s.repo.GetAllNew(ctx, duration)
-}
-func (s *ChatService) AllByGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
-	return s.repo.GetAllByGroup(ctx, group)
-}
-func (s *ChatService) AllByWatchedGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
-	return s.repo.GetAllByWatchedGroup(ctx, group)
-}
-func (s *ChatService) AllByDailyTime(ctx context.Context, time string) ([]*model.Chat, error) {
-	return s.repo.GetAllByDailyTime(ctx, time)
-}
-func (s *ChatService) AllWithPairNotification(ctx context.Context) ([]*model.Chat, error) {
-	return s.repo.GetAllWithPairNotification(ctx)
-}
-func (s *ChatService) AllWithChangeAlert(ctx context.Context) ([]*model.Chat, error) {
-	return s.repo.GetAllWithChangeAlert(ctx)
-}
-func (s *ChatService) AllWithDarkMode(ctx context.Context) ([]*model.Chat, error) {
-	return s.repo.GetAllWithDarkMode(ctx)
+func (s *ChatService) GetChatByChatID(ctx context.Context, chatID model.ChatID) (*model.Chat, error) {
+	return s.repo.GetChatByChatID(ctx, chatID)
 }
 
-func (s *ChatService) Delete(ctx context.Context, id int64) error { return s.repo.Delete(ctx, id) }
+func (s *ChatService) GetAllChats(ctx context.Context) ([]*model.Chat, error) {
+	return s.repo.GetAllChats(ctx)
+}
+func (s *ChatService) GetPrivateChats(ctx context.Context) ([]*model.Chat, error) {
+	return s.repo.GetPrivateChats(ctx)
+}
+func (s *ChatService) GetNewChats(ctx context.Context, duration time.Duration) ([]*model.Chat, error) {
+	return s.repo.GetNewChats(ctx, duration)
+}
+func (s *ChatService) GetChatsByGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
+	return s.repo.GetChatsByGroup(ctx, group)
+}
+func (s *ChatService) GetChatsByWatchedGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
+	return s.repo.GetChatsByWatchedGroup(ctx, group)
+}
+func (s *ChatService) GetChatsByDailyTime(ctx context.Context, time string) ([]*model.Chat, error) {
+	return s.repo.GetChatsWithDailyTime(ctx, time)
+}
+func (s *ChatService) GetChatsWithPairNotification(ctx context.Context) ([]*model.Chat, error) {
+	return s.repo.GetChatsWithPairNotification(ctx)
+}
+func (s *ChatService) GetChatsWithChangeAlert(ctx context.Context) ([]*model.Chat, error) {
+	return s.repo.GetChatsWithChangeAlert(ctx)
+}
+func (s *ChatService) GetChatsWithDarkMode(ctx context.Context) ([]*model.Chat, error) {
+	return s.repo.GetChatsWithDarkMode(ctx)
+}
+
+func (s *ChatService) DeleteChat(ctx context.Context, id int64) error { return s.repo.DeleteChat(ctx, id) }
 
 func (s *ChatService) AddChatRecentTeacher(ctx context.Context, chatID int64, teacherID int64) error {
 	return s.repo.AddRecentTeacher(ctx, chatID, teacherID)
 }
 
 func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duration) (*ChatStatsData, error) {
-	chatsTotal, err := s.repo.CountAll(ctx)
+	chatsTotal, err := s.repo.CountAllChats(ctx)
 	if err != nil {
 		return nil, err
 	}
-	chatsPrivate, err := s.repo.CountAllPrivate(ctx)
-	chatsInactive, err := s.repo.CountInactive(ctx, duration)
+	chatsPrivate, err := s.repo.CountPricateChats(ctx)
+	chatsInactive, err := s.repo.CountInactiveChats(ctx, duration)
 	if err != nil {
 		return nil, err
 	}
-	chatsNew, err := s.repo.CountAllNew(ctx, duration)
+	chatsNew, err := s.repo.CountNewChats(ctx, duration)
 	if err != nil {
 		return nil, err
 	}

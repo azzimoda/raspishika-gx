@@ -46,7 +46,7 @@ func (h *handler) createOrUpdateChat(b *bot.Bot, update *models.Update) (*model.
 	}
 
 	chat := new(model.Chat{TgChatID: chatID, UserName: new(model.UserName(username))})
-	created, err := h.Chat.CreateOrUpdate(context.Background(), chat)
+	created, err := h.Chat.CreateOrUpdateChat(context.Background(), chat)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create or update chat: %w", err)
 	}
@@ -70,7 +70,7 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 	for range 5 {
 		time.Sleep(20 * time.Second)
 
-		if chat, err := h.Chat.GetByChatID(context.Background(), chat.TgChatID); err == nil && chat.GroupName != nil {
+		if chat, err := h.Chat.GetChatByChatID(context.Background(), chat.TgChatID); err == nil && chat.GroupName != nil {
 			b.DeleteMessage(context.Background(), &bot.DeleteMessageParams{ChatID: msg.Chat.ID, MessageID: msg.ID})
 			h.Report().Chat(chat).Msgf("Chat configured group %s", *chat.GroupName)
 			break
