@@ -49,12 +49,12 @@ const (
 func Init() error {
 	// Defaults
 	viper.SetDefault(KeyLogLevel, "trace")
-	viper.SetDefault(KeyLogDir, "logs")
+	viper.SetDefault(KeyLogDir, "storage/logs")
 
-	viper.SetDefault(KeyCacheDir, "./storage/cache")
+	viper.SetDefault(KeyCacheDir, "storage/cache")
 
-	viper.SetDefault(KeyDBFile, "./storage/database/data.db")
-	viper.SetDefault(KeyDBMigrationDir, "./migrations")
+	viper.SetDefault(KeyDBFile, "storage/database/data.db")
+	viper.SetDefault(KeyDBMigrationDir, "migrations")
 
 	viper.SetDefault(KeyBrowserHeadless, true)
 	viper.SetDefault(KeyBrowserTimeout, 30*time.Second)
@@ -62,20 +62,18 @@ func Init() error {
 	viper.SetDefault(KeyBrowserHeight, 1080)
 	viper.SetDefault(KeyBrowserScale, 1.0)
 
-	viper.SetDefault(KeyProxyListFile, "./proxies.json")
+	viper.SetDefault(KeyProxyListFile, "storage/proxies.json")
 
-	viper.SetDefault(KeyAdminID, 0) // 0 means admin bot is disabled
-
-	viper.SetDefault(KeyScreenshotDir, "./storage/screenshots")
-
+	viper.SetDefault(KeyScreenshotDir, "storage/screenshots")
 	viper.SetDefault(KeyChatStateTTL, 10*time.Minute)
+	viper.SetDefault(KeyCacheScheduleTTL, 30*time.Minute)
 
 	viper.SetDefault(KeyDailyBroadcast, false)
 	viper.SetDefault(KeyPairNotification, false)
 	viper.SetDefault(KeyChangeAlert, false)
 
-	viper.SetDefault(KeyScheduleTemplateFile, "./templates/light.html")
-	viper.SetDefault(KeyScheduleTemplateDarkFile, "./templates/dark.html")
+	viper.SetDefault(KeyScheduleTemplateFile, "templates/light.html")
+	viper.SetDefault(KeyScheduleTemplateDarkFile, "templates/dark.html")
 
 	// Environment variables
 	if err := godotenv.Load(); err != nil {
