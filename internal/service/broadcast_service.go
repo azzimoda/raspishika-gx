@@ -8,18 +8,21 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/robfig/cron"
 	"github.com/rs/zerolog/log"
+
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
 )
 
-func NewBroadcastService(bot *bot.Bot, services *Services) *BroadcastService {
-	return &BroadcastService{Bot: bot, services: services, cron: cron.New()}
+func NewBroadcastService(bot *bot.Bot, services *Services, reporter reporter.Reporter) *BroadcastService {
+	return &BroadcastService{Bot: bot, services: services, Reporter: reporter, cron: cron.New()}
 }
 
 type BroadcastService struct {
 	*bot.Bot
 	services *Services
-	cron     *cron.Cron
-	ctx      context.Context
-	cancel   context.CancelFunc
+	reporter.Reporter
+	cron   *cron.Cron
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 type BroadcastConfig struct {
@@ -49,9 +52,9 @@ func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) {
 
 func (s *BroadcastService) scheduleDaily(ctx context.Context) {
 	// Every minute
-	s.cron.AddFunc("* * * * *", func() { go s.handleDailyBroadcast(time.Now()) })
+	s.cron.AddFunc("* * * * *", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
 }
-func (s *BroadcastService) handleDailyBroadcast(t time.Time) {
+func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time) {
 	log.Info().Time("t", t).Msg("Daily broadcast")
 	// TODO
 }
