@@ -25,6 +25,7 @@ type GroupRepository interface {
 	GetAllActualGroups(context.Context) ([]*model.Group, error)
 	GetOutdatedActualGroups(context.Context) ([]*model.Group, error)
 	GetDepartmentActualGroups(context.Context, string) ([]*model.Group, error)
+	DeleteAllGroups(context.Context) error
 
 	ValidateNameCase(context.Context, model.GroupName) (model.GroupName, error)
 	ValidateName(context.Context, model.GroupName) (model.GroupName, error)
@@ -135,6 +136,10 @@ func (r *groupRepository) GetDepartmentActualGroups(ctx context.Context, name st
 	var groups []*model.Group
 	err := r.db.SelectContext(ctx, &groups, `SELECT * FROM groups WHERE department_name = ?`, name)
 	return groups, err
+}
+func (r *groupRepository) DeleteAllGroups(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM groups`)
+	return err
 }
 
 func (r *groupRepository) ValidateNameCase(ctx context.Context, name model.GroupName) (model.GroupName, error) {

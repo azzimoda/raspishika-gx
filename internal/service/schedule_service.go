@@ -121,7 +121,7 @@ func (s *ScheduleService) PrepareScheduleImage(
 	return fileName, bytes, nil
 }
 
-func (s *ScheduleService) EnsureGroups(ctx context.Context) error {
+func (s *ScheduleService) EnsureGroups(ctx context.Context) (updated bool, err error) {
 	actualGroupsCount := 0
 	if actualGroups, err := s.groups.GetAllActualGroups(ctx); err == nil {
 		actualGroupsCount = len(actualGroups)
@@ -131,18 +131,18 @@ func (s *ScheduleService) EnsureGroups(ctx context.Context) error {
 
 	outdatedGroups, err := s.groups.GetOutdatedActualGroups(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if actualGroupsCount == 0 || len(outdatedGroups) > 0 {
 		if err := s.UpdateGroups(ctx); err != nil {
-			return err
+			return false, err
 		}
-	} else {
-		log.Trace().Msg("Group data is up to date")
+		return true, nil
 	}
 
-	return nil
+	log.Trace().Msg("Group data is up to date")
+	return false, nil
 }
 func (s *ScheduleService) UpdateGroups(ctx context.Context) error {
 	log.Info().Msg("Updating group data...")
@@ -164,6 +164,10 @@ func (s *ScheduleService) GetGroupsByDepartmentName(ctx context.Context, name st
 }
 func (s *ScheduleService) ValidateGroupName(ctx context.Context, name model.GroupName) (model.GroupName, error) {
 	return s.groups.ValidateName(ctx, name)
+}
+func (s *ScheduleService) DeleteAllGroups(ctx context.Context) error {
+	log.Warn().Msg("Deleting all groups...")
+	return s.groups.DeleteAllGroups(ctx)
 }
 
 func (s *ScheduleService) EnsureDepartments(ctx context.Context) error {

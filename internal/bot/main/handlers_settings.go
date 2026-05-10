@@ -596,7 +596,7 @@ func (h *handler) sendDepartmentSelectionMenu(
 	chat *model.Chat,
 	messageThreadID int,
 ) error {
-	if err := h.Schedule.EnsureGroups(ctx); err != nil {
+	if _, err := h.Schedule.EnsureGroups(ctx); err != nil {
 		return err
 	}
 
