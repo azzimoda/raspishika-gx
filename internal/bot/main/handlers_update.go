@@ -38,7 +38,7 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 	}
 
 	conf := model.GroupScheduleConfig(group, darkMode)
-	rawSchedule, err := h.Schedule.Get(ctx, conf)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -108,7 +108,7 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 	}
 
 	conf := model.TeacherScheduleConfig(teacher, darkMode)
-	rawSchedule, err := h.Schedule.Get(ctx, conf)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -170,7 +170,7 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 	}
 
 	conf := model.GroupScheduleConfig(group, false)
-	rawSchedule, err := h.Schedule.Get(ctx, conf)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -251,7 +251,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 	}
 
 	conf := model.GroupScheduleConfig(group, false)
-	rawSchedule, err := h.Schedule.Get(ctx, conf)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{

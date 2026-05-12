@@ -48,7 +48,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	}
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, err := h.Schedule.Get(ctx, conf)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -112,7 +112,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	}
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, err := h.Schedule.Get(ctx, conf)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -187,7 +187,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	// Otherwise, send today's schedule
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, err := h.Schedule.Get(ctx, conf)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)

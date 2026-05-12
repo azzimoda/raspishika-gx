@@ -162,7 +162,7 @@ func (h *handler) sendTeacherSchedule(
 	sendChatActionTyping(ctx, b, message.Chat.ID, message.MessageThreadID)
 
 	conf := model.TeacherScheduleConfig(teacher, chat.DarkMode)
-	rawSchedule, err := h.Schedule.Get(ctx, conf)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		return err
 	}

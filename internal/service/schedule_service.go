@@ -46,9 +46,9 @@ type ScheduleService struct {
 
 var ErrNoCache = errors.New("no cache for the key")
 
-// Get returns the schedule for the given config and uses cache if available.
-func (s *ScheduleService) Get(ctx context.Context, conf model.ScheduleConfig) (*model.RawSchedule, error) {
-	key := conf.String()
+// GetSchedule returns the schedule for the given config and uses cache if available.
+func (s *ScheduleService) GetSchedule(ctx context.Context, conf model.ScheduleConfig) (*model.RawSchedule, error) {
+	key := conf.ScheduleKey()
 	if rawSchedule, ok := s.CheckScheduleCache(key); ok {
 		log.Debug().Str("cacheKey", key).Msg("Cache hit")
 		return rawSchedule, nil
@@ -83,7 +83,7 @@ func (s *ScheduleService) UpdateScheduleCache(
 	conf model.ScheduleConfig,
 ) (*model.RawSchedule, error) {
 	// Fetch schedule
-	key := conf.String()
+	key := conf.ScheduleKey()
 	result, err, _ := s.sf.Do(key, func() (any, error) { return s.scrapeSchedule(ctx, conf) })
 	if err != nil {
 		return nil, fmt.Errorf("failed to scrape schedule: %w", err)
@@ -108,7 +108,7 @@ func (s *ScheduleService) PrepareScheduleImage(
 	rawSchedule *model.RawSchedule,
 ) (fileName string, bytes []byte, err error) {
 	if rawSchedule == nil {
-		rawSchedule, err = s.Get(ctx, conf)
+		rawSchedule, err = s.GetSchedule(ctx, conf)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed loading schedule: %w", err)
 		}
@@ -323,7 +323,7 @@ func getScheduleTemplate(is_dark bool) string {
 	return template
 }
 
-func scheduleScreenshotFileName(conf model.ScheduleConfig) string { return conf.String() + ".png" }
+func scheduleScreenshotFileName(conf model.ScheduleConfig) string { return conf.ImageKey() + ".png" }
 
 // matchStrings returns the closest matches for a given target string from a list of strings.
 func matchStrings(strs []string, target string, n int) []string {

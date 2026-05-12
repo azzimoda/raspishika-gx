@@ -231,7 +231,7 @@ func saveScheduleCache(conf model.ScheduleConfig, html string) {
 	}
 
 	// Save HTML to cache directory
-	filename := filepath.Join(cacheDir, conf.String()+".html")
+	filename := filepath.Join(cacheDir, conf.ScheduleKey()+".html")
 	if err := os.WriteFile(filename, []byte(html), 0644); err != nil {
 		log.Warn().Err(err).Msg("Failed to save schedule HTML to file")
 	} else {

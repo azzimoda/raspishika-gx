@@ -15,18 +15,20 @@ type ScheduleConfig struct {
 	IsDark  bool     `json:"is_dark"`
 }
 
-func (cs *ScheduleConfig) String() string {
+func (cs *ScheduleConfig) ScheduleKey() string {
+	if cs.Group != nil {
+		return fmt.Sprintf("schedule_%s_%s", cs.Group.DepartmentName, cs.Group.GroupName)
+	} else if cs.Teacher != nil {
+		return fmt.Sprintf("teacher_%s", cs.Teacher.Name.Safe())
+	}
+	return ""
+}
+func (cs *ScheduleConfig) ImageKey() string {
 	mode := "light"
 	if cs.IsDark {
 		mode = "dark"
 	}
-
-	if cs.Group != nil {
-		return fmt.Sprintf("schedule_%s_%s_%s", cs.Group.DepartmentName, cs.Group.GroupName, mode)
-	} else if cs.Teacher != nil {
-		return fmt.Sprintf("teacher_%s_%s", cs.Teacher.Name.Safe(), mode)
-	}
-	return ""
+	return fmt.Sprintf("%s_%s", cs.ScheduleKey(), mode)
 }
 
 func (sc *ScheduleConfig) FormatHTML() string {
