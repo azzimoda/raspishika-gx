@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
 
+	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 )
 
@@ -168,7 +169,7 @@ func (h *handler) logHandler(next bot.HandlerFunc) bot.HandlerFunc {
 				Str("username", message.From.Username).
 				Str("first_name", message.From.FirstName).
 				Str("last_name", message.From.LastName).
-				Str("text", shortenText(message.Text, 100)).
+				Str("text", botutil.ShortenText(message.Text, 100)).
 				Msg("Message handled")
 		} else if update.CallbackQuery != nil {
 			updateKind = "callback_query"

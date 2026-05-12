@@ -10,6 +10,7 @@ import (
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
 
+	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
@@ -64,13 +65,13 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 				handler, h.checkRegularAccess)
 		}
 
-		registerRegularCallbackHandler(CallbackCommandDelete, h.handleCQDelete)
-		registerRegularCallbackHandler(CallbackCommandSelectTeacher, h.handleCQTeacher)
-		registerRegularCallbackHandler(CallbackCommandUpdateGroup, h.handleCQUpdateGroup)
-		registerRegularCallbackHandler(CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher)
-		registerRegularCallbackHandler(CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow)
-		registerRegularCallbackHandler(CallbackCommandUpdateLeft, h.handleCQUpdateToday)
-		registerRegularCallbackHandler(CallbackCommandUpdateToday, h.handleCQUpdateToday)
+		registerRegularCallbackHandler(botutil.CallbackCommandDelete, h.handleCQDelete)
+		registerRegularCallbackHandler(botutil.CallbackCommandSelectTeacher, h.handleCQTeacher)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateGroup)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateLeft, h.handleCQUpdateToday)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateToday, h.handleCQUpdateToday)
 
 		// Config callbacks
 		registerConfigCallbackHandler := func(callbackCommand string, handler bot.HandlerFunc) {
@@ -78,15 +79,15 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 				handler, h.checkConfigAccess)
 		}
 
-		registerConfigCallbackHandler(CallbackCommandDeleteConfig, h.handleCQDelete)
-		registerConfigCallbackHandler(CallbackCommandSelectDepartment, h.handleCQSelectDepartment)
-		registerConfigCallbackHandler(CallbackCommandConfigGroup, h.handleCQConfigGroup)
-		registerConfigCallbackHandler(CallbackCommandConfigDailyTime, h.handleCQConfigDailyTime)
-		registerConfigCallbackHandler(CallbackCommandDailyOff, h.handleCQDailyOff)
-		registerConfigCallbackHandler(CallbackCommandConfigReminder, h.handleCQConfigReminder)
-		registerConfigCallbackHandler(CallbackCommandConfigChange, h.handleCQConfigChange)
-		registerConfigCallbackHandler(CallbackCommandConfigDarkMode, h.handleCQConfigDarkMode)
-		registerConfigCallbackHandler(CallbackCommandSetAccess, h.handleCQSetAccess)
+		registerConfigCallbackHandler(botutil.CallbackCommandDeleteConfig, h.handleCQDelete)
+		registerConfigCallbackHandler(botutil.CallbackCommandSelectDepartment, h.handleCQSelectDepartment)
+		registerConfigCallbackHandler(botutil.CallbackCommandConfigGroup, h.handleCQConfigGroup)
+		registerConfigCallbackHandler(botutil.CallbackCommandConfigDailyTime, h.handleCQConfigDailyTime)
+		registerConfigCallbackHandler(botutil.CallbackCommandDailyOff, h.handleCQDailyOff)
+		registerConfigCallbackHandler(botutil.CallbackCommandConfigReminder, h.handleCQConfigReminder)
+		registerConfigCallbackHandler(botutil.CallbackCommandConfigChange, h.handleCQConfigChange)
+		registerConfigCallbackHandler(botutil.CallbackCommandConfigDarkMode, h.handleCQConfigDarkMode)
+		registerConfigCallbackHandler(botutil.CallbackCommandSetAccess, h.handleCQSetAccess)
 	}
 }
 

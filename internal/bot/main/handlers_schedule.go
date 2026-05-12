@@ -72,7 +72,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 		return
 	}
 
-	err = sendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData)
+	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData)
 	addHandlerCtxErr(ctx, err)
 }
 
@@ -133,7 +133,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,
-		ReplyMarkup:     updateScheduleMarkup("tomorrow", string(group.GroupName)),
+		ReplyMarkup:     botutil.UpdateScheduleMarkup("tomorrow", string(group.GroupName)),
 	})
 	addHandlerCtxErr(ctx, err)
 }
@@ -179,7 +179,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            "Сегодня воскресенье, отдыхайте!",
-			ReplyMarkup:     updateScheduleMarkup("today", string(group.GroupName)),
+			ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName)),
 		})
 		addHandlerCtxErr(ctx, err)
 		return
@@ -207,7 +207,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,
-		ReplyMarkup:     updateScheduleMarkup("today", string(group.GroupName)),
+		ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName)),
 	})
 	addHandlerCtxErr(ctx, err)
 }

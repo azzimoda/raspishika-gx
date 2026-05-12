@@ -1,4 +1,4 @@
-package mainbot
+package botutil
 
 const (
 	CallbackCommandDelete       = "delete"

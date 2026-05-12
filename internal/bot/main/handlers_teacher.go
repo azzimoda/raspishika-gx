@@ -49,7 +49,7 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 		ChatID:          chatID,
 		MessageThreadID: threadID,
 		Text:            "Пришлите полное имя преподавателя или его часть",
-		ReplyMarkup:     teacherMenuMarkup(recentTeachers),
+		ReplyMarkup:     botutil.TeacherMenuMarkup(recentTeachers),
 	})
 	addHandlerCtxErr(ctx, err)
 }
@@ -79,7 +79,7 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,
 			Text:            "Не удалось найти преподавателя, попробуйте ещё раз",
-			ReplyMarkup:     teacherMenuMarkup(nil), // Empty list
+			ReplyMarkup:     botutil.TeacherMenuMarkup(nil), // Empty list
 		})
 		addHandlerCtxErr(ctx, err)
 		return
@@ -105,7 +105,7 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
 		Text:            "Выберите преподавателя из списка или попробуйте снова",
-		ReplyMarkup:     teacherMenuMarkup(teachers),
+		ReplyMarkup:     botutil.TeacherMenuMarkup(teachers),
 	})
 	addHandlerCtxErr(ctx, err)
 	// TODO: Send list of matching teachers
@@ -172,5 +172,5 @@ func (h *handler) sendTeacherSchedule(
 		return err
 	}
 
-	return sendWeekScheduleMessages(ctx, b, message.MessageThreadID, chat, conf, imageFilename, imageData)
+	return botutil.SendWeekScheduleMessages(ctx, b, message.MessageThreadID, chat, conf, imageFilename, imageData)
 }

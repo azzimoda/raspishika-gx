@@ -113,7 +113,7 @@ func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.
 }
 
 func (h *handler) handleCmdCancel(ctx context.Context, b *bot.Bot, update *models.Update) {
-	unimplementedHandler()
+	panic("unimplemented")
 }
 
 // handleCQDelete deletes the message of the callback button

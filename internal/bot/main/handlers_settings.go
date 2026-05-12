@@ -101,7 +101,7 @@ func (h *handler) handleCQConfigDailyTime(ctx context.Context, b *bot.Bot, updat
 		Text:            text,
 		ReplyMarkup: models.InlineKeyboardMarkup{
 			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{{Text: "Закрыть", CallbackData: CallbackCommandDelete}},
+				{{Text: "Закрыть", CallbackData: botutil.CallbackCommandDelete}},
 			},
 		},
 	})
@@ -327,59 +327,59 @@ func settingsMenuMarkup(chat *model.Chat) models.InlineKeyboardMarkup {
 	keyboard := make([][]models.InlineKeyboardButton, 0)
 
 	// Student group
-	keyboard = append(keyboard, []models.InlineKeyboardButton{{Text: "Изменить группу", CallbackData: CallbackCommandConfigGroup}})
+	keyboard = append(keyboard, []models.InlineKeyboardButton{{Text: "Изменить группу", CallbackData: botutil.CallbackCommandConfigGroup}})
 
 	// Daily sending
 	if chat.DailySendingTime == nil {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "Вкл. ежедневную рассылку", CallbackData: CallbackCommandConfigDailyTime},
+			{Text: "Вкл. ежедневную рассылку", CallbackData: botutil.CallbackCommandConfigDailyTime},
 		})
 	} else {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "Изменить время", CallbackData: CallbackCommandConfigDailyTime},
-			{Text: "Выкл. рассылку", CallbackData: CallbackCommandDailyOff},
+			{Text: "Изменить время", CallbackData: botutil.CallbackCommandConfigDailyTime},
+			{Text: "Выкл. рассылку", CallbackData: botutil.CallbackCommandDailyOff},
 		})
 	}
 
 	// Pair notification
 	if chat.PairSending {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "Выкл. напоминания перед парами", CallbackData: CallbackCommandConfigReminder + "\nfalse"},
+			{Text: "Выкл. напоминания перед парами", CallbackData: botutil.CallbackCommandConfigReminder + "\nfalse"},
 		})
 	} else {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "Вкл. напоминания перед парами", CallbackData: CallbackCommandConfigReminder + "\ntrue"},
+			{Text: "Вкл. напоминания перед парами", CallbackData: botutil.CallbackCommandConfigReminder + "\ntrue"},
 		})
 	}
 
 	// Change alerts
 	if chat.ChangeAlert {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "Выкл. уведомления об изменениях", CallbackData: CallbackCommandConfigChange + "\nfalse"},
+			{Text: "Выкл. уведомления об изменениях", CallbackData: botutil.CallbackCommandConfigChange + "\nfalse"},
 		})
 	} else {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "Вкл. уведомления об изменениях", CallbackData: CallbackCommandConfigChange + "\ntrue"},
+			{Text: "Вкл. уведомления об изменениях", CallbackData: botutil.CallbackCommandConfigChange + "\ntrue"},
 		})
 	}
 
 	// Dark mode
 	if chat.DarkMode {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "Вкл. светлую тему", CallbackData: CallbackCommandConfigDarkMode + "\nfalse"},
+			{Text: "Вкл. светлую тему", CallbackData: botutil.CallbackCommandConfigDarkMode + "\nfalse"},
 		})
 	} else {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{
-			{Text: "Вкл. тёмную тему", CallbackData: CallbackCommandConfigDarkMode + "\ntrue"},
+			{Text: "Вкл. тёмную тему", CallbackData: botutil.CallbackCommandConfigDarkMode + "\ntrue"},
 		})
 	}
 
 	// Group chat access
 	if !chat.IsPrivate() {
 		row := []models.InlineKeyboardButton{
-			{Text: "0", CallbackData: CallbackCommandSetAccess + "\n0"},
-			{Text: "1", CallbackData: CallbackCommandSetAccess + "\n1"},
-			{Text: "2", CallbackData: CallbackCommandSetAccess + "\n2"},
+			{Text: "0", CallbackData: botutil.CallbackCommandSetAccess + "\n0"},
+			{Text: "1", CallbackData: botutil.CallbackCommandSetAccess + "\n1"},
+			{Text: "2", CallbackData: botutil.CallbackCommandSetAccess + "\n2"},
 		}
 		for i := range 3 {
 			if i == int(chat.Access) {
@@ -391,7 +391,7 @@ func settingsMenuMarkup(chat *model.Chat) models.InlineKeyboardMarkup {
 
 	// Close button
 	keyboard = append(keyboard, []models.InlineKeyboardButton{
-		{Text: "Закрыть", CallbackData: CallbackCommandDeleteConfig},
+		{Text: "Закрыть", CallbackData: botutil.CallbackCommandDeleteConfig},
 	})
 
 	return models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
@@ -487,7 +487,7 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,
 			Text:            botutil.ErrMsgCouldNotUpdateData,
-			ReplyMarkup:     mainMenuMarkup(chat.IsPrivate()),
+			ReplyMarkup:     botutil.MainMenuMarkup(chat.IsPrivate()),
 		})
 		return
 	}
@@ -496,7 +496,7 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
 		Text:            fmt.Sprintf("Теперь вы в группе %s", group.GroupName),
-		ReplyMarkup:     mainMenuMarkup(chat.IsPrivate()),
+		ReplyMarkup:     botutil.MainMenuMarkup(chat.IsPrivate()),
 	})
 	addHandlerCtxErr(ctx, err)
 }
@@ -524,7 +524,7 @@ func (h *handler) handleCmdAccess(ctx context.Context, b *bot.Bot, update *model
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,
 			Text:            accessMenuText(chat),
-			ReplyMarkup:     accessMenuMarkup(chat.Access),
+			ReplyMarkup:     botutil.AccessMenuMarkup(chat.Access),
 		})
 		addHandlerCtxErr(ctx, err)
 	}
@@ -574,7 +574,7 @@ func (h *handler) handleCQSetAccess(ctx context.Context, b *bot.Bot, update *mod
 		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
 		MessageID:   update.CallbackQuery.Message.Message.ID,
 		Text:        accessMenuText(chat),
-		ReplyMarkup: accessMenuMarkup(chat.Access),
+		ReplyMarkup: botutil.AccessMenuMarkup(chat.Access),
 	})
 	addHandlerCtxErr(ctx, err)
 }
@@ -627,13 +627,13 @@ func departmentMenuMarkup(departments []model.Department) models.InlineKeyboardM
 		row := make([]models.InlineKeyboardButton, 0)
 		for j := i; j < len(departments) && j < i+2; j++ {
 			row = append(row, models.InlineKeyboardButton{Text: departments[j].Name.String(),
-				CallbackData: fmt.Sprintf("%s\n%s", CallbackCommandSelectDepartment, departments[j].Name)})
+				CallbackData: fmt.Sprintf("%s\n%s", botutil.CallbackCommandSelectDepartment, departments[j].Name)})
 		}
 		keyboard = append(keyboard, row)
 	}
 
 	keyboard = append(keyboard, []models.InlineKeyboardButton{
-		{Text: "Отмена", CallbackData: CallbackCommandDeleteConfig},
+		{Text: "Отмена", CallbackData: botutil.CallbackCommandDeleteConfig},
 	})
 	return models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }

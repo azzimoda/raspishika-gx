@@ -66,7 +66,7 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 			Media:           "attach://image.png",
 			MediaAttachment: bytes.NewReader(imageData),
 		},
-		ReplyMarkup: updateScheduleMarkup("group", string(groupName)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup("group", string(groupName)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -136,7 +136,7 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 			Media:           "attach://image.png",
 			MediaAttachment: bytes.NewReader(imageData),
 		},
-		ReplyMarkup: updateScheduleMarkup("teacher", string(teacherID)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup("teacher", string(teacherID)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -189,7 +189,7 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        tomorrow.HTML(),
-		ReplyMarkup: updateScheduleMarkup("tomorrow", string(groupName)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup("tomorrow", string(groupName)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -220,7 +220,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 			MessageID:   message.ID,
 			ParseMode:   models.ParseModeHTML,
 			Text:        "Сегодня воскресенье, отдыхайте!",
-			ReplyMarkup: updateScheduleMarkup("today", string(groupName)),
+			ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName)),
 		})
 		if err != nil {
 			addHandlerCtxErr(ctx, err)
@@ -269,7 +269,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        today.DynamicFormatHTML(time.Now()),
-		ReplyMarkup: updateScheduleMarkup("today", string(groupName)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
