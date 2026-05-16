@@ -15,6 +15,10 @@ type ScheduleConfig struct {
 	IsDark  bool     `json:"is_dark"`
 }
 
+func (cs ScheduleConfig) WithDarkMode(isDark bool) ScheduleConfig {
+	return ScheduleConfig{Group: cs.Group, Teacher: cs.Teacher, IsDark: isDark}
+}
+
 func (cs *ScheduleConfig) ScheduleKey() string {
 	if cs.Group != nil {
 		return fmt.Sprintf("schedule_%s_%s", cs.Group.DepartmentName, cs.Group.GroupName)

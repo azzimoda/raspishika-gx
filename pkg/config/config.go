@@ -40,6 +40,9 @@ const (
 	KeyPairNotification = "pair_notification"
 	KeyChangeAlert      = "change_alert"
 
+	KeyPairNotificationTTL   = "pair_notification_ttl"
+	KeyUpdateMonitorInterval = "update_monitor_interval"
+
 	KeyScheduleTemplate         = "schedule_template"
 	KeyScheduleTemplateDark     = "schedule_template_dark"
 	KeyScheduleTemplateFile     = "schedule_template_file"
@@ -71,6 +74,9 @@ func Init() error {
 	viper.SetDefault(KeyDailyBroadcast, false)
 	viper.SetDefault(KeyPairNotification, false)
 	viper.SetDefault(KeyChangeAlert, false)
+
+	viper.SetDefault(KeyPairNotificationTTL, 90*time.Minute)
+	viper.SetDefault(KeyUpdateMonitorInterval, 25*time.Minute)
 
 	viper.SetDefault(KeyScheduleTemplateFile, "templates/light.html")
 	viper.SetDefault(KeyScheduleTemplateDarkFile, "templates/dark.html")

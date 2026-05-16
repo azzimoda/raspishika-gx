@@ -56,6 +56,29 @@ func (s *ScheduleService) GetSchedule(ctx context.Context, conf model.ScheduleCo
 	log.Debug().Str("cacheKey", key).Msg("Cache miss")
 	return s.UpdateScheduleCache(ctx, s.browser, conf)
 }
+
+// GetSchedules returns the schedules for the given configs and uses cache if available.
+//
+// If errors occur on any of the configs, they are accumulated and returned as a single error. Successfully
+// processed configs are returned along with any errors that occurred during processing.
+func (s *ScheduleService) GetSchedules(ctx context.Context, confs []model.ScheduleConfig) ([]*model.RawSchedule, error) {
+	var (
+		rawSchedules []*model.RawSchedule
+		errs         []error
+	)
+	for _, conf := range confs {
+		rawSchedule, err := s.GetSchedule(ctx, conf)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			rawSchedules = append(rawSchedules, rawSchedule)
+		}
+	}
+	if len(errs) > 0 {
+		return rawSchedules, fmt.Errorf("errors occurred: %w", errors.Join(errs...))
+	}
+	return rawSchedules, nil
+}
 func (s *ScheduleService) GetScheduleCache(conf model.ScheduleConfig) (*model.RawSchedule, error) {
 	scheduleCache, err := s.schedule.GetByKey(context.Background(), conf.ScheduleKey())
 	if errors.Is(err, sql.ErrNoRows) {
@@ -100,6 +123,52 @@ func (s *ScheduleService) UpdateScheduleCache(
 		return rawSchedule, fmt.Errorf("cache not updated: %w", err)
 	}
 	return rawSchedule, nil
+}
+func (s *ScheduleService) GetChanges(
+	ctx context.Context,
+	groupNames []model.GroupName,
+) (map[model.GroupName]*model.ScheduleChange, error) {
+	changes := make(map[model.GroupName]*model.ScheduleChange)
+	var errs []error
+
+	for _, gn := range groupNames {
+		group, err := s.GetGroupByName(ctx, gn)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		conf := model.GroupScheduleConfig(group, false)
+
+		oldRawSchedule, err := s.GetScheduleCache(conf)
+		if errors.Is(err, ErrNoCache) {
+			log.Warn().Err(err).Any("conf", conf).Msg("No change for the schedule config")
+			if _, err := s.UpdateScheduleCache(ctx, s.browser, conf); err != nil {
+				errs = append(errs, err)
+			}
+			continue
+		} else if err != nil {
+			log.Error().Err(err).Any("conf", conf).Msg("Failed to get schedule cache")
+			errs = append(errs, err)
+			continue
+		}
+
+		newRawSchedule, err := s.UpdateScheduleCache(ctx, s.browser, conf)
+		if err != nil {
+			log.Error().Err(err).Any("conf", conf).Msg("Failed to update schedule cache")
+			errs = append(errs, err)
+			continue
+		}
+
+		change := model.NewScheduleChange(oldRawSchedule.Transform(), newRawSchedule.Transform())
+		diffs := change.Diffs()
+		if len(diffs) > 0 {
+			log.Debug().Any("conf", conf).Msg("Schedule change detected")
+			changes[gn] = change
+		}
+	}
+
+	return changes, errors.Join(errs...)
 }
 
 func (s *ScheduleService) PrepareScheduleImage(

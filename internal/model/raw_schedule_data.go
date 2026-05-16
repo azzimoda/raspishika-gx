@@ -42,6 +42,11 @@ type RawSchedule struct {
 	Rows   []RawScheduleRow
 }
 
+func (s RawSchedule) WithConfig(config ScheduleConfig) RawSchedule {
+	s.Config = config
+	return s
+}
+
 func (s *RawSchedule) Transform() ScheduleData {
 	schedule := ScheduleData{
 		Config: s.Config,
