@@ -167,7 +167,7 @@ func (h *handler) sendTeacherSchedule(
 		return err
 	}
 
-	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, conf, rawSchedule)
+	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
 	if err != nil {
 		return err
 	}

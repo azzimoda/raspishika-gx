@@ -104,17 +104,13 @@ func (s *ScheduleService) UpdateScheduleCache(
 
 func (s *ScheduleService) PrepareScheduleImage(
 	ctx context.Context,
-	conf model.ScheduleConfig,
 	rawSchedule *model.RawSchedule,
 ) (fileName string, bytes []byte, err error) {
 	if rawSchedule == nil {
-		rawSchedule, err = s.GetSchedule(ctx, conf)
-		if err != nil {
-			return "", nil, fmt.Errorf("failed loading schedule: %w", err)
-		}
+		return "", nil, fmt.Errorf("schedule is nil")
 	}
 
-	fileName, bytes, err = s.htmlToImage(conf, rawSchedule.HTML(getScheduleTemplate(conf.IsDark)))
+	fileName, bytes, err = s.htmlToImage(rawSchedule.Config, rawSchedule.HTML(getScheduleTemplate(rawSchedule.Config.IsDark)))
 	if err != nil {
 		return "", nil, err
 	}

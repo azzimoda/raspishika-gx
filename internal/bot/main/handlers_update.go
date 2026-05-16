@@ -48,7 +48,7 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 		return
 	}
 
-	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, conf, rawSchedule)
+	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -118,7 +118,7 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 		return
 	}
 
-	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, conf, rawSchedule)
+	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{

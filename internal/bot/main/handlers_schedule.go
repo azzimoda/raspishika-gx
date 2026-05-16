@@ -60,7 +60,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 		return
 	}
 
-	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, conf, rawSchedule)
+	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to prepare schedule image")
 		addHandlerCtxErr(ctx, err)
