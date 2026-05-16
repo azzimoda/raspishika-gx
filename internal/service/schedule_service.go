@@ -57,7 +57,7 @@ func (s *ScheduleService) GetSchedule(ctx context.Context, conf model.ScheduleCo
 	return s.UpdateScheduleCache(ctx, s.browser, conf)
 }
 func (s *ScheduleService) GetScheduleCache(conf model.ScheduleConfig) (*model.RawSchedule, error) {
-	scheduleCache, err := s.schedule.GetByKey(context.Background(), conf.String())
+	scheduleCache, err := s.schedule.GetByKey(context.Background(), conf.ScheduleKey())
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoCache
 	}
