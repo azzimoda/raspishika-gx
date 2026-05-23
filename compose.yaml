@@ -1,0 +1,8 @@
+services:
+  raspishika:
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Yekaterinburg
+    volumes:
+      - ./.env:/app/.env
+      - ./storage:/app/storage

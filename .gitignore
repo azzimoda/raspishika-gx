@@ -1,7 +1,5 @@
 .*
 !.gitignore
+!.dockerignore
 
-__debug*
 storage/
-
-*.json
