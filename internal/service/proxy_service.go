@@ -45,7 +45,7 @@ func (s *ProxyService) NextChecked(ctx context.Context) (string, error) {
 		default:
 		}
 
-		if err := s.Check(proxy); err == nil {
+		if err := s.Check(ctx, proxy); err == nil {
 			return proxy, nil
 		}
 		idx, proxy = s.repo.Next()
@@ -62,30 +62,38 @@ func (s *ProxyService) Next() string {
 	return proxy
 }
 
+const proxyFinderTimeout = 5 * time.Second
+
 var ErrEmptyProxy = errors.New("empty proxy")
 var ErrProxyUnavailable = errors.New("proxy unavailable")
 
 // Check checks the availability of a proxy and returns an error if it is unavailable
 //
 // Returns [ErrProxyUnavailable] if the proxy is unavailable, or [ErrEmptyProxy] if the proxy is empty
-func (s *ProxyService) Check(proxy string) error {
+func (s *ProxyService) Check(ctx context.Context, proxy string) error {
 	if proxy == "" {
 		return ErrEmptyProxy
 	}
 
-	// Check the proxy by trying to launch Telegram bot polling with fake token.
+	// Check the proxy by creating a telegram bot with fake token
 	httpClient, err := proxyutil.NewHTTPProxyClient(proxy)
 	if err != nil {
-		// Proxy is not available
+		// Proxy is unavailable
 		return fmt.Errorf("%w: %w", ErrProxyUnavailable, err)
 	}
-	opts := []bot.Option{bot.WithHTTPClient(10*time.Second, httpClient)}
+	opts := []bot.Option{bot.WithHTTPClient(proxyFinderTimeout, httpClient),}
 	_, err = bot.New("faketoken", opts...)
+
+	ctx, cancel := context.WithTimeout(ctx, proxyFinderTimeout)
+	defer cancel()
 	if strings.Contains(err.Error(), "not found") {
-		// Telegram servers are abailable, the proxy is available
+		// Telegram API is abailable, then the proxy is available
+		log.Info().Str("proxy", proxy).Msg("Proxy is available")
 		return nil
+	} else if !strings.Contains(err.Error(), "context") {
+		// Telegram API is unavailable, then the proxy is unavailable
+		return ErrProxyUnavailable
 	}
-	// Telegram servers are unavailable, the proxy is unavailable
 	return ErrProxyUnavailable
 }
 
