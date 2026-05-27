@@ -58,8 +58,8 @@ func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) {
 }
 
 func (s *BroadcastService) scheduleDaily(ctx context.Context) {
-	// Every minute
-	s.cron.AddFunc("* * * * *", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
+	// Every minute except Sunday
+	s.cron.AddFunc("0 * * * * 1-5", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
 }
 func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time) {
 	if s.Bot == nil {
