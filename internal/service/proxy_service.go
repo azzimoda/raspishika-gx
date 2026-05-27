@@ -21,9 +21,13 @@ type ProxyService struct{ repo repository.ProxyRepository }
 
 var ErrNoAvailableProxy = errors.New("no available proxy")
 
+const proxyFinderWorkers = 64
+
 func (s *ProxyService) FirstAvailable() (string, error) {
 	proxies := s.repo.All()
-	result, ok := findFirstAsync(proxies, func(p string) bool { return s.Check(p) == nil })
+	log.Trace().Any("proxies", len(proxies)).Msg("Checking proxies...")
+
+	result, ok := findFirstAsync(proxies, proxyFinderWorkers, func(ctx context.Context, p string) bool { return s.Check(ctx, p) == nil })
 	if ok {
 		log.Debug().Str("proxy", result).Msg("Found available proxy")
 		return result, nil
@@ -97,17 +101,34 @@ func (s *ProxyService) Check(ctx context.Context, proxy string) error {
 	return ErrProxyUnavailable
 }
 
-func findFirstAsync[T any](items []T, predicate func(T) bool) (T, bool) {
+func findFirstAsync[T any](items []T, maxConcurrent int, predicate func(context.Context, T) bool) (T, bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	semaphore := make(chan struct{}, maxConcurrent)
 	resultChan := make(chan T, 1)
 	var wg sync.WaitGroup
 
 	for _, item := range items {
 		wg.Add(1)
+
+		semaphore <- struct{}{}
+
 		go func(item T) {
 			defer wg.Done()
-			if predicate(item) {
+			defer func() { <-semaphore }()
+
+			// Check if context is done before running the predicate
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			if predicate(ctx, item) {
 				select {
 				case resultChan <- item:
+					cancel()
 				default:
 				}
 			}
@@ -121,5 +142,5 @@ func findFirstAsync[T any](items []T, predicate func(T) bool) (T, bool) {
 	}()
 
 	result, ok := <-resultChan
-	return result, ok // ok=false means no match found
+	return result, ok
 }
