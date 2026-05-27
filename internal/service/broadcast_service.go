@@ -19,12 +19,12 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 )
 
-func NewBroadcastService(bot *bot.Bot, services *Services, reporter reporter.Reporter) *BroadcastService {
+func NewBroadcastService(bot *BotService, services *Services, reporter reporter.Reporter) *BroadcastService {
 	return &BroadcastService{Bot: bot, Services: services, Reporter: reporter, cron: cron.New()}
 }
 
 type BroadcastService struct {
-	*bot.Bot
+	Bot *BotService
 	*Services
 	reporter.Reporter
 	cron   *cron.Cron
@@ -139,7 +139,7 @@ func (s *BroadcastService) sendDaily(
 			}
 			if err := botutil.SendWeekScheduleMessages(
 				ctx,
-				s.Bot,
+				s.Bot.Bot,
 				0,
 				chat,
 				c.schedule.Config,
@@ -243,7 +243,7 @@ func (s *BroadcastService) sendPairNotificatins(
 			pair.Classroom, pair.Discipline, refutil.DerefOrTypeDefault(pair.Teacher))
 
 		for _, chat := range groupedChats[groupNames[i]] {
-			if msg, err := s.SendMessage(ctx, &bot.SendMessageParams{
+			if msg, err := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID:          chat.TgChatID,
 				MessageThreadID: 0,
 				Text:            text,
@@ -259,7 +259,7 @@ func (s *BroadcastService) sendPairNotificatins(
 	go func(msgs []*models.Message) {
 		time.Sleep(viper.GetDuration(config.KeyPairNotificationTTL))
 		for _, m := range msgs {
-			if _, err := s.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID}); err != nil {
+			if _, err := s.Bot.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID}); err != nil {
 				log.Error().Err(err).Any("message", m).Msg("Failed to delete pair notification message")
 			}
 		}
@@ -379,7 +379,7 @@ func (s *BroadcastService) sendChangeReports(
 
 			if err := botutil.SendWeekScheduleMessages(
 				ctx,
-				s.Bot,
+				s.Bot.Bot,
 				0,
 				chat,
 				c.schedule.Config,

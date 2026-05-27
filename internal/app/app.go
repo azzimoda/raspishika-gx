@@ -54,7 +54,7 @@ func New() (*App, error) {
 		services.Proxy,
 	)
 
-	broadcast := service.NewBroadcastService(mainBot.Bot, services, appReporter)
+	broadcast := service.NewBroadcastService(mainBot, services, appReporter)
 
 	return &App{
 		db:          db,
