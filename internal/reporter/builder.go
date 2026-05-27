@@ -85,7 +85,7 @@ func (rc ReportBuilder) Msgf(format string, a ...any) (*Report, error) {
 	return rc.Msg(fmt.Sprintf(format, a...))
 }
 func (rc ReportBuilder) Msg(msg string) (*Report, error) {
-	log.Trace().Any("report", rc).Msg("Sending report...")
+	log.Trace().Msg("Sending report...")
 
 	reportErr, ok := rc.Value(errKey).(error)
 	if !ok {

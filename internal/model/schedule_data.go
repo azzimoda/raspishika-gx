@@ -70,27 +70,12 @@ func (s *ScheduleDay) CommonKind() PairKind {
 func (s *ScheduleDay) IsEqual(other *ScheduleDay) bool { return reflect.DeepEqual(s, other) }
 func (s *ScheduleDay) IsEmpty() bool                   { return s.CommonKind() == PairKindEmpty }
 
-// func (s ScheduleDay) Left() ScheduleDay {
-// 	leftSchedule := ScheduleDay{Date: s.Date, Weekday: s.Weekday, WeekKind: s.WeekKind, Pairs: []Pair{}}
-
-// 	now := time.Now() // TODO: Add current time as a parameter.
-// 	p, err := s.CurrentPair(now)
-// 	if err != nil {
-// 		if now.Before(time.Date(now.Year(), now.Month(), now.Day(), 8, 0, 0, 0, now.Location())) {
-// 			return s
-// 		}
-// 		p = &Pair{Number: 8}
-// 	}
-
-// 	for i := range len(s.Pairs) {
-// 		if i >= p.Number-1 {
-// 			leftSchedule.Pairs = append(leftSchedule.Pairs, s.Pairs[i])
-// 		}
-// 	}
-
-// 	return leftSchedule
-// }
-
+// CurrentPair returns the current pair at the given time.
+// If the time is before the first pair, it returns the first pair.
+// If the time is after the last pair, it returns the last pair.
+// Otherwise, it returns the pair that is currently in progress.
+//
+// Returns an error if the pair start or end time cannot be parsed.
 func (s ScheduleDay) CurrentPair(t time.Time) (*Pair, error) {
 	log.Trace().Time("time", t).Str("timeStr", t.String()).Msg("CurrentPair")
 	year, month, day := t.Date()

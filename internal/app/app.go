@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -77,7 +79,8 @@ type App struct {
 
 func (a *App) Run() error {
 	log.Info().Msg("Starting app...")
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
 	// Services
 	a.broadcast.Run(ctx, service.BroadcastConfig{
@@ -93,6 +96,12 @@ func (a *App) Run() error {
 	if viper.GetInt("admin_id") != 0 {
 		go a.adminBot.Start(ctx)
 		for a.adminBot.Bot == nil {
+			select {
+			case <-ctx.Done():
+				log.Warn().Msg("Context cancelled!")
+				return nil
+			default:
+			}
 			log.Debug().Msg("Wating for admin bot...")
 			time.Sleep(1 * time.Second)
 		}

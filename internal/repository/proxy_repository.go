@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/rs/zerolog/log"
 )
 
 type ProxyRepository interface {
@@ -68,5 +70,6 @@ func loadProxies(proxyListFile string) ([]string, error) {
 			filteredProxies = append(filteredProxies, fmt.Sprintf("%s:%d", proxy.IP, proxy.Port))
 		}
 	}
+	log.Debug().Any("proxies", len(filteredProxies)).Msg("Loaded proxies")
 	return filteredProxies, nil
 }

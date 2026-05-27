@@ -59,6 +59,13 @@ func (s *BotService) startBot(ctx context.Context) {
 		if err != nil {
 			log.Error().Err(err).Msg("No available proxy, retrying in 10s...")
 			time.Sleep(10 * time.Second)
+
+			select {
+			case <-ctx.Done():
+				log.Error().Msg("Context cancelled, stopping bot...")
+				return
+			default:
+			}
 			continue
 		}
 		log.Debug().Str("proxy", proxy)
