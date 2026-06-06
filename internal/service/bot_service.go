@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sync/singleflight"
 )
 
 type BotBuilderFunc = func(proxy string) (*bot.Bot, error)
@@ -31,16 +33,27 @@ func (s *BotService) Start(ctx context.Context) {
 	for {
 		_, ok := <-s.restartChan
 		if !ok {
+			log.Error().Msg("Restart channel closed, stopping bot...")
 			return
 		}
-		s.Stop()
-		s.startBot(s.botCtx)
+		log.Trace().Msg("Restarting bot...")
+		s.botCtxCancel()
+		s.startBot(ctx)
 	}
 }
 
-func (s *BotService) Restart() { s.restartChan <- struct{}{} }
+var restartSF = singleflight.Group{}
+
+func (s *BotService) Restart() {
+	restartSF.Do("restart", func() (interface{}, error) {
+		log.Trace().Msg("Sending restart signal...")
+		s.restartChan <- struct{}{}
+		return nil, nil
+	})
+}
 
 func (s *BotService) Stop() {
+	log.Trace().Msg("Stopping bot...")
 	s.botCtxCancel()
 	close(s.restartChan)
 }
@@ -76,8 +89,20 @@ func (s *BotService) startBot(ctx context.Context) {
 			time.Sleep(10 * time.Second)
 			continue
 		}
+
+		bot.WithErrorsHandler(func(err error) { go s.handleAPIError(err) })(s.Bot)
+
 		break
 	}
 
-	s.Bot.Start(ctx)
+	s.Bot.Start(s.botCtx)
+}
+
+func (s *BotService) handleAPIError(err error) {
+	if strings.Contains(err.Error(), "socks connect") || strings.Contains(err.Error(), "connection refused") {
+		log.Error().Err(err).Msg("Proxy connection refused, restarting...")
+		s.Restart()
+	} else {
+		log.Error().Err(err).Msg("Telegram API error")
+	}
 }
