@@ -91,22 +91,21 @@ func (a *App) Run() error {
 
 	// Bots
 	go a.mainBot.Start(ctx)
-	log.Info().Msg("Main bot started")
 
 	if viper.GetInt("admin_id") != 0 {
 		go a.adminBot.Start(ctx)
-		for a.adminBot.Bot == nil {
+		for a.adminBot.Bot == nil || a.mainBot.Bot == nil {
 			select {
 			case <-ctx.Done():
 				log.Warn().Msg("Context cancelled!")
 				return nil
 			default:
 			}
-			log.Debug().Msg("Wating for admin bot...")
-			time.Sleep(1 * time.Second)
+			log.Debug().Msg("Wating for bots...")
+			time.Sleep(5 * time.Second)
 		}
 		time.Sleep(1 * time.Second)
-		log.Info().Msg("Admin bot started")
+		log.Info().Msg("All bots started")
 		a.appReporter.Reporter = reporter.NewReporter(a.adminBot.Bot, viper.GetInt64(config.KeyAdminID))
 		a.Report().Msg("Started on bot @" + mainbot.GetMe(a.mainBot.Bot).Username)
 	} else {
