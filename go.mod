@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/chromedp/cdproto v0.0.0-20260427013145-5737772c319b
-	github.com/go-telegram/bot v1.20.0
+	github.com/go-telegram/bot v1.21.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.44
