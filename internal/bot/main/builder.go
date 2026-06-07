@@ -19,10 +19,10 @@ import (
 //go:embed commands.yaml
 var myCommandsBytes []byte
 
-func New(s *service.Services, p string, reporter reporter.Reporter) (*bot.Bot, error) {
+func New(s *service.Services, proxy string, reporter reporter.Reporter) (*bot.Bot, error) {
 	h := newHandler(s, reporter)
 
-	httpClient, err := proxyutil.NewHTTPProxyClient(p)
+	httpClient, err := proxyutil.NewHTTPProxyClient(proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func New(s *service.Services, p string, reporter reporter.Reporter) (*bot.Bot, e
 			h.ignoreInaccessibleMessageCQ,
 			h.syncCQSingleFlight,
 			h.ensureChat,
-			h.logHandler,
+			h.logUpdate,
 		),
 		bot.WithDefaultHandler(h.handleDefault),
 	}

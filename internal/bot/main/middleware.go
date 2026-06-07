@@ -126,12 +126,13 @@ func (h *handler) syncCQSingleFlight(next bot.HandlerFunc) bot.HandlerFunc {
 	}
 }
 
-// logHandler middleware logs incoming updates.
-func (h *handler) logHandler(next bot.HandlerFunc) bot.HandlerFunc {
+// logUpdate middleware logs incoming updates.
+func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 	return func(ctx context.Context, bot *bot.Bot, update *models.Update) {
 		log.Trace().Any("update", update).Msg("Received update")
 
 		// Prepare
+
 		var handlerErrs []error
 		ctx = context.WithValue(ctx, keyError, &handlerErrs)
 
@@ -139,9 +140,12 @@ func (h *handler) logHandler(next bot.HandlerFunc) bot.HandlerFunc {
 		ctx = context.WithValue(ctx, keyNoLogFlag, &noLogFlag)
 
 		// Call the handler
+
 		startTime := time.Now()
 		next(ctx, bot, update)
 		elapsedTime := time.Since(startTime)
+
+		// Log the update
 
 		log.Trace().Any("update", update).Msg("Update processed")
 

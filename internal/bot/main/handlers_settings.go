@@ -610,13 +610,11 @@ func (h *handler) sendDepartmentSelectionMenu(
 		currentGroup = fmt.Sprintf("Текущая группа: %s", *chat.GroupName)
 	}
 
-	markup := departmentMenuMarkup(departments)
-
 	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: messageThreadID,
 		Text:            fmt.Sprintf("%s\nВыберите отделение", currentGroup),
-		ReplyMarkup:     markup,
+		ReplyMarkup:     departmentMenuMarkup(departments),
 	})
 	return err
 }

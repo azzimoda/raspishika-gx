@@ -10,19 +10,19 @@ import (
 	"github.com/spf13/viper"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/proxyutil"
-	"github.com/azzimoda/raspishika-gx/internal/reporter"
 )
 
 //go:embed commands.yaml
 var myCommandsBytes []byte
 
-func New(s *service.Services, p string, reporter reporter.Reporter) (*bot.Bot, error) {
+func New(s *service.Services, proxy string, reporter reporter.Reporter) (*bot.Bot, error) {
 	h := newHandler(s, reporter)
 
-	httpClient, err := proxyutil.NewHTTPProxyClient(p)
+	httpClient, err := proxyutil.NewHTTPProxyClient(proxy)
 	if err != nil {
 		return nil, err
 	}

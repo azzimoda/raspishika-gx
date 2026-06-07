@@ -13,7 +13,8 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 )
 
-const startMessageText = `
+const (
+	startMessageText = `
 Привет! Со мной ты можешь легко получить расписание своей группы и любого преподавателя
 
 Для начала нужно задать свою группу, после этого можно будет использовать команды /week, /tomorrow, /today и настроить рассылки. Прочие функции перечислены в /help
@@ -21,8 +22,7 @@ const startMessageText = `
 Помимо команд можно использовать кнопки клавиатуры, а также меня можно добавить в групповой чат
 
 Подпишись на канал разработчика @mazzaLLM, где ты можешь найти последние новости и обсудить бота в комментариях`
-
-const helpMessageText = `Основные команды:
+	helpMessageText = `Основные команды:
 
 • /week — Расписание на неделю
 • /tomorrow — Расписание на завтра
@@ -45,6 +45,7 @@ const helpMessageText = `Основные команды:
 • Можно получить расписание любой группы, просто прислав её название, например: "ИСПт-22-(9)-2" или "испт 22 9 2"
 
 По всем вопросам пишите в комментарии или директ канала @mazzaLLM.`
+)
 
 func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models.Update) {
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
@@ -55,8 +56,7 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 	addHandlerCtxErr(ctx, err)
 
 	if err == nil {
-		chat, ok := ctx.Value(keyChat).(*model.Chat)
-		if !ok {
+		if chat, ok := ctx.Value(keyChat).(*model.Chat); !ok {
 			addHandlerCtxErr(ctx, fmt.Errorf("failed to get chat from handler context"))
 		} else if chat.GroupName == nil || string(refutil.DerefOrTypeDefault(chat.GroupName)) == "" {
 			err := h.sendDepartmentSelectionMenu(ctx, b, chat, update.Message.MessageThreadID)
