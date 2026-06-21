@@ -23,7 +23,6 @@ type ChatState string
 
 const (
 	ChatStateDefault             ChatState = "default"
-	ChatStateSelectingDepartment ChatState = "selecting_department"
 	ChatStateSelectingGroup      ChatState = "selecting_group"
 	ChatStateSelectingTeacher    ChatState = "selecting_teacher"
 	ChatStateSelectingTime       ChatState = "selecting_time"

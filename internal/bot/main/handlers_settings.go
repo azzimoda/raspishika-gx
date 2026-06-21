@@ -610,10 +610,20 @@ func (h *handler) sendDepartmentSelectionMenu(
 		currentGroup = fmt.Sprintf("Текущая группа: %s", *chat.GroupName)
 	}
 
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateSelectingGroup)); err != nil {
+		addHandlerCtxErr(ctx, err)
+		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
+			ChatID:          chat.TgChatID,
+			MessageThreadID: messageThreadID,
+			Text:            botutil.ErrMsgTryLater,
+		})
+		return err
+	}
+
 	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: messageThreadID,
-		Text:            fmt.Sprintf("%s\nВыберите отделение", currentGroup),
+		Text:            fmt.Sprintf("%s\nВведите название группы или выберите отделение", currentGroup),
 		ReplyMarkup:     departmentMenuMarkup(departments),
 	})
 	return err
