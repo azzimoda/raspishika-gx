@@ -17,11 +17,12 @@ import (
 type reportKey string
 
 const (
-	tempKey     reportKey = "temp"
-	errKey      reportKey = "err"
-	chatIDKey   reportKey = "chat_id"
-	usernameKey reportKey = "username"
-	debugKey    reportKey = "debug"
+	tempKey      reportKey = "temp"
+	errKey       reportKey = "err"
+	chatIDKey    reportKey = "chat_id"
+	usernameKey  reportKey = "username"
+	groupNameKey reportKey = "group_name"
+	debugKey     reportKey = "debug"
 )
 
 func NewReportBuilder(bot *bot.Bot, recipientChatID int64) ReportBuilder {
@@ -36,6 +37,7 @@ func defaultContext() context.Context {
 	ctx = context.WithValue(ctx, errKey, nil)
 	ctx = context.WithValue(ctx, chatIDKey, model.ChatID(0))
 	ctx = context.WithValue(ctx, usernameKey, model.UserName(""))
+	ctx = context.WithValue(ctx, groupNameKey, model.GroupName(""))
 	ctx = context.WithValue(ctx, debugKey, make(map[string]any))
 
 	return ctx
@@ -50,12 +52,20 @@ type ReportBuilder struct {
 // Err adds error to report message.
 func (r ReportBuilder) Err(err error) ReportBuilder { return r.withValue(errKey, err) }
 
-// Chat sets the chat, whose message caused the error. It can be either a Chat object or a chat ID.
+// Chat sets the chat ID, username, and group name of the chat, whose message caused the error.
+//
+// If the chatOrID is an int64, the chat ID is set to the value, and the username and group name are set to "??".
+//
+// If the chatOrID is a *model.Chat, the chat ID, username, and group name are set to the corresponding values from the chat.
 func (r ReportBuilder) Chat(chatOrID any) ReportBuilder {
 	if tgChatID, ok := chatOrID.(int64); ok {
-		r = r.withValue(chatIDKey, tgChatID)
+		r = r.withValue(chatIDKey, tgChatID).
+			withValue(usernameKey, "??").
+			withValue(groupNameKey, "??")
 	} else if chat, ok := chatOrID.(*model.Chat); ok {
-		r = r.withValue(chatIDKey, chat.TgChatID).withValue(usernameKey, refutil.DerefOrTypeDefault(chat.UserName))
+		r = r.withValue(chatIDKey, chat.TgChatID).
+			withValue(usernameKey, refutil.DerefOrTypeDefault(chat.UserName)).
+			withValue(groupNameKey, refutil.DerefOrTypeDefault(chat.GroupName))
 	} else {
 		log.Error().Type("type", chatOrID).Any("arg", chatOrID).Msg("Wrong type of chat argument")
 	}
@@ -92,6 +102,7 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 		reportErr = nil
 	}
 	chatID := rc.Value(chatIDKey).(model.ChatID)
+	groupName := rc.Value(groupNameKey).(model.GroupName)
 	username := rc.Value(usernameKey).(model.UserName)
 	debugObjects := rc.Value(debugKey).(map[string]any)
 
@@ -122,6 +133,7 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 	// Chat
 	if chatID != 0 {
 		fmt.Fprintf(&msgText, "<code>/chat %d</code> @%s\n", chatID, username)
+		fmt.Fprintf(&msgText, "Group: <code>%s</code>\n", groupName)
 	}
 
 	// Error
