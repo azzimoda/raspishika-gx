@@ -49,10 +49,16 @@ func (s *ScheduleService) GetSchedule(ctx context.Context, conf model.ScheduleCo
 	key := conf.ScheduleKey()
 	if rawSchedule, ok := s.GetScheduleCache(key); ok {
 		log.Debug().Str("cacheKey", key).Msg("Cache hit")
+		rawSchedule.Config.IsDark = conf.IsDark
 		return rawSchedule, nil
 	}
 	log.Debug().Str("cacheKey", key).Msg("Cache miss")
-	return s.UpdateScheduleCache(ctx, s.browser, conf)
+	rawSchedule, err := s.UpdateScheduleCache(ctx, s.browser, conf)
+	if err != nil {
+		return nil, err
+	}
+	rawSchedule.Config.IsDark = conf.IsDark
+	return rawSchedule, nil
 }
 
 // GetSchedules returns the schedules for the given configs and uses cache if available.
