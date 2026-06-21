@@ -48,6 +48,29 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess)
 		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess)
 		registerTextHandler(b, "отмена", h.handleCmdCancel, h.checkRegularAccess)
+
+		b.RegisterHandlerMatchFunc(func(update *models.Update) bool {
+			if update.Message == nil {
+				return false
+			}
+
+			chat, err := h.Chat.GetChatByChatID(context.Background(), model.ChatID(update.Message.Chat.ID))
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to get chat by chat ID")
+				return false
+			}
+			if state, _ := chat.GetState(); state == model.ChatStateSelectingGroup {
+				return false
+			}
+
+			// Check the group name
+			groupName := model.GroupName(update.Message.Text)
+			if _, err := h.Schedule.ValidateGroupName(context.Background(), groupName); err == nil {
+				return true
+			} else {
+				return false
+			}
+		}, h.handleTextQuickGroup, h.checkRegularAccess)
 	}
 
 	// States
@@ -148,7 +171,7 @@ func (h *handler) registerChatStateHandler(b *bot.Bot, state model.ChatState, f 
 			chatState = chat.State
 		}
 
-		log.Debug().Any("chat", chat).Any("state", chatState).Any("target", state).Msg("Matching chat state...")
+		log.Trace().Any("chat", chat).Any("state", chatState).Any("target", state).Msg("Matching chat state...")
 		return chatState == state
 	}
 	return b.RegisterHandlerMatchFunc(matchFunc, f, m...)

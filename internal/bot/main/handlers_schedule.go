@@ -211,3 +211,75 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	})
 	addHandlerCtxErr(ctx, err)
 }
+
+func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	threadID := update.Message.MessageThreadID
+
+	sendChatActionTyping(ctx, b, chatID, threadID)
+
+	groupName := model.GroupName(update.Message.Text)
+	var err error
+	groupName, err = h.Schedule.ValidateGroupName(ctx, groupName)
+	if err != nil { // This condition should be impossible
+		log.Error().Err(err).Msg("Invalid group name")
+		addHandlerCtxErr(ctx, err)
+		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
+			ChatID:          chatID,
+			MessageThreadID: threadID,
+			Text:            "Такой группы не существует",
+		})
+		return
+	}
+
+	chat, ok := ctx.Value(keyChat).(*model.Chat)
+	if !ok {
+		addHandlerCtxErr(ctx, ErrNoChatContext)
+		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
+			ChatID:          chatID,
+			MessageThreadID: threadID,
+			Text:            botutil.ErrMsgTryLater,
+		})
+		return
+	}
+
+	group, err := h.Schedule.GetGroupByName(ctx, groupName)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get group by name")
+		addHandlerCtxErr(ctx, err)
+		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
+			ChatID:          chatID,
+			MessageThreadID: threadID,
+			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+		})
+		return
+	}
+
+	conf := model.GroupScheduleConfig(group, chat.DarkMode)
+	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get schedule")
+		addHandlerCtxErr(ctx, err)
+		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
+			ChatID:          chatID,
+			MessageThreadID: threadID,
+			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+		})
+		return
+	}
+
+	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to prepare schedule image")
+		addHandlerCtxErr(ctx, err)
+		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
+			ChatID:          chatID,
+			MessageThreadID: threadID,
+			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+		})
+		return
+	}
+
+	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData)
+	addHandlerCtxErr(ctx, err)
+}

@@ -85,14 +85,14 @@ func (s *ProxyService) Check(ctx context.Context, proxy string) error {
 		// Proxy is unavailable
 		return fmt.Errorf("%w: %w", ErrProxyUnavailable, err)
 	}
-	opts := []bot.Option{bot.WithHTTPClient(proxyFinderTimeout, httpClient),}
+	opts := []bot.Option{bot.WithHTTPClient(proxyFinderTimeout, httpClient)}
 	_, err = bot.New("faketoken", opts...)
 
 	ctx, cancel := context.WithTimeout(ctx, proxyFinderTimeout)
 	defer cancel()
 	if strings.Contains(err.Error(), "not found") {
 		// Telegram API is abailable, then the proxy is available
-		log.Info().Str("proxy", proxy).Msg("Proxy is available")
+		// log.Info().Str("proxy", proxy).Msg("Proxy is available")
 		return nil
 	} else if !strings.Contains(err.Error(), "context") {
 		// Telegram API is unavailable, then the proxy is unavailable
