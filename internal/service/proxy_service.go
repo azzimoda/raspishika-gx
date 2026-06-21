@@ -101,6 +101,13 @@ func (s *ProxyService) Check(ctx context.Context, proxy string) error {
 	return ErrProxyUnavailable
 }
 
+func (s *ProxyService) HealthCheck() error {
+	if len(s.repo.All()) == 0 {
+		return fmt.Errorf("no proxies available")
+	}
+	return nil
+}
+
 func findFirstAsync[T any](items []T, maxConcurrent int, predicate func(context.Context, T) bool) (T, bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

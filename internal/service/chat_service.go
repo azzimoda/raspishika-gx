@@ -60,7 +60,9 @@ func (s *ChatService) GetChatsWithDarkMode(ctx context.Context) ([]*model.Chat, 
 	return s.repo.GetChatsWithDarkMode(ctx)
 }
 
-func (s *ChatService) DeleteChat(ctx context.Context, id int64) error { return s.repo.DeleteChat(ctx, id) }
+func (s *ChatService) DeleteChat(ctx context.Context, id int64) error {
+	return s.repo.DeleteChat(ctx, id)
+}
 
 func (s *ChatService) AddChatRecentTeacher(ctx context.Context, chatID int64, teacherID int64) error {
 	return s.repo.AddRecentTeacher(ctx, chatID, teacherID)
@@ -98,6 +100,13 @@ func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duratio
 		GroupsTotal:   groupsTotal,
 	}
 	return stats, nil
+}
+
+func (s *ChatService) HealthCheck() error {
+	if _, err := s.GetAllChats(context.Background()); err != nil {
+		return err
+	}
+	return nil
 }
 
 type ChatStatsData struct {

@@ -369,6 +369,19 @@ func (s *ScheduleService) scrapeSchedule(
 	}
 }
 
+func (s *ScheduleService) HealthCheck() error {
+	if _, err := s.groups.GetAllGroups(context.Background()); err != nil {
+		return err
+	}
+	if _, err := s.GetDepartments(context.Background()); err != nil {
+		return err
+	}
+	if _, err := s.groups.GetAllTeachers(context.Background()); err != nil {
+		return err
+	}
+	return nil
+}
+
 func getScheduleTemplate(is_dark bool) string {
 	fileKey := config.KeyScheduleTemplateFile
 	if is_dark {

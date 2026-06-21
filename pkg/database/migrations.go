@@ -94,3 +94,44 @@ func ensureMigrationsTable(db *sqlx.DB) error {
 	}
 	return nil
 }
+
+func GetMigrationsInfo(db *sqlx.DB, migrationsDir string) (*MigrationsInfo, error) {
+	// Get migration files
+	migrationFiles, err := migrationFiles(migrationsDir)
+	if err != nil {
+		return nil, err
+	}
+	migrationFilesStr := make([]string, 0, len(migrationFiles))
+	for _, file := range migrationFiles {
+		migrationFilesStr = append(migrationFilesStr, file.name)
+	}
+
+	// Get applied migrations
+	rows, err := db.Query("SELECT name FROM migrations")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	appliedMigrations := make([]string, 0)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		appliedMigrations = append(appliedMigrations, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &MigrationsInfo{
+		MigrationFiles:    migrationFilesStr,
+		AppliedMigrations: appliedMigrations,
+	}, nil
+}
+
+type MigrationsInfo struct {
+	MigrationFiles    []string
+	AppliedMigrations []string
+}

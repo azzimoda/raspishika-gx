@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/chromedp/cdproto/page"
@@ -118,6 +119,27 @@ func (b *BrowserService) TakeScreenshotHTML(html, outputFilename string) error {
 	if err := os.WriteFile(outputFilename, imageData, 0644); err != nil {
 		return fmt.Errorf("failed to write screenshot to file: %w", err)
 	}
+	return nil
+}
+
+func (b *BrowserService) HealthCheck() error {
+	if b.pwBrowser == nil {
+		return fmt.Errorf("browser not initialized")
+	}
+
+	page, err := b.pwBrowser.NewPage()
+	if err != nil {
+		return fmt.Errorf("failed to create page: %w", err)
+	}
+	defer page.Close()
+
+	// Taking screenshot
+
+	tempDir := os.TempDir()
+	if err := b.TakeScreenshotHTML(`<html><body>test</body></html>`, filepath.Join(tempDir, "screenshot.png")); err != nil {
+		return fmt.Errorf("failed to take screenshot: %w", err)
+	}
+
 	return nil
 }
 

@@ -81,3 +81,10 @@ type LogStatsData struct {
 	BroadcastPair   int `json:"broadcast_Pair"`
 	BroadcastChange int `json:"broadcast_change"`
 }
+
+func (s *LogService) HealthCheck() error {
+	if _, err := s.GetGeneralStats(context.Background(), time.Hour); err != nil {
+		return err
+	}
+	return nil
+}

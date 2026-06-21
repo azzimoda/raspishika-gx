@@ -38,3 +38,22 @@ func (s *Services) Stop() error {
 	s.Browser.Close()
 	return nil
 }
+
+func (s *Services) HealthCheck() error {
+	if err := s.Browser.HealthCheck(); err != nil {
+		return err
+	}
+	if err := s.Proxy.HealthCheck(); err != nil {
+		return err
+	}
+	if err := s.Chat.HealthCheck(); err != nil {
+		return err
+	}
+	if err := s.Schedule.HealthCheck(); err != nil {
+		return err
+	}
+	if err := s.Log.HealthCheck(); err != nil {
+		return err
+	}
+	return nil
+}
