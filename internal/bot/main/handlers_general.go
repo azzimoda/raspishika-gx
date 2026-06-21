@@ -103,6 +103,7 @@ func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.
 		return
 	}
 
+	h.Report().Chat(chat).Msg("User stopped the bot :(")
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
