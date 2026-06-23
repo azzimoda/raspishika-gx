@@ -3,39 +3,42 @@ package repository
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
 
 type ProxyRepository interface {
-	// UpdateProxyList updates the proxy list from the configured file
-	// UpdateProxyList() error
+	UpdateFromJSON(data []byte)
 
 	// All returns all proxies in the list
 	All() []string
 
 	// Next returns the next proxy from the list
 	Next() (idx int, proxy string)
+
+	UpdatedAt() time.Time
 }
 
-func NewProxyRepository(proxyListFile string) (ProxyRepository, error) {
-	proxies, err := loadProxies(proxyListFile)
-	if err != nil {
-		return nil, err
-	}
-
-	return &proxyRepository{proxies: proxies}, nil
+func NewProxyRepository() (ProxyRepository, error) {
+	return &proxyRepository{proxies: make([]string, 0)}, nil
 }
 
 type proxyRepository struct {
-	proxies []string
-	current int
+	proxies   []string
+	updatedAt time.Time
+	current   int
 }
 
 func (r *proxyRepository) All() []string { return r.proxies }
 
+var muNext sync.Mutex
+
 func (r *proxyRepository) Next() (int, string) {
+	muNext.Lock()
+	defer muNext.Unlock()
+
 	idx := r.current
 	proxy := r.proxies[idx]
 
@@ -47,11 +50,11 @@ func (r *proxyRepository) Next() (int, string) {
 	return idx, proxy
 }
 
-func loadProxies(proxyListFile string) ([]string, error) {
-	bytes, err := os.ReadFile(proxyListFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load proxy list file: %w", err)
-	}
+var muUpdate sync.Mutex
+
+func (r *proxyRepository) UpdateFromJSON(data []byte) {
+	muUpdate.Lock()
+	defer muUpdate.Unlock()
 
 	var proxies []struct {
 		Protocol    string `json:"protocol"`
@@ -61,7 +64,7 @@ func loadProxies(proxyListFile string) ([]string, error) {
 			Country string `json:"country"`
 		} `json:"geolocation"`
 	}
-	json.Unmarshal(bytes, &proxies)
+	json.Unmarshal(data, &proxies)
 
 	// Filter SOCKS and not Russian proxies
 	var filteredProxies []string
@@ -71,5 +74,9 @@ func loadProxies(proxyListFile string) ([]string, error) {
 		}
 	}
 	log.Debug().Any("proxies", len(filteredProxies)).Msg("Loaded proxies")
-	return filteredProxies, nil
+
+	r.proxies = filteredProxies
+	r.updatedAt = time.Now()
 }
+
+func (r *proxyRepository) UpdatedAt() time.Time { return r.updatedAt }

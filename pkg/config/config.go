@@ -23,8 +23,6 @@ const (
 	KeyBrowserHeight   = "browser_height"
 	KeyBrowserScale    = "browser_scale"
 
-	KeyProxyListFile = "proxy_list_file"
-
 	KeyBotToken      = "bot_token"
 	KeyAdminBotToken = "admin_bot_token"
 	KeyAdminID       = "admin_id"
@@ -64,8 +62,6 @@ func Init() error {
 	viper.SetDefault(KeyBrowserWidth, 1920)
 	viper.SetDefault(KeyBrowserHeight, 1080)
 	viper.SetDefault(KeyBrowserScale, 1.0)
-
-	viper.SetDefault(KeyProxyListFile, "storage/proxies.json")
 
 	viper.SetDefault(KeyScreenshotDir, "storage/screenshots")
 	viper.SetDefault(KeyChatStateTTL, 10*time.Minute)

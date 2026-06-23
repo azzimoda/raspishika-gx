@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +26,10 @@ var ErrNoAvailableProxy = errors.New("no available proxy")
 const proxyFinderWorkers = 128
 
 func (s *ProxyService) FirstAvailable() (string, error) {
+	if err := s.UpdateProxies(); err != nil {
+		return "", fmt.Errorf("failed to update proxies: %w", err)
+	}
+
 	proxies := s.repo.All()
 	log.Trace().Any("proxies", len(proxies)).Msg("Checking proxies...")
 
@@ -34,6 +40,40 @@ func (s *ProxyService) FirstAvailable() (string, error) {
 	}
 	log.Debug().Msg("No available proxy found")
 	return "", ErrNoAvailableProxy
+}
+
+const proxySourceURL = "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json"
+const proxyCacheTTL = 1 * time.Hour
+
+var muUpdate sync.Mutex
+
+func (s *ProxyService) UpdateProxies() error {
+	muUpdate.Lock()
+	defer muUpdate.Unlock()
+
+	if updatedAt := s.repo.UpdatedAt(); time.Since(updatedAt) <= proxyCacheTTL {
+		log.Trace().Time("updatedAt", updatedAt).Msg("Proxies are actual")
+		return nil
+	}
+
+	log.Debug().Msg("Updating proxies...")
+	client := new(http.Client{Timeout: 30 * time.Second})
+	resp, err := client.Get(proxySourceURL)
+	if err != nil {
+		return fmt.Errorf("failed to update proxies: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to update proxies: %w", err)
+	}
+
+	s.repo.UpdateFromJSON(body)
+	all := s.repo.All()
+	log.Debug().Int("count", len(all)).Msg("Proxies updated")
+
+	return nil
 }
 
 // NextChecked returns the next proxy from the list that is checked to be available
@@ -102,6 +142,9 @@ func (s *ProxyService) Check(ctx context.Context, proxy string) error {
 }
 
 func (s *ProxyService) HealthCheck() error {
+	if err := s.UpdateProxies(); err != nil {
+		return err
+	}
 	if len(s.repo.All()) == 0 {
 		return fmt.Errorf("no proxies available")
 	}

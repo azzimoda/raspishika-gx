@@ -24,7 +24,6 @@ func TestScheduleService_EnsureGroups(t *testing.T) {
 	if err := config.Init(); err != nil {
 		t.Fatal(err)
 	}
-	viper.Set(config.KeyProxyListFile, "./storage/proxies.json")
 
 	artifactDir := t.ArtifactDir()
 	viper.Set(config.KeyDBFile, filepath.Join(artifactDir, "database/data.db"))

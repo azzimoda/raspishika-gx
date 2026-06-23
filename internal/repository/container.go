@@ -1,14 +1,9 @@
 package repository
 
-import (
-	"github.com/jmoiron/sqlx"
-	"github.com/spf13/viper"
-
-	"github.com/azzimoda/raspishika-gx/pkg/config"
-)
+import "github.com/jmoiron/sqlx"
 
 func NewContainer(db *sqlx.DB) (*Container, error) {
-	proxyRepo, err := NewProxyRepository(viper.GetString(config.KeyProxyListFile))
+	proxyRepo, err := NewProxyRepository()
 	if err != nil {
 		return nil, err
 	}

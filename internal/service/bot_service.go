@@ -102,8 +102,8 @@ func (s *BotService) startBot(ctx context.Context) {
 		s.Log().Trace().Msg("Building bot...")
 		b, err := s.builder(proxy)
 		if err != nil {
-			s.Log().Error().Err(err).Msg("Failed to build bot, retrying in 10 second...")
-			time.Sleep(10 * time.Second)
+			s.Log().Error().Err(err).Msg("Failed to build bot, retrying in 5 second...")
+			time.Sleep(5 * time.Second)
 			continue
 		}
 
@@ -112,8 +112,8 @@ func (s *BotService) startBot(ctx context.Context) {
 			s.username = me.Username
 			s.Log().Info().Msg("Bot started")
 		} else {
-			s.Log().Error().Err(err).Msg("Failed to get bot username, retrying in 10 seconds...")
-			time.Sleep(10 * time.Second)
+			s.Log().Error().Err(err).Msg("Failed to get bot username, retrying in 5 seconds...")
+			time.Sleep(5 * time.Second)
 			continue
 		}
 
