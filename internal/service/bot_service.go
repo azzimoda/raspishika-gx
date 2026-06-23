@@ -31,6 +31,16 @@ func (s *BotService) Log() *zerolog.Logger {
 	return new(log.Logger.With().Str("bot", s.username).Logger())
 }
 
+func (s *BotService) HealthCheck() error {
+	if s.Bot == nil {
+		return nil
+	}
+	if _, err := s.Bot.GetMe(s.botCtx); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *BotService) Start(ctx context.Context) {
 	s.botCtx, s.botCtxCancel = context.WithCancel(ctx)
 

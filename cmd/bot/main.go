@@ -9,7 +9,9 @@ import (
 func main() {
 	app, err := app.New()
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create app")
+		log.Fatal().Err(err).Msg("Failed to create app")
 	}
-	app.Run()
+	if err := app.Run(); err != nil {
+		log.Fatal().Err(err).Msg("App exited with error")
+	}
 }
