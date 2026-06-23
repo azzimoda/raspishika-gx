@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-telegram/bot"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
 )
@@ -17,12 +18,17 @@ func NewBotService(builder BotBuilderFunc, proxyService *ProxyService) *BotServi
 }
 
 type BotService struct {
-	builder BotBuilderFunc
+	username string
+	builder  BotBuilderFunc
 	*bot.Bot
 	proxy        *ProxyService
 	botCtx       context.Context
 	botCtxCancel context.CancelFunc
 	restartChan  chan struct{}
+}
+
+func (s *BotService) Log() *zerolog.Logger {
+	return new(log.Logger.With().Str("bot", s.username).Logger())
 }
 
 func (s *BotService) Start(ctx context.Context) {
@@ -33,10 +39,10 @@ func (s *BotService) Start(ctx context.Context) {
 	for {
 		_, ok := <-s.restartChan
 		if !ok {
-			log.Error().Msg("Restart channel closed, stopping bot...")
+			s.Log().Error().Msg("Restart channel closed, stopping bot...")
 			return
 		}
-		log.Trace().Msg("Restarting bot...")
+		s.Log().Trace().Msg("Restarting bot...")
 		s.botCtxCancel()
 		s.startBot(ctx)
 	}
@@ -45,15 +51,15 @@ func (s *BotService) Start(ctx context.Context) {
 var restartSF = singleflight.Group{}
 
 func (s *BotService) Restart() {
-	restartSF.Do("restart", func() (interface{}, error) {
-		log.Trace().Msg("Sending restart signal...")
+	restartSF.Do("restart", func() (any, error) {
+		s.Log().Trace().Msg("Sending restart signal...")
 		s.restartChan <- struct{}{}
 		return nil, nil
 	})
 }
 
 func (s *BotService) Stop() {
-	log.Trace().Msg("Stopping bot...")
+	s.Log().Trace().Msg("Stopping bot...")
 	s.botCtxCancel()
 	close(s.restartChan)
 }
@@ -70,27 +76,41 @@ func (s *BotService) startBot(ctx context.Context) {
 
 		proxy, err := s.proxy.FirstAvailable()
 		if err != nil {
-			log.Error().Err(err).Msg("No available proxy, retrying in 10s...")
+			s.Log().Error().Err(err).Msg("No available proxy, retrying in 10s...")
 			time.Sleep(10 * time.Second)
 
 			select {
 			case <-ctx.Done():
-				log.Error().Msg("Context cancelled, stopping bot...")
+				s.Log().Error().Msg("Context cancelled, stopping bot...")
 				return
 			default:
 			}
 			continue
 		}
-		log.Debug().Str("proxy", proxy)
+		s.Log().Debug().Str("proxy", proxy)
 
-		s.Bot, err = s.builder(proxy)
+		s.Log().Trace().Msg("Building bot...")
+		b, err := s.builder(proxy)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to build bot, retrying in 10 second...")
+			s.Log().Error().Err(err).Msg("Failed to build bot, retrying in 10 second...")
 			time.Sleep(10 * time.Second)
 			continue
 		}
 
-		bot.WithErrorsHandler(func(err error) { go s.handleAPIError(err) })(s.Bot)
+		s.Log().Trace().Msg("Bot built, getting username...")
+		if me, err := b.GetMe(ctx); err == nil {
+			s.username = me.Username
+			s.Log().Info().Msg("Bot started")
+		} else {
+			s.Log().Error().Err(err).Msg("Failed to get bot username, retrying in 10 seconds...")
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		bot.WithErrorsHandler(func(err error) { go s.handleAPIError(err) })(b)
+		s.Log().Trace().Msg("Bot initialized")
+
+		s.Bot = b
 
 		break
 	}
@@ -100,9 +120,9 @@ func (s *BotService) startBot(ctx context.Context) {
 
 func (s *BotService) handleAPIError(err error) {
 	if strings.Contains(err.Error(), "socks connect") || strings.Contains(err.Error(), "connection refused") {
-		log.Error().Err(err).Msg("Proxy connection refused, restarting...")
+		s.Log().Error().Err(err).Msg("Proxy connection refused, restarting...")
 		s.Restart()
 	} else {
-		log.Error().Err(err).Msg("Telegram API error")
+		s.Log().Error().Err(err).Msg("Telegram API error")
 	}
 }
