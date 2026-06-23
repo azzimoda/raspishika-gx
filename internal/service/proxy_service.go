@@ -21,7 +21,7 @@ type ProxyService struct{ repo repository.ProxyRepository }
 
 var ErrNoAvailableProxy = errors.New("no available proxy")
 
-const proxyFinderWorkers = 64
+const proxyFinderWorkers = 128
 
 func (s *ProxyService) FirstAvailable() (string, error) {
 	proxies := s.repo.All()
