@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/spf13/viper"
@@ -63,21 +62,15 @@ func (c *Chat) IsPrivate() bool { return c.TgChatID.IsPrivate() }
 // If chat's state is not Defeult and chat state TTL is expired, returns (ChatStateDefault, true).
 // Otherwise returns actual state and false.
 func (c *Chat) GetState() (state ChatState, expired bool) {
-
-	if c.State != ChatStateDefault && c.UpdatedAt.Add(viper.GetDuration(config.KeyChatStateTTL)).After(time.Now()) {
+	if c.State != ChatStateDefault && time.Since(c.UpdatedAt) >= viper.GetDuration(config.KeyChatStateTTL) {
 		c.State = ChatStateDefault
-		return ChatStateDefault, false
+		return ChatStateDefault, true
 	}
-	return c.State, true
+	return c.State, false
 }
 
 // WithState updates chat's state and returns reference to this chat.
 func (c *Chat) WithState(state ChatState) *Chat {
 	c.State = state
 	return c
-}
-
-func sqlPeriod(dur time.Duration) string {
-	sqlPeriod := fmt.Sprintf("-%d seconds", int(dur.Seconds()))
-	return sqlPeriod
 }
