@@ -19,7 +19,6 @@ require (
 	github.com/SyNdicateFoundation/fastrand v1.0.0 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/andybalholm/cascadia v1.3.4 // indirect
-	github.com/avast/retry-go v3.0.0+incompatible // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/deckarep/golang-set/v2 v2.9.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.5 // indirect
