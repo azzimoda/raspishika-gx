@@ -182,6 +182,9 @@ func callbackDataRegexp(s string) *regexp.Regexp {
 }
 
 func (h *handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.Update) {
+	noLogFlag := ctx.Value(keyNoLogFlag).(*bool)
+	*noLogFlag = true // Do not log default handler
+
 	if update.Message != nil {
 		log.Debug().Str("text", update.Message.Text).Msg("Unhandled message")
 	} else if update.CallbackQuery != nil {
