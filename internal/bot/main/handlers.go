@@ -41,6 +41,13 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerCommandHandler(b, "access", h.handleCmdAccess, h.checkConfigAccess)
 	}
 
+	// States
+	{
+		h.registerChatStateHandler(b, model.ChatStateSelectingGroup, h.handleTextGroup, h.checkConfigAccess)
+		h.registerChatStateHandler(b, model.ChatStateSelectingTime, h.handleTextTime, h.checkConfigAccess)
+		h.registerChatStateHandler(b, model.ChatStateSelectingTeacher, h.handleTextTeacherName, h.checkRegularAccess)
+	}
+
 	// Text messages
 	{
 		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess)
@@ -71,13 +78,6 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 				return false
 			}
 		}, h.handleTextQuickGroup, h.checkRegularAccess)
-	}
-
-	// States
-	{
-		h.registerChatStateHandler(b, model.ChatStateSelectingGroup, h.handleTextGroup, h.checkConfigAccess)
-		h.registerChatStateHandler(b, model.ChatStateSelectingTime, h.handleTextTime, h.checkConfigAccess)
-		h.registerChatStateHandler(b, model.ChatStateSelectingTeacher, h.handleTextTeacherName, h.checkRegularAccess)
 	}
 
 	// Callback queries
@@ -167,7 +167,7 @@ func (h *handler) registerChatStateHandler(b *bot.Bot, state model.ChatState, f 
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to get chat to match chat state; interpreting as default")
 		} else {
-			chatState = chat.State
+			chatState, _ = chat.GetState()
 		}
 
 		log.Trace().Any("chat", chat).Any("state", chatState).Any("target", state).Msg("Matching chat state...")
