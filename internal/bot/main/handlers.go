@@ -93,7 +93,6 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateGroup)
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher)
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow)
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateLeft, h.handleCQUpdateToday)
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateToday, h.handleCQUpdateToday)
 
 		// Config callbacks

@@ -18,8 +18,5 @@ const (
 	CallbackCommandUpdateGroup    = "update_group"
 	CallbackCommandUpdateTeacher  = "update_teacher"
 	CallbackCommandUpdateTomorrow = "update_tomorrow"
-	// Deprecated: Use [CallbackCommandUpdateToday] instead.
-	// TODO: Remove constant [CallbackCommandUpdateLeft] and handlers dependencies after 2026-06-01
-	CallbackCommandUpdateLeft  = "update_left"
 	CallbackCommandUpdateToday = "update_today"
 )
