@@ -108,7 +108,6 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 		ReplyMarkup:     botutil.TeacherMenuMarkup(teachers),
 	})
 	addHandlerCtxErr(ctx, err)
-	// TODO: Send list of matching teachers
 }
 
 func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *models.Update) {
