@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/avast/retry-go/v5"
 	"github.com/go-telegram/bot"
 	"github.com/rs/zerolog/log"
 
@@ -58,7 +59,14 @@ func (s *ProxyService) UpdateProxies() error {
 
 	log.Debug().Msg("Updating proxies...")
 	client := new(http.Client{Timeout: 30 * time.Second})
-	resp, err := client.Get(proxySourceURL)
+	var resp *http.Response
+	err := retry.New(retry.Attempts(5), retry.Delay(100*time.Millisecond)).Do(
+		func() error {
+			var err error
+			resp, err = client.Get(proxySourceURL)
+			return err
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to update proxies: %w", err)
 	}
