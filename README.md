@@ -54,8 +54,6 @@
 
 ### Docker
 
-> TODO: add Docker & Compose
-
 ```sh
 docker-compose up --build --remove-orphans
 ```
