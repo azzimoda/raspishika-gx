@@ -16,8 +16,6 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/service"
 )
 
-var startTime = time.Now() // TODO: Use to calculate uptime
-
 func newHandler(s *service.Services, reporter reporter.Reporter) *handler {
 	return &handler{Services: s, Reporter: reporter}
 }
@@ -81,7 +79,7 @@ func buildReportText(chat *service.ChatStatsData, log *service.LogStatsData, dur
 
 Total: %d
 Private/Group: %d / %d
-Active/Inactive: %d / %d
+Active/Semiactive/Inactive: %d / %d / %d
 New reigstered: %d
 
 %v
@@ -98,7 +96,7 @@ Fails: %d`,
 		dur,
 		chat.ChatsTotal,
 		chat.ChatsPrivate, chat.ChatsTotal-chat.ChatsPrivate,
-		chat.ChatsTotal-chat.ChatsInactive, chat.ChatsInactive,
+		chat.ChatsActive, chat.ChatsSemiactive, chat.ChatsInactive,
 		chat.ChatsNew,
 		chat.ChatsNewGrouped,
 

@@ -36,6 +36,8 @@ type ChatRepository interface {
 	CountAllChats(context.Context) (int, error)
 	CountPricateChats(context.Context) (int, error)
 	CountNewChats(context.Context, time.Duration) (int, error)
+	CountActiveChats(context.Context, time.Duration) (int, error)
+	CountSemiactiveChats(context.Context, time.Duration) (int, error)
 	CountInactiveChats(context.Context, time.Duration) (int, error)
 	GetAvgChatPerGroup(context.Context) (float64, error)
 
@@ -198,6 +200,47 @@ func (r *chatRepository) CountNewChats(ctx context.Context, dur time.Duration) (
 	`, period)
 	return count, err
 }
+
+// CountActiveChats returns the number of active chats,
+// those with update logs within the given period.
+func (r *chatRepository) CountActiveChats(ctx context.Context, dur time.Duration) (int, error) {
+	var count int
+	period := sqlPeriod(dur)
+	err := r.db.GetContext(ctx, &count, `
+			SELECT count(*) FROM (
+				SELECT c.id, c.tg_chat_id, c.username, c."group", c.daily_sending_time, c.pair_sending, c.updated_at,
+					count(ul.id) as count FROM chats c
+				LEFT JOIN (
+					SELECT * FROM update_logs WHERE created_at > datetime('now', ?)
+				) ul ON c.id = ul.chat_id
+				GROUP BY c.id
+				HAVING count > 0
+			);
+		`, period, period)
+	return count, err
+}
+
+// CountSemiactiveChats returns the number of semiactive chats,
+// those with no update logs within the given period but with a group or daily/pair/change broadcast enabled.
+func (r *chatRepository) CountSemiactiveChats(ctx context.Context, dur time.Duration) (int, error) {
+	var count int
+	period := sqlPeriod(dur)
+	err := r.db.GetContext(ctx, &count, `
+			SELECT count(*) FROM (
+				SELECT c.id, c.tg_chat_id, c.username, c."group", c.daily_sending_time, c.pair_sending, c.updated_at,
+					count(ul.id) as count FROM chats c
+				LEFT JOIN (
+					SELECT * FROM update_logs WHERE created_at > datetime('now', ?)
+				) ul ON c.id = ul.chat_id
+				GROUP BY c.id
+				HAVING count = 0 AND ("group" IS NOT NULL AND "group" != '' AND (daily_sending_time IS NOT NULL OR pair_sending = 1 OR update_notification = 1))
+			);
+		`, period, period)
+	return count, err
+}
+
+// CountInactiveChats returns the number of inactive chats,
+// those with no update logs within the given period and no group or daily/pair/change broadcast enabled.
 func (r *chatRepository) CountInactiveChats(ctx context.Context, dur time.Duration) (int, error) {
 	var count int
 	period := sqlPeriod(dur)
@@ -209,11 +252,13 @@ func (r *chatRepository) CountInactiveChats(ctx context.Context, dur time.Durati
 					SELECT * FROM update_logs WHERE created_at > datetime('now', ?)
 				) ul ON c.id = ul.chat_id
 				GROUP BY c.id
-				HAVING count = 0 AND ("group" IS NULL OR "group" = '' OR daily_sending_time IS NULL AND pair_sending = 0)
+				HAVING count = 0 AND ("group" IS NULL OR "group" = '' OR daily_sending_time IS NULL AND pair_sending = 0 AND update_notification = 0)
 			);
 		`, period, period)
 	return count, err
 }
+
+// GetAvgChatPerGroup returns the average number of chats per group.
 func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error) {
 	var avg float64
 	err := r.db.GetContext(ctx, &avg, `

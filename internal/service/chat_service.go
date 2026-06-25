@@ -74,6 +74,17 @@ func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duratio
 		return nil, err
 	}
 	chatsPrivate, err := s.repo.CountPricateChats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	chatsActive, err := s.repo.CountActiveChats(ctx, duration)
+	if err != nil {
+		return nil, err
+	}
+	chatsSemiactive, err := s.repo.CountSemiactiveChats(ctx, duration)
+	if err != nil {
+		return nil, err
+	}
 	chatsInactive, err := s.repo.CountInactiveChats(ctx, duration)
 	if err != nil {
 		return nil, err
@@ -92,12 +103,14 @@ func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duratio
 	}
 
 	stats := &ChatStatsData{
-		ChatsTotal:    chatsTotal,
-		ChatsPrivate:  chatsPrivate,
-		ChatsInactive: chatsInactive,
-		ChatsNew:      chatsNew,
-		ChatsPerGroup: chatsPerGroup,
-		GroupsTotal:   groupsTotal,
+		ChatsTotal:      chatsTotal,
+		ChatsPrivate:    chatsPrivate,
+		ChatsActive:     chatsActive,
+		ChatsSemiactive: chatsSemiactive,
+		ChatsInactive:   chatsInactive,
+		ChatsNew:        chatsNew,
+		ChatsPerGroup:   chatsPerGroup,
+		GroupsTotal:     groupsTotal,
 	}
 	return stats, nil
 }
@@ -112,6 +125,8 @@ func (s *ChatService) HealthCheck() error {
 type ChatStatsData struct {
 	ChatsTotal      int                     `json:"chats_total"`
 	ChatsPrivate    int                     `json:"chats_private"`
+	ChatsActive     int                     `json:"chats_active"`
+	ChatsSemiactive int                     `json:"chats_semiactive"`
 	ChatsInactive   int                     `json:"chats_inactive"`
 	ChatsNew        int                     `json:"chats_new"`
 	ChatsNewGrouped map[model.GroupName]int `json:"chats_new_grouped"`
