@@ -88,6 +88,10 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 
 	// Send schedules
 	successCount, err := s.sendDaily(ctx, schedules, groupedChats)
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
+	}
 
 	// Log
 	if err := s.Log.LogBroadcast(ctx, model.BroadcastLog{
@@ -96,7 +100,7 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 		Groups:  len(groupedChats),
 		Elapsed: int(time.Since(start).Milliseconds()),
 		Fails:   chatCount - successCount,
-		Errors:  err.Error(),
+		Errors:  errStr,
 	}); err != nil {
 		s.Report().Err(err).Msg("Failed to log daily broadcast")
 	}
