@@ -77,30 +77,39 @@ func TestSchedule(t *testing.T) {
 		old, new ScheduleDay
 		want     []Diff
 	}{
-		{"empty -> empty",
-			ScheduleDay{Pairs: []Pair{pairEmpty}},
-			ScheduleDay{Pairs: []Pair{pairEmpty}},
-			nil,
+		{name: "empty -> empty",
+			old:  ScheduleDay{Pairs: []Pair{pairEmpty}},
+			new:  ScheduleDay{Pairs: []Pair{pairEmpty}},
+			want: nil,
 		},
-		{"pair1 -> pair1",
-			ScheduleDay{Pairs: []Pair{pair1}},
-			ScheduleDay{Pairs: []Pair{pair1}},
-			nil,
+		{name: "pair1 -> pair1",
+			old:  ScheduleDay{Pairs: []Pair{pair1}},
+			new:  ScheduleDay{Pairs: []Pair{pair1}},
+			want: nil,
 		},
-		{"empty -> pair1",
-			ScheduleDay{Pairs: []Pair{pairEmpty}},
-			ScheduleDay{Pairs: []Pair{pair1}},
-			[]Diff{{OldPair: pairEmpty, NewPair: pair1}},
+		{name: "empty -> pair1",
+			old: ScheduleDay{Pairs: []Pair{pairEmpty}},
+			new: ScheduleDay{Pairs: []Pair{pair1}},
+			want: []Diff{{
+				NewDay:  new(ScheduleDay{Pairs: []Pair{pair1}}),
+				OldPair: pairEmpty, NewPair: pair1,
+			}},
 		},
-		{"pair1 -> pair2",
-			ScheduleDay{Pairs: []Pair{pair1}},
-			ScheduleDay{Pairs: []Pair{pair2}},
-			[]Diff{{OldPair: pair1, NewPair: pair2}},
+		{name: "pair1 -> pair2",
+			old: ScheduleDay{Pairs: []Pair{pair1}},
+			new: ScheduleDay{Pairs: []Pair{pair2}},
+			want: []Diff{{
+				NewDay:  new(ScheduleDay{Pairs: []Pair{pair2}}),
+				OldPair: pair1, NewPair: pair2,
+			}},
 		},
-		{"pair2 -> pair1",
-			ScheduleDay{Pairs: []Pair{pair2}},
-			ScheduleDay{Pairs: []Pair{pair1}},
-			[]Diff{{OldPair: pair2, NewPair: pair1}},
+		{name: "pair2 -> pair1",
+			old: ScheduleDay{Pairs: []Pair{pair2}},
+			new: ScheduleDay{Pairs: []Pair{pair1}},
+			want: []Diff{{
+				NewDay:  new(ScheduleDay{Pairs: []Pair{pair1}}),
+				OldPair: pair2, NewPair: pair1,
+			}},
 		},
 	}
 	for _, tt := range testCases {
@@ -111,7 +120,7 @@ func TestSchedule(t *testing.T) {
 			)
 			got := s.Diffs()
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Expected %#v, got %#v", tt.want, got)
+				t.Errorf("Unexpected diffs:\nwant %#v,\n got %#v", tt.want, got)
 			}
 		})
 	}

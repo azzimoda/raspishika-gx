@@ -16,7 +16,7 @@ func TestSchedule_JSON(t *testing.T) {
 		GroupName:      "Test",
 		DepartmentName: "Test",
 		Year:           2026,
-		CreatedAt:      time.Now(),
+		CreatedAt:      time.Now().Round(time.Microsecond),
 	}
 	teacherName := "Иванов Иван Иванович"
 	schedule := model.RawSchedule{
@@ -59,11 +59,10 @@ func TestSchedule_JSON(t *testing.T) {
 
 	// Compare original and unmarshaled schedules
 	if !reflect.DeepEqual(schedule, unmarshaledSchedule) {
-		t.Errorf("Original and unmarshaled schedules are not equal:\n%+v\n%+v", schedule, unmarshaledSchedule)
+		t.Logf("Config groups:\n%+v\n%+v", schedule.Config.Group, unmarshaledSchedule.Config.Group)
+		t.Errorf("Original and unmarshaled schedules are not equal:\n%#v\n%#v", schedule, unmarshaledSchedule)
 	}
 	if newJSON, err := unmarshaledSchedule.JSON(); err != nil || !reflect.DeepEqual(jsonBytes, newJSON) {
 		t.Errorf("Failed to marshal unmarshaled schedule to JSON again: %v", err)
 	}
-
-	t.Log("Schedule marshaled and unmarshaled successfully")
 }
