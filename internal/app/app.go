@@ -58,14 +58,19 @@ func New() (*App, error) {
 
 	broadcast := service.NewBroadcastService(mainBot, services, appReporter)
 
-	return &App{
+	a := &App{
 		db:          db,
 		services:    services,
 		broadcast:   broadcast,
 		mainBot:     mainBot,
 		adminBot:    adminBot,
 		appReporter: appReporter,
-	}, nil
+	}
+
+	mainBot.OnRestart(a.onMainBotRestart)
+	adminBot.OnRestart(a.onAdminBotRestart)
+
+	return a, nil
 }
 
 type App struct {
@@ -136,6 +141,44 @@ func (a *App) Stop() error {
 	errServices := a.services.Stop()
 	errDB := a.db.Close()
 	return errors.Join(errDB, errServices)
+}
+
+func (a *App) onMainBotRestart(ctx context.Context) {
+	a.Report().Msg("Admin bot is restarting...")
+
+	for a.mainBot.Bot == nil {
+		select {
+		case <-ctx.Done():
+			log.Warn().Msg("Context cancelled!")
+			return
+		default:
+		}
+		log.Debug().Msg("Wating for main bot...")
+		time.Sleep(5 * time.Second)
+	}
+
+	a.Report().Msg("Main bot has just restarted")
+}
+
+func (a *App) onAdminBotRestart(ctx context.Context) {
+	if a.adminBot.Bot != nil {
+		if _, err := a.Report().Msg("Admin bot is restarting..."); err == nil {
+			return
+		}
+	}
+
+	for a.adminBot.Bot == nil {
+		select {
+		case <-ctx.Done():
+			log.Warn().Msg("Context cancelled!")
+			return
+		default:
+		}
+		log.Debug().Msg("Wating for admin bot...")
+		time.Sleep(5 * time.Second)
+	}
+
+	a.Report().Msg("Admin bot has just restarted")
 }
 
 type appReporter struct{ reporter.Reporter }

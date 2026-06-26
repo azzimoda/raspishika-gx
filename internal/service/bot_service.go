@@ -18,6 +18,7 @@ func NewBotService(builder BotBuilderFunc, proxyService *ProxyService) *BotServi
 }
 
 type BotService struct {
+	superCtx context.Context
 	username string
 	builder  BotBuilderFunc
 	*bot.Bot
@@ -25,6 +26,7 @@ type BotService struct {
 	botCtx       context.Context
 	botCtxCancel context.CancelFunc
 	restartChan  chan struct{}
+	onRestart    func(context.Context)
 }
 
 func (s *BotService) Log() *zerolog.Logger {
@@ -42,6 +44,7 @@ func (s *BotService) HealthCheck() error {
 }
 
 func (s *BotService) Start(ctx context.Context) {
+	s.superCtx = ctx
 	s.botCtx, s.botCtxCancel = context.WithCancel(ctx)
 
 	go s.startBot(ctx)
@@ -64,6 +67,9 @@ func (s *BotService) Restart() {
 	restartSF.Do("restart", func() (any, error) {
 		s.Log().Trace().Msg("Sending restart signal...")
 		s.restartChan <- struct{}{}
+		if s.onRestart != nil {
+			s.onRestart(s.superCtx)
+		}
 		return nil, nil
 	})
 }
@@ -73,6 +79,8 @@ func (s *BotService) Stop() {
 	s.botCtxCancel()
 	close(s.restartChan)
 }
+
+func (s *BotService) OnRestart(f func(context.Context)) { s.onRestart = f }
 
 func (s *BotService) startBot(ctx context.Context) {
 	s.botCtx, s.botCtxCancel = context.WithCancel(ctx)
