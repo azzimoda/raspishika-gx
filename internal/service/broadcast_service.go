@@ -38,28 +38,42 @@ type BroadcastConfig struct {
 	ChangeAlert      bool
 }
 
-func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) {
+func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) error {
 	s.ctx, s.cancel = context.WithCancel(ctx)
 
 	if config.Daily {
-		s.scheduleDaily(s.ctx)
+		if err := s.scheduleDaily(s.ctx); err != nil {
+			log.Error().Err(err).Msg("Failed to schedule daily broadcast")
+			return err
+		}
 		log.Info().Msg("Daily broadcast scheduled")
+	} else {
+		log.Info().Msg("Daily broadcast disabled")
 	}
 	if config.PairNotification {
-		s.schedulePairNotification(s.ctx)
+		if err := s.schedulePairNotification(s.ctx); err != nil {
+			log.Error().Err(err).Msg("Failed to schedule pair notification")
+			return err
+		}
 		log.Info().Msg("Pair notification scheduled")
+	} else {
+		log.Info().Msg("Pair notification disabled")
 	}
 	if config.ChangeAlert {
 		go s.runChangeNotifier(s.ctx)
 		log.Info().Msg("Change alert scheduled")
+	} else {
+		log.Info().Msg("Change alert disabled")
 	}
 
 	s.cron.Start()
+
+	return nil
 }
 
-func (s *BroadcastService) scheduleDaily(ctx context.Context) {
-	// Every minute except Sunday
-	s.cron.AddFunc("0 * * * * 1-5", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
+// Every minute except Sunday
+func (s *BroadcastService) scheduleDaily(ctx context.Context) error {
+	return s.cron.AddFunc("0 * * * * 1-6", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
 }
 func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time) {
 	if s.Bot == nil {
@@ -120,16 +134,17 @@ func (s *BroadcastService) sendDaily(
 			imageFileName string
 			imageData     []byte
 		}
-		light := new(msgConf{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(false))})
-		light.imageFileName, light.imageData, err = s.Schedule.PrepareScheduleImage(ctx, schedule)
+		confLight := new(msgConf{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(false))})
+		confLight.imageFileName, confLight.imageData, err = s.Schedule.PrepareScheduleImage(ctx, schedule)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to prepare light schedule image")
 			errs = append(errs, err)
 			continue
 		}
 
-		dark := new(msgConf{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(true))})
-		dark.imageFileName, dark.imageData, err = s.Schedule.PrepareScheduleImage(ctx, schedule)
+		scheduleDark := schedule.WithConfig(schedule.Config.WithDarkMode(true))
+		confDark := new(msgConf{schedule: scheduleDark})
+		confDark.imageFileName, confDark.imageData, err = s.Schedule.PrepareScheduleImage(ctx, &scheduleDark)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to prepare dark schedule image")
 			errs = append(errs, err)
@@ -137,9 +152,9 @@ func (s *BroadcastService) sendDaily(
 		}
 
 		for _, chat := range groupedChats[schedule.Config.Group.GroupName] {
-			c := light
+			c := confLight
 			if chat.DarkMode {
-				c = dark
+				c = confDark
 			}
 			if err := botutil.SendWeekScheduleMessages(
 				ctx,
@@ -161,7 +176,7 @@ func (s *BroadcastService) sendDaily(
 	return successCount, errors.Join(errs...)
 }
 
-func (s *BroadcastService) schedulePairNotification(ctx context.Context) {
+func (s *BroadcastService) schedulePairNotification(ctx context.Context) error {
 	times := [][]int{
 		{7, 45},  // 8:00
 		{9, 30},  // 9:45
@@ -173,10 +188,13 @@ func (s *BroadcastService) schedulePairNotification(ctx context.Context) {
 		// 15 minutes before a pair starts
 	}
 	for _, t := range times {
-		s.cron.AddFunc(fmt.Sprintf("%d %d * * *", t[1], t[0]), func() {
+		if err := s.cron.AddFunc(fmt.Sprintf("%d %d * * *", t[1], t[0]), func() {
 			go s.handlePairNotification(ctx, time.Now())
-		})
+		}); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Time) {
 	if s.Bot == nil {
@@ -422,19 +440,19 @@ func (s *BroadcastService) prepareBroadcast(ctx context.Context, timeStr string,
 ) {
 	chats, err := s.Chat.GetChatsByDailyTime(ctx, timeStr)
 	if err != nil {
-		s.Report().Err(err).Debug("time", timeStr).Msg("Failed to get chats for daily broadcast")
+		s.Report().Err(err).Debug("time", timeStr).Msg("Failed to get chats for broadcast")
 		return 0, nil, nil, nil, true
 	}
 
 	chatCount = len(chats)
 	if chatCount == 0 {
-		log.Debug().Time("time", t).Msg("No chat for daily broadcast")
+		log.Debug().Time("time", t).Msg("No chat for broadcast")
 		return 0, nil, nil, nil, true
 	}
 
 	groupedChats = groupChats(chats)
 	groupCount := len(groupedChats)
-	log.Info().Time("time", t).Int("chats", chatCount).Int("groups", groupCount).Msg("Processing daily broadcast...")
+	log.Info().Time("time", t).Int("chats", chatCount).Int("groups", groupCount).Msg("Processing broadcast...")
 
 	// Prepare schedule configs
 	groupNames = make([]model.GroupName, 0, len(groupedChats))
