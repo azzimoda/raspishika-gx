@@ -68,10 +68,11 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 	}
 
 	msg := report.Message
+	var err error
 	for range 5 {
 		time.Sleep(20 * time.Second)
 
-		if chat, err := h.Chat.GetChatByChatID(context.Background(), chat.TgChatID); err == nil && chat.GroupName != nil {
+		if chat, err = h.Chat.GetChatByChatID(context.Background(), chat.TgChatID); err == nil && chat.GroupName != nil {
 			b.DeleteMessage(context.Background(), &bot.DeleteMessageParams{ChatID: msg.Chat.ID, MessageID: msg.ID})
 			h.Report().Chat(chat).Msgf("Chat configured group %s", *chat.GroupName)
 			break
