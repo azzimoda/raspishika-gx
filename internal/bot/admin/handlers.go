@@ -77,6 +77,13 @@ func (h *handler) handleCmdStats(ctx context.Context, b *bot.Bot, update *models
 	}
 }
 func buildReportText(chat *service.ChatStatsData, log *service.LogStatsData, dur time.Duration) string {
+	var newChatsGroupedStr strings.Builder
+	if chat.ChatsNewGrouped != nil {
+		for group, count := range chat.ChatsNewGrouped {
+			fmt.Fprintf(&newChatsGroupedStr, "%s: %d\n", group, count)
+		}
+	}
+
 	return fmt.Sprintf(`STATISTICS FOR LAST %s
 
 Total: %d
@@ -84,7 +91,7 @@ Private/Group: %d / %d
 Active/Semiactive/Inactive: %d / %d / %d
 New reigstered: %d
 
-%+v
+%s
 
 Groups: %d
 CpG: %.2f
@@ -100,7 +107,7 @@ Fails: %d`,
 		chat.ChatsPrivate, chat.ChatsTotal-chat.ChatsPrivate,
 		chat.ChatsActive, chat.ChatsSemiactive, chat.ChatsInactive,
 		chat.ChatsNew,
-		chat.ChatsNewGrouped,
+		newChatsGroupedStr.String(),
 
 		chat.GroupsTotal, chat.ChatsPerGroup,
 

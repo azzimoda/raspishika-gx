@@ -6,6 +6,7 @@ import (
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
+	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 )
 
 func NewLogService(repo repository.LogRepository) *LogService { return &LogService{repo: repo} }
@@ -29,7 +30,7 @@ func (s *LogService) GetGeneralStats(ctx context.Context, dur time.Duration) (*L
 	updatesTotal := len(updates)
 	updatesSuccess := 0
 	for _, u := range updates {
-		if u.Error == nil {
+		if refutil.DerefOrTypeDefault(u.Error) == "" {
 			updatesSuccess += 1
 		}
 	}
