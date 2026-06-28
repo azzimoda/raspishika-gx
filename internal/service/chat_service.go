@@ -121,13 +121,6 @@ func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duratio
 	return stats, nil
 }
 
-func (s *ChatService) HealthCheck() error {
-	if _, err := s.GetAllChats(context.Background()); err != nil {
-		return fmt.Errorf("failed to get all chats: %w", err)
-	}
-	return nil
-}
-
 type ChatStatsData struct {
 	ChatsTotal      int         `json:"chats_total"`
 	ChatsPrivate    int         `json:"chats_private"`
@@ -138,4 +131,68 @@ type ChatStatsData struct {
 	ChatsNewGrouped map[int]int `json:"chats_new_grouped"`
 	ChatsPerGroup   float64     `json:"chat_per_group"`
 	GroupsTotal     int         `json:"groups_total"`
+}
+
+func (s *ChatService) GetConfigStats(ctx context.Context) (*ConfigStatsData, error) {
+	chatsTotal, err := s.repo.CountAllChats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	chatsWithConfiguredGroup, err := s.repo.CountChatsWithConfiguredGroup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	uniqueConfiguredGroups, err := s.repo.CountUniqueConfiguredGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dailyEnabled, err := s.repo.CountDailyEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pairEnabled, err := s.repo.CountPairEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	changeEnabled, err := s.repo.CountChangeEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	darkEnabled, err := s.repo.CountDarkEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	chatCountByTime, err := s.repo.GetGroupedCountChatCountByTime(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ConfigStatsData{
+		ChatsTotal:             chatsTotal,
+		ConfiguredGroupsTotal:  chatsWithConfiguredGroup,
+		ConfiguredGroupsUnique: uniqueConfiguredGroups,
+		DailyEnabled:           dailyEnabled,
+		PairEnabled:            pairEnabled,
+		ChangeEnabled:          changeEnabled,
+		DarkEnabled:            darkEnabled,
+		ChatCountByTime:        chatCountByTime,
+	}, nil
+}
+
+type ConfigStatsData struct {
+	ChatsTotal             int            `json:"chats_total"`
+	ConfiguredGroupsTotal  int            `json:"configured_groups_total"`
+	ConfiguredGroupsUnique int            `json:"configured_groups_unique"`
+	DailyEnabled           int            `json:"daily_enabled"`
+	PairEnabled            int            `json:"pair_enabled"`
+	ChangeEnabled          int            `json:"change_enabled"`
+	DarkEnabled            int            `json:"dark_enabled"`
+	ChatCountByTime        map[string]int `json:"chat_count_by_time"`
+}
+
+func (s *ChatService) HealthCheck() error {
+	if _, err := s.GetAllChats(context.Background()); err != nil {
+		return fmt.Errorf("failed to get all chats: %w", err)
+	}
+	return nil
 }

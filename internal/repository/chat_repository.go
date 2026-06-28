@@ -40,7 +40,14 @@ type ChatRepository interface {
 	CountActiveChats(context.Context, time.Duration) (int, error)
 	CountSemiactiveChats(context.Context, time.Duration) (int, error)
 	CountInactiveChats(context.Context, time.Duration) (int, error)
+	CountChatsWithConfiguredGroup(context.Context) (int, error)
+	CountUniqueConfiguredGroups(context.Context) (int, error)
+	CountDailyEnabled(context.Context) (int, error)
+	CountPairEnabled(context.Context) (int, error)
+	CountChangeEnabled(context.Context) (int, error)
+	CountDarkEnabled(context.Context) (int, error)
 	GetAvgChatPerGroup(context.Context) (float64, error)
+	GetGroupedCountChatCountByTime(context.Context) (map[string]int, error)
 
 	DeleteChat(ctx context.Context, id int64) error
 
@@ -288,6 +295,37 @@ func (r *chatRepository) CountInactiveChats(ctx context.Context, dur time.Durati
 	return count, err
 }
 
+func (r *chatRepository) CountChatsWithConfiguredGroup(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE "group" IS NOT NULL AND "group" != ''`)
+	return count, err
+}
+func (r *chatRepository) CountUniqueConfiguredGroups(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT count(DISTINCT "group") FROM chats WHERE "group" IS NOT NULL AND "group" != ''`)
+	return count, err
+}
+func (r *chatRepository) CountDailyEnabled(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE daily_sending_time IS NOT NULL AND daily_sending_time != ''`)
+	return count, err
+}
+func (r *chatRepository) CountPairEnabled(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE pair_sending = 1`)
+	return count, err
+}
+func (r *chatRepository) CountChangeEnabled(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE update_notification = 1`)
+	return count, err
+}
+func (r *chatRepository) CountDarkEnabled(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE dark_mode = 1`)
+	return count, err
+}
+
 // GetAvgChatPerGroup returns the average number of chats per group.
 func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error) {
 	var avg float64
@@ -299,6 +337,28 @@ func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error
 		)
 	`)
 	return avg, err
+}
+
+func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) (map[string]int, error) {
+	var result []struct {
+		Time  string `db:"time"`
+		Count int    `db:"count"`
+	}
+	err := r.db.SelectContext(ctx, &result, `
+		SELECT daily_sending_time AS time, count(*) AS count FROM chats
+		WHERE "group" != '' AND "group" IS NOT NULL AND daily_sending_time IS NOT NULL AND daily_sending_time != ''
+		GROUP BY daily_sending_time
+		ORDER BY daily_sending_time
+	`)
+	if err != nil {
+		return nil, err
+	}
+
+	m := make(map[string]int)
+	for _, r := range result {
+		m[r.Time] = r.Count
+	}
+	return m, nil
 }
 
 func (r *chatRepository) DeleteChat(ctx context.Context, id int64) error {

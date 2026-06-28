@@ -72,12 +72,12 @@ func (h *handler) handleCmdStats(ctx context.Context, b *bot.Bot, update *models
 		return
 	}
 
-	_, err = h.Report().Msg(buildReportText(chatStats, logStats, duration))
+	_, err = h.Report().Msg(buildGeneralReportText(chatStats, logStats, duration))
 	if err != nil {
 		h.Report().Err(err).Msg("Failed to send statistics report")
 	}
 }
-func buildReportText(chat *service.ChatStatsData, log *service.LogStatsData, dur time.Duration) string {
+func buildGeneralReportText(chat *service.ChatStatsData, log *service.LogStatsData, dur time.Duration) string {
 	var newChatsGroupedStr strings.Builder
 	if chat.ChatsNewGrouped != nil {
 		for year, count := range chat.ChatsNewGrouped {
@@ -125,8 +125,32 @@ Fails: %d`,
 	)
 }
 
-func (*handler) handleCmdConfig(ctx context.Context, b *bot.Bot, update *models.Update) {
-	log.Warn().Msg("Unimplemented handler")
+func (h *handler) handleCmdConfig(ctx context.Context, b *bot.Bot, update *models.Update) {
+	stats, err := h.Chat.GetConfigStats(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get config stats")
+		return
+	}
+	_, err = h.Report().Msg(buildConfigReportText(stats))
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to send config report")
+	}
+}
+func buildConfigReportText(stats *service.ConfigStatsData) string {
+	var sb strings.Builder
+	sb.WriteString("Config Report:\n\n")
+	fmt.Fprintf(&sb, "Total Chats: %d\n", stats.ChatsTotal)
+	fmt.Fprintf(&sb, "Total Configured: %d\n", stats.ConfiguredGroupsTotal)
+	fmt.Fprintf(&sb, "Unique Configured: %d\n", stats.ConfiguredGroupsUnique)
+	fmt.Fprintf(&sb, "Daily: %d\n", stats.DailyEnabled)
+	fmt.Fprintf(&sb, "Pair: %d\n", stats.PairEnabled)
+	fmt.Fprintf(&sb, "Change: %d\n", stats.ChangeEnabled)
+	fmt.Fprintf(&sb, "Dark: %d\n", stats.DarkEnabled)
+	fmt.Fprintf(&sb, "\n")
+	for time, count := range stats.ChatCountByTime {
+		fmt.Fprintf(&sb, "%s => %d\n", time, count)
+	}
+	return sb.String()
 }
 
 func (*handler) handleCmdChat(ctx context.Context, b *bot.Bot, update *models.Update) {
