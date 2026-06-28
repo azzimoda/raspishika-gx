@@ -36,6 +36,7 @@ type ChatRepository interface {
 	CountAllChats(context.Context) (int, error)
 	CountPricateChats(context.Context) (int, error)
 	CountNewChats(context.Context, time.Duration) (int, error)
+	GetNewChatCountByGroup(context.Context, time.Duration) (map[model.GroupName]int, error)
 	CountActiveChats(context.Context, time.Duration) (int, error)
 	CountSemiactiveChats(context.Context, time.Duration) (int, error)
 	CountInactiveChats(context.Context, time.Duration) (int, error)
@@ -199,6 +200,30 @@ func (r *chatRepository) CountNewChats(ctx context.Context, dur time.Duration) (
 		WHERE updated_at > datetime('now', ?)
 	`, period)
 	return count, err
+}
+func (r *chatRepository) GetNewChatCountByGroup(
+	ctx context.Context,
+	dur time.Duration,
+) (map[model.GroupName]int, error) {
+	result := make([]struct {
+		Group model.GroupName `db:"group"`
+		Count int `db:"count"`
+	}, 0)
+	period := sqlPeriod(dur)
+	err := r.db.SelectContext(ctx, &result, `
+		SELECT "group", count(*) AS count FROM chats
+		WHERE updated_at > datetime('now', ?)
+		GROUP BY "group"
+	`, period)
+	if err != nil {
+		return nil, err
+	}
+
+	m := make(map[model.GroupName]int)
+	for _, r := range result {
+		m[r.Group] = r.Count
+	}
+	return m, nil
 }
 
 // CountActiveChats returns the number of active chats,

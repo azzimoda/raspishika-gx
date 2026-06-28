@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
@@ -71,35 +72,41 @@ func (s *ChatService) AddChatRecentTeacher(ctx context.Context, chatID int64, te
 func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duration) (*ChatStatsData, error) {
 	chatsTotal, err := s.repo.CountAllChats(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to count all chats: %w", err)
 	}
 	chatsPrivate, err := s.repo.CountPricateChats(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to count private chats: %w", err)
 	}
 	chatsActive, err := s.repo.CountActiveChats(ctx, duration)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to count active chats: %w", err)
 	}
 	chatsSemiactive, err := s.repo.CountSemiactiveChats(ctx, duration)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to count semiactive chats: %w", err)
 	}
 	chatsInactive, err := s.repo.CountInactiveChats(ctx, duration)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to count inactive chats: %w", err)
 	}
 	chatsNew, err := s.repo.CountNewChats(ctx, duration)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to count new chats: %w", err)
 	}
+
+	chatsNewGrouped, err := s.repo.GetNewChatCountByGroup(ctx, duration)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new chat count by group: %w", err)
+	}
+
 	chatsPerGroup, err := s.repo.GetAvgChatPerGroup(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get avg chat per group: %w", err)
 	}
 	groupsTotal, err := s.repo.CountAllConfiguredGroups(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to count all configured groups: %w", err)
 	}
 
 	stats := &ChatStatsData{
@@ -109,6 +116,7 @@ func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duratio
 		ChatsSemiactive: chatsSemiactive,
 		ChatsInactive:   chatsInactive,
 		ChatsNew:        chatsNew,
+		ChatsNewGrouped: chatsNewGrouped,
 		ChatsPerGroup:   chatsPerGroup,
 		GroupsTotal:     groupsTotal,
 	}
@@ -117,7 +125,7 @@ func (s *ChatService) GetGeneralStats(ctx context.Context, duration time.Duratio
 
 func (s *ChatService) HealthCheck() error {
 	if _, err := s.GetAllChats(context.Background()); err != nil {
-		return err
+		return fmt.Errorf("failed to get all chats: %w", err)
 	}
 	return nil
 }

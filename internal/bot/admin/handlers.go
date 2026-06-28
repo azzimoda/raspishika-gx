@@ -63,10 +63,12 @@ func (h *handler) handleCmdStats(ctx context.Context, b *bot.Bot, update *models
 	chatStats, err := h.Chat.GetGeneralStats(ctx, duration)
 	if err != nil {
 		h.Report().Err(err).Msg("Failed to collect chat statistics")
+		return
 	}
 	logStats, err := h.Log.GetGeneralStats(ctx, duration)
 	if err != nil {
 		h.Report().Err(err).Msg("Failed to collect log statistics")
+		return
 	}
 
 	_, err = h.Report().Msg(buildReportText(chatStats, logStats, duration))
@@ -82,7 +84,7 @@ Private/Group: %d / %d
 Active/Semiactive/Inactive: %d / %d / %d
 New reigstered: %d
 
-%v
+%+v
 
 Groups: %d
 CpG: %.2f
