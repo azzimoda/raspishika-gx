@@ -47,7 +47,7 @@ type ChatRepository interface {
 	CountChangeEnabled(context.Context) (int, error)
 	CountDarkEnabled(context.Context) (int, error)
 	GetAvgChatPerGroup(context.Context) (float64, error)
-	GetGroupedCountChatCountByTime(context.Context) (map[string]int, error)
+	GetGroupedCountChatCountByTime(context.Context) ([]TimeCount, error)
 
 	DeleteChat(ctx context.Context, id int64) error
 
@@ -339,26 +339,20 @@ func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error
 	return avg, err
 }
 
-func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) (map[string]int, error) {
-	var result []struct {
-		Time  string `db:"time"`
-		Count int    `db:"count"`
-	}
+func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) ([]TimeCount, error) {
+	var result []TimeCount
 	err := r.db.SelectContext(ctx, &result, `
 		SELECT daily_sending_time AS time, count(*) AS count FROM chats
 		WHERE "group" != '' AND "group" IS NOT NULL AND daily_sending_time IS NOT NULL AND daily_sending_time != ''
 		GROUP BY daily_sending_time
 		ORDER BY daily_sending_time
 	`)
-	if err != nil {
-		return nil, err
-	}
+	return result, err
+}
 
-	m := make(map[string]int)
-	for _, r := range result {
-		m[r.Time] = r.Count
-	}
-	return m, nil
+type TimeCount struct {
+	Time  string `db:"time"`
+	Count int    `db:"count"`
 }
 
 func (r *chatRepository) DeleteChat(ctx context.Context, id int64) error {

@@ -180,14 +180,14 @@ func (s *ChatService) GetConfigStats(ctx context.Context) (*ConfigStatsData, err
 }
 
 type ConfigStatsData struct {
-	ChatsTotal             int            `json:"chats_total"`
-	ConfiguredGroupsTotal  int            `json:"configured_groups_total"`
-	ConfiguredGroupsUnique int            `json:"configured_groups_unique"`
-	DailyEnabled           int            `json:"daily_enabled"`
-	PairEnabled            int            `json:"pair_enabled"`
-	ChangeEnabled          int            `json:"change_enabled"`
-	DarkEnabled            int            `json:"dark_enabled"`
-	ChatCountByTime        map[string]int `json:"chat_count_by_time"`
+	ChatsTotal             int                    `json:"chats_total"`
+	ConfiguredGroupsTotal  int                    `json:"configured_groups_total"`
+	ConfiguredGroupsUnique int                    `json:"configured_groups_unique"`
+	DailyEnabled           int                    `json:"daily_enabled"`
+	PairEnabled            int                    `json:"pair_enabled"`
+	ChangeEnabled          int                    `json:"change_enabled"`
+	DarkEnabled            int                    `json:"dark_enabled"`
+	ChatCountByTime        []repository.TimeCount `json:"chat_count_by_time"`
 }
 
 func (s *ChatService) HealthCheck() error {

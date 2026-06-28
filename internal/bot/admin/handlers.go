@@ -147,8 +147,8 @@ func buildConfigReportText(stats *service.ConfigStatsData) string {
 	fmt.Fprintf(&sb, "Change: %d\n", stats.ChangeEnabled)
 	fmt.Fprintf(&sb, "Dark: %d\n", stats.DarkEnabled)
 	fmt.Fprintf(&sb, "\n")
-	for time, count := range stats.ChatCountByTime {
-		fmt.Fprintf(&sb, "%s => %d\n", time, count)
+	for _, c := range stats.ChatCountByTime {
+		fmt.Fprintf(&sb, "%s => %d\n", c.Time, c.Count)
 	}
 	return sb.String()
 }
