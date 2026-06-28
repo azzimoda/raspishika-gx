@@ -26,6 +26,7 @@ var ErrNoAvailableProxy = errors.New("no available proxy")
 
 const proxyFinderWorkers = 128
 
+// FirstAvailable returns the first available proxy from the list.
 func (s *ProxyService) FirstAvailable() (string, error) {
 	if err := s.UpdateProxies(); err != nil {
 		return "", fmt.Errorf("failed to update proxies: %w", err)
@@ -48,6 +49,7 @@ const proxyCacheTTL = 1 * time.Hour
 
 var muUpdate sync.Mutex
 
+// UpdateProxies synchronously updates the proxy list from the source URL.
 func (s *ProxyService) UpdateProxies() error {
 	muUpdate.Lock()
 	defer muUpdate.Unlock()
@@ -58,15 +60,7 @@ func (s *ProxyService) UpdateProxies() error {
 	}
 
 	log.Debug().Msg("Updating proxies...")
-	client := new(http.Client{Timeout: 30 * time.Second})
-	var resp *http.Response
-	err := retry.New(retry.Attempts(5), retry.Delay(100*time.Millisecond)).Do(
-		func() error {
-			var err error
-			resp, err = client.Get(proxySourceURL)
-			return err
-		},
-	)
+	resp, err := getProxies()
 	if err != nil {
 		return fmt.Errorf("failed to update proxies: %w", err)
 	}
@@ -84,9 +78,22 @@ func (s *ProxyService) UpdateProxies() error {
 	return nil
 }
 
-// NextChecked returns the next proxy from the list that is checked to be available
+func getProxies() (*http.Response, error) {
+	client := new(http.Client{Timeout: 30 * time.Second})
+	var resp *http.Response
+	err := retry.New(retry.Attempts(5), retry.Delay(100*time.Millisecond), retry.DelayType(retry.BackOffDelay)).Do(
+		func() error {
+			var err error
+			resp, err = client.Get(proxySourceURL)
+			return err
+		},
+	)
+	return resp, err
+}
+
+// NextChecked returns the next proxy from the list that is checked to be available.
 //
-// Returns [ErrNoAvailableProxy] if no proxy is available
+// Returns [ErrNoAvailableProxy] if no proxy is available.
 func (s *ProxyService) NextChecked(ctx context.Context) (string, error) {
 	idxStart, proxy := s.repo.Next()
 	idx := idxStart
@@ -119,9 +126,9 @@ const proxyFinderTimeout = 5 * time.Second
 var ErrEmptyProxy = errors.New("empty proxy")
 var ErrProxyUnavailable = errors.New("proxy unavailable")
 
-// Check checks the availability of a proxy and returns an error if it is unavailable
+// Check checks the availability of a proxy and returns an error if it is unavailable.
 //
-// Returns [ErrProxyUnavailable] if the proxy is unavailable, or [ErrEmptyProxy] if the proxy is empty
+// Returns [ErrProxyUnavailable] if the proxy is unavailable, or [ErrEmptyProxy] if the proxy is empty.
 func (s *ProxyService) Check(ctx context.Context, proxy string) error {
 	if proxy == "" {
 		return ErrEmptyProxy
@@ -140,15 +147,13 @@ func (s *ProxyService) Check(ctx context.Context, proxy string) error {
 	defer cancel()
 	if strings.Contains(err.Error(), "not found") {
 		// Telegram API is abailable, then the proxy is available
-		// log.Info().Str("proxy", proxy).Msg("Proxy is available")
 		return nil
-	} else if !strings.Contains(err.Error(), "context") {
-		// Telegram API is unavailable, then the proxy is unavailable
-		return ErrProxyUnavailable
 	}
 	return ErrProxyUnavailable
 }
 
+// HealthCheck performs a health check on the proxy service,
+// ensuring the proxy source is available and returns at least one proxy.
 func (s *ProxyService) HealthCheck() error {
 	if err := s.UpdateProxies(); err != nil {
 		return err
