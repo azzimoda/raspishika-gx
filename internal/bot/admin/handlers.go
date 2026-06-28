@@ -3,6 +3,7 @@ package adminbot
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,8 +80,12 @@ func (h *handler) handleCmdStats(ctx context.Context, b *bot.Bot, update *models
 func buildReportText(chat *service.ChatStatsData, log *service.LogStatsData, dur time.Duration) string {
 	var newChatsGroupedStr strings.Builder
 	if chat.ChatsNewGrouped != nil {
-		for group, count := range chat.ChatsNewGrouped {
-			fmt.Fprintf(&newChatsGroupedStr, "%s: %d\n", group, count)
+		for year, count := range chat.ChatsNewGrouped {
+			yearStr := "none"
+			if year != 0 {
+				yearStr = strconv.Itoa(year)
+			}
+			fmt.Fprintf(&newChatsGroupedStr, "%s => %d\n", yearStr, count)
 		}
 	}
 

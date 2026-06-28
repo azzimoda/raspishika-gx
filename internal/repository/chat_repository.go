@@ -36,7 +36,7 @@ type ChatRepository interface {
 	CountAllChats(context.Context) (int, error)
 	CountPricateChats(context.Context) (int, error)
 	CountNewChats(context.Context, time.Duration) (int, error)
-	GetNewChatCountByGroup(context.Context, time.Duration) (map[model.GroupName]int, error)
+	GetNewChatCountByYear(context.Context, time.Duration) (map[int]int, error)
 	CountActiveChats(context.Context, time.Duration) (int, error)
 	CountSemiactiveChats(context.Context, time.Duration) (int, error)
 	CountInactiveChats(context.Context, time.Duration) (int, error)
@@ -201,13 +201,13 @@ func (r *chatRepository) CountNewChats(ctx context.Context, dur time.Duration) (
 	`, period)
 	return count, err
 }
-func (r *chatRepository) GetNewChatCountByGroup(
+func (r *chatRepository) GetNewChatCountByYear(
 	ctx context.Context,
 	dur time.Duration,
-) (map[model.GroupName]int, error) {
+) (map[int]int, error) {
 	result := make([]struct {
-		Group model.GroupName `db:"group"`
-		Count int `db:"count"`
+		Group *string `db:"group"`
+		Count int     `db:"count"`
 	}, 0)
 	period := sqlPeriod(dur)
 	err := r.db.SelectContext(ctx, &result, `
@@ -219,9 +219,14 @@ func (r *chatRepository) GetNewChatCountByGroup(
 		return nil, err
 	}
 
-	m := make(map[model.GroupName]int)
+	m := make(map[int]int)
 	for _, r := range result {
-		m[r.Group] = r.Count
+		groupName := model.GroupName(refutil.DerefOrTypeDefault(r.Group))
+		year := 0
+		if groupName != "" {
+			_, year, _, _, _ = groupName.Parse()
+		}
+		m[year] = r.Count
 	}
 	return m, nil
 }
