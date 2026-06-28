@@ -57,6 +57,7 @@ func (s *BotService) Start(ctx context.Context) {
 		}
 		s.Log().Trace().Msg("Restarting bot...")
 		s.botCtxCancel()
+		s.Bot = nil
 		s.startBot(ctx)
 	}
 }

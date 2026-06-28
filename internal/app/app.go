@@ -144,7 +144,7 @@ func (a *App) Stop() error {
 }
 
 func (a *App) onMainBotRestart(ctx context.Context) {
-	a.Report().Msg("Admin bot is restarting...")
+	a.Report().Msg("Main bot is restarting...")
 
 	for a.mainBot.Bot == nil {
 		select {
@@ -162,9 +162,8 @@ func (a *App) onMainBotRestart(ctx context.Context) {
 
 func (a *App) onAdminBotRestart(ctx context.Context) {
 	if a.adminBot.Bot != nil {
-		if _, err := a.Report().Msg("Admin bot is restarting..."); err == nil {
-			return
-		}
+		a.Report().Msg("Admin bot is restarting...")
+		time.Sleep(3 * time.Second)
 	}
 
 	for a.adminBot.Bot == nil {
