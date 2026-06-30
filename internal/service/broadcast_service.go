@@ -171,8 +171,12 @@ func (s *BroadcastService) sendDaily(
 				c.imageFileName,
 				c.imageData,
 			); err != nil {
-				log.Error().Err(err).Msg("Failed to send week schedule message")
 				errs = append(errs, err)
+				if errors.Is(err, bot.ErrorForbidden) {
+					s.handleForbidden(ctx, err, chat)
+					continue
+				}
+				log.Error().Err(err).Msg("Failed to send week schedule message")
 			} else {
 				successCount++
 			}
@@ -287,7 +291,11 @@ func (s *BroadcastService) sendPairNotificatins(
 				ParseMode:       models.ParseModeHTML,
 			})
 			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to send pair notification: %w", err))
+				errs = append(errs, err)
+				if errors.Is(err, bot.ErrorForbidden) {
+					s.handleForbidden(ctx, err, chat)
+					continue
+				}
 			} else {
 				messagesToDelete = append(messagesToDelete, msg)
 			}
@@ -453,6 +461,10 @@ func (s *BroadcastService) sendChangeReports(
 				Text:            text,
 			}); errReport != nil {
 				err = errors.Join(err, errReport)
+				if errors.Is(errReport, bot.ErrorForbidden) {
+					s.handleForbidden(ctx, errReport, chat)
+					continue
+				}
 				log.Error().Err(errReport).Msg("Failed to send schedule change alert message")
 			} else {
 				successCount++
@@ -535,4 +547,11 @@ func groupChats(chats []*model.Chat) map[model.GroupName][]*model.Chat {
 func (s *BroadcastService) Stop() {
 	s.cancel()
 	s.cron.Stop()
+}
+
+func (s *BroadcastService) handleForbidden(ctx context.Context, err error, chat *model.Chat) {
+	s.Report().Err(err).Chat(chat).Msg("Bot was kicked from the chat")
+	if err := s.Chat.DeleteChat(ctx, chat.ID); err != nil {
+		s.Report().Err(err).Chat(chat).Msg("Failed to delete chat")
+	}
 }
