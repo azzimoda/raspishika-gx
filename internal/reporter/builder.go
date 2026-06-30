@@ -26,31 +26,28 @@ const (
 )
 
 func NewReportBuilder(bot *bot.Bot, recipientChatID int64) ReportBuilder {
-	return ReportBuilder{bot: bot, recipientChatID: recipientChatID, Context: defaultContext()}
+	b := EmptyReportBuilder()
+	b.bot = bot
+	b.recipientChatID = recipientChatID
+	return b
 }
-func EmptyReportConfig() ReportBuilder { return ReportBuilder{Context: defaultContext()} }
-
-func defaultContext() context.Context {
-	ctx := context.Background()
-
-	ctx = context.WithValue(ctx, tempKey, false)
-	ctx = context.WithValue(ctx, errKey, nil)
-	ctx = context.WithValue(ctx, chatIDKey, model.ChatID(0))
-	ctx = context.WithValue(ctx, usernameKey, model.UserName(""))
-	ctx = context.WithValue(ctx, groupNameKey, model.GroupName(""))
-	ctx = context.WithValue(ctx, debugKey, make(map[string]any))
-
-	return ctx
-}
+func EmptyReportBuilder() ReportBuilder { return ReportBuilder{debugValues: make(map[string]any)} }
 
 type ReportBuilder struct {
 	bot             *bot.Bot
 	recipientChatID int64
-	context.Context
+
+	isTemp      bool
+	error       error
+	chat        *model.Chat
+	debugValues map[string]any
 }
 
 // Err adds error to report message.
-func (r ReportBuilder) Err(err error) ReportBuilder { return r.withValue(errKey, err) }
+func (r ReportBuilder) Err(err error) ReportBuilder {
+	r.error = err
+	return r
+}
 
 // Chat sets the chat ID, username, and group name of the chat, whose message caused the error.
 //
@@ -59,13 +56,9 @@ func (r ReportBuilder) Err(err error) ReportBuilder { return r.withValue(errKey,
 // If the chatOrID is a *model.Chat, the chat ID, username, and group name are set to the corresponding values from the chat.
 func (r ReportBuilder) Chat(chatOrID any) ReportBuilder {
 	if tgChatID, ok := chatOrID.(int64); ok {
-		r = r.withValue(chatIDKey, tgChatID).
-			withValue(usernameKey, "??").
-			withValue(groupNameKey, "??")
+		r.chat = new(model.Chat{TgChatID: model.ChatID(tgChatID)})
 	} else if chat, ok := chatOrID.(*model.Chat); ok {
-		r = r.withValue(chatIDKey, chat.TgChatID).
-			withValue(usernameKey, refutil.DerefOrTypeDefault(chat.UserName)).
-			withValue(groupNameKey, refutil.DerefOrTypeDefault(chat.GroupName))
+		r.chat = chat
 	} else {
 		log.Error().Type("type", chatOrID).Any("arg", chatOrID).Msg("Wrong type of chat argument")
 	}
@@ -74,19 +67,7 @@ func (r ReportBuilder) Chat(chatOrID any) ReportBuilder {
 
 // Debug sets a debug object with the given name and value.
 func (r ReportBuilder) Debug(name string, value any) ReportBuilder {
-	debugValues, ok := r.Value(debugKey).(map[string]any)
-	if !ok {
-		debugValues = make(map[string]any)
-		debugValues[name] = value
-		r.Context = context.WithValue(r.Context, debugKey, debugValues)
-	} else {
-		debugValues[name] = value
-	}
-	return r
-}
-
-func (r ReportBuilder) withValue(key any, value any) ReportBuilder {
-	r.Context = context.WithValue(r.Context, key, value)
+	r.debugValues[name] = value
 	return r
 }
 
@@ -97,27 +78,18 @@ func (rc ReportBuilder) Msgf(format string, a ...any) (*Report, error) {
 func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 	log.Trace().Msg("Sending report...")
 
-	reportErr, ok := rc.Value(errKey).(error)
-	if !ok {
-		reportErr = nil
-	}
-	chatID := rc.Value(chatIDKey).(model.ChatID)
-	groupName := rc.Value(groupNameKey).(model.GroupName)
-	username := rc.Value(usernameKey).(model.UserName)
-	debugObjects := rc.Value(debugKey).(map[string]any)
-
 	{
 		var logEvent *zerolog.Event
-		if reportErr != nil {
-			logEvent = log.Error().Err(reportErr)
+		if rc.error != nil {
+			logEvent = log.Error().Err(rc.error)
 		} else {
 			logEvent = log.Debug()
 		}
 		logEvent = logEvent.CallerSkipFrame(1)
-		for key, value := range debugObjects {
+		for key, value := range rc.debugValues {
 			logEvent.Any(key, value)
 		}
-		logEvent.Any("chatID", chatID).Any("username", username).Msgf("Report: %s", msg)
+		logEvent.Msgf("Report: %s", msg)
 	}
 
 	if rc.bot == nil {
@@ -131,20 +103,20 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 	var msgText strings.Builder
 
 	// Chat
-	if chatID != 0 {
-		fmt.Fprintf(&msgText, "<code>/chat %d</code> @%s\n", chatID, username)
-		fmt.Fprintf(&msgText, "Group: <code>%s</code>\n", groupName)
+	if rc.chat != nil {
+		fmt.Fprintf(&msgText, "<code>/chat %d</code> @%s\n", rc.chat.TgChatID, rc.chat.UserName)
+		fmt.Fprintf(&msgText, "Group: <code>%s</code>\n", refutil.DerefOrTypeDefault(rc.chat.GroupName))
 	}
 
 	// Error
-	if reportErr != nil {
-		fmt.Fprintf(&msgText, "Error:\n<pre>%s</pre>\n", reportErr.Error())
+	if rc.error != nil {
+		fmt.Fprintf(&msgText, "Error:\n<pre>%s</pre>\n", rc.error.Error())
 	}
 
 	// Debug objects
-	if len(debugObjects) > 0 {
+	if len(rc.debugValues) > 0 {
 		msgText.WriteString("\n<pre>")
-		for name, value := range debugObjects {
+		for name, value := range rc.debugValues {
 			fmt.Fprintf(&msgText, "%s = %+v\n", name, value)
 		}
 		msgText.WriteString("</pre>\n")
