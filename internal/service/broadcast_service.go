@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
@@ -20,7 +20,7 @@ import (
 )
 
 func NewBroadcastService(bot *BotService, services *Services, reporter reporter.Reporter) *BroadcastService {
-	return &BroadcastService{Bot: bot, Services: services, Reporter: reporter, cron: cron.New()}
+	return &BroadcastService{Bot: bot, Services: services, Reporter: reporter, cron: cron.New(cron.WithSeconds())}
 }
 
 type BroadcastService struct {
@@ -73,7 +73,8 @@ func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) erro
 
 // Every minute except Sunday
 func (s *BroadcastService) scheduleDaily(ctx context.Context) error {
-	return s.cron.AddFunc("0 * * * * *", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
+	_, err := s.cron.AddFunc("0 * * * 1-6,9-12 *", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
+	return err
 }
 func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time) {
 	if s.Bot == nil {
@@ -82,8 +83,11 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 	}
 
 	timeStr := t.Format("15:04")
-
 	start := time.Now()
+	if start.Month() == time.July || start.Month() == time.August {
+		log.Debug().Msg("Skipping daily broadcast during summer")
+		return
+	}
 
 	groupedChats, _, confs, shouldReturn := s.prepareBroadcast(ctx, timeStr, t)
 	if shouldReturn {
@@ -194,7 +198,7 @@ func (s *BroadcastService) schedulePairNotification(ctx context.Context) error {
 		// 15 minutes before a pair starts
 	}
 	for _, t := range times {
-		if err := s.cron.AddFunc(fmt.Sprintf("%d %d * * * 1-6", t[1], t[0]), func() {
+		if _, err := s.cron.AddFunc(fmt.Sprintf("0 %d %d * 1-6,9-12 1-6", t[1], t[0]), func() {
 			go s.handlePairNotification(ctx, time.Now())
 		}); err != nil {
 			return err
