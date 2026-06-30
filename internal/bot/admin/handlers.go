@@ -61,23 +61,20 @@ func (h *handler) handleCmdStats(ctx context.Context, b *bot.Bot, update *models
 		duration = 24 * time.Hour
 	}
 
-	chatStats, err := h.Chat.GetGeneralStats(ctx, duration)
-	if err != nil {
-		h.Report().Err(err).Msg("Failed to collect chat statistics")
-		return
-	}
-	logStats, err := h.Log.GetGeneralStats(ctx, duration)
+	generalStats, err := h.Stats.GetGeneralStats(ctx, duration)
 	if err != nil {
 		h.Report().Err(err).Msg("Failed to collect log statistics")
 		return
 	}
 
-	_, err = h.Report().Msg(buildGeneralReportText(chatStats, logStats, duration))
+	_, err = h.Report().Msg(buildGeneralReportText(generalStats, duration, args))
 	if err != nil {
 		h.Report().Err(err).Msg("Failed to send statistics report")
 	}
 }
-func buildGeneralReportText(chat *service.ChatStatsData, log *service.LogStatsData, dur time.Duration) string {
+func buildGeneralReportText(stats *service.GeneralStatsData, dur time.Duration, periodStr string) string {
+	chat := stats.ChatStatsData
+	logs := stats.LogStatsData
 	var newChatsGroupedStr strings.Builder
 	if chat.ChatsNewGrouped != nil {
 		for year, count := range chat.ChatsNewGrouped {
@@ -89,7 +86,7 @@ func buildGeneralReportText(chat *service.ChatStatsData, log *service.LogStatsDa
 		}
 	}
 
-	return fmt.Sprintf(`STATISTICS FOR LAST %s
+	return fmt.Sprintf(`STATISTICS FOR LAST %s (%s)
 
 Total: %d
 Private/Group: %d / %d
@@ -104,10 +101,11 @@ CpG: %.2f
 Updates: %d
 Success: %d (%.1f%%)
 
-Broadcasts: %d
+Broadcast Tasks/Sends: %d / %d
+Success: %d (%.1f%%)
 Daily/Pair/Change: %d / %d / %d
-Fails: %d`,
-		dur,
+`,
+		periodStr, dur,
 		chat.ChatsTotal,
 		chat.ChatsPrivate, chat.ChatsTotal-chat.ChatsPrivate,
 		chat.ChatsActive, chat.ChatsSemiactive, chat.ChatsInactive,
@@ -116,40 +114,41 @@ Fails: %d`,
 
 		chat.GroupsTotal, chat.ChatsPerGroup,
 
-		log.UpdatesTotal,
-		log.UpdatesSuccess, (float64(log.UpdatesSuccess) / (float64(log.UpdatesTotal) + 0.001) * 100),
+		logs.UpdatesTotal,
+		logs.UpdatesSuccess, (float64(logs.UpdatesSuccess) / (float64(logs.UpdatesTotal) + 0.001) * 100),
 
-		log.BroadcastChats,
-		log.BroadcastDaily, log.BroadcastPair, log.BroadcastChange,
-		log.BroadcastFails,
+		logs.BroadcastTasks, logs.BroadcastLogs,
+		logs.BroadcastSuccess, (float64(logs.BroadcastSuccess) / (float64(logs.BroadcastLogs) + 0.001) * 100),
+		logs.BroadcastDaily, logs.BroadcastPair, logs.BroadcastChange,
 	)
 }
 
 func (h *handler) handleCmdConfig(ctx context.Context, b *bot.Bot, update *models.Update) {
-	stats, err := h.Chat.GetConfigStats(ctx)
+	stats, err := h.Stats.GetConfigStats(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get config stats")
 		return
 	}
-	_, err = h.Report().Msg(buildConfigReportText(stats))
+	_, err = h.Report().Msg(buildConfigReportTextHTML(stats))
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to send config report")
 	}
 }
-func buildConfigReportText(stats *service.ConfigStatsData) string {
+func buildConfigReportTextHTML(stats *service.ConfigStatsData) string {
 	var sb strings.Builder
 	sb.WriteString("Config Report:\n\n")
 	fmt.Fprintf(&sb, "Total Chats: %d\n", stats.ChatsTotal)
-	fmt.Fprintf(&sb, "Total Configured: %d\n", stats.ConfiguredGroupsTotal)
-	fmt.Fprintf(&sb, "Unique Configured: %d\n", stats.ConfiguredGroupsUnique)
-	fmt.Fprintf(&sb, "Daily: %d\n", stats.DailyEnabled)
-	fmt.Fprintf(&sb, "Pair: %d\n", stats.PairEnabled)
-	fmt.Fprintf(&sb, "Change: %d\n", stats.ChangeEnabled)
-	fmt.Fprintf(&sb, "Dark: %d\n", stats.DarkEnabled)
-	fmt.Fprintf(&sb, "\n")
+	fmt.Fprintf(&sb, "Total Configured: %d (%.1f%%)\n",
+		stats.ConfiguredGroupsTotal, (float64(stats.ConfiguredGroupsTotal)+0.1)/float64(stats.ChatsTotal)*100)
+	fmt.Fprintf(&sb, "Unique Group: %d\n", stats.ConfiguredGroupsUnique)
+	fmt.Fprintf(&sb, "Daily/Pair/Change: %d / %d / %d\n", stats.DailyEnabled, stats.PairEnabled, stats.ChangeEnabled)
+	fmt.Fprintf(&sb, "Dark theme: %d (%.1f%%)\n",
+		stats.DarkEnabled, (float64(stats.DarkEnabled)+0.1)/float64(stats.ChatsTotal)*100)
+	fmt.Fprintf(&sb, "\nConfigured daily times:\n<pre>\n")
 	for _, c := range stats.ChatCountByTime {
 		fmt.Fprintf(&sb, "%s => %d\n", c.Time, c.Count)
 	}
+	fmt.Fprintf(&sb, "</pre>\n")
 	return sb.String()
 }
 

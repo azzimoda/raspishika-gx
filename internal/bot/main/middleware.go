@@ -204,13 +204,13 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 				Msg("Handler error")
 		}
 
-		h.Log.LogUpdate(ctx, model.UpdateLog{
-			ChatID:       chat.ID,
-			Kind:         updateKind,
-			MessageID:    messageID,
-			Data:         updateData,
-			HandlingTime: int(elapsedTime.Milliseconds()),
-			Error:        &handlerErrStr,
+		h.Stats.LogUpdate(ctx, model.UpdateLog{
+			ChatID:    chat.ID,
+			Kind:      updateKind,
+			MessageID: messageID,
+			Data:      updateData,
+			Elapsed:   int(elapsedTime.Milliseconds()),
+			Error:     &handlerErrStr,
 		})
 	}
 }

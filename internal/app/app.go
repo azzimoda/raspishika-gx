@@ -184,7 +184,7 @@ type appReporter struct{ reporter.Reporter }
 
 func (r appReporter) Report() reporter.ReportBuilder {
 	if r.Reporter == nil {
-		return reporter.EmptyReportConfig()
+		return reporter.EmptyReportBuilder()
 	}
 	return r.Reporter.Report()
 }

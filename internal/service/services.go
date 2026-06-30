@@ -21,7 +21,8 @@ func NewServices(container *repository.Container) (*Services, error) {
 		Proxy:    NewProxyService(container.Proxy),
 		Chat:     NewChatService(container.Chat),
 		Schedule: NewScheduleService(browser, scraper, container.Schedule, container.Group),
-		Log:      NewLogService(container.Log),
+		Stats:    NewStatsService(container.Log, container.Chat),
+		// Log:      NewLogService(container.Log),
 	}, nil
 }
 
@@ -30,7 +31,8 @@ type Services struct {
 	Proxy    *ProxyService
 	Chat     *ChatService
 	Schedule *ScheduleService
-	Log      *LogService
+	Stats    *StatsService
+	// Log      *LogService
 }
 
 func (s *Services) Stop() error {
@@ -52,7 +54,7 @@ func (s *Services) HealthCheck() error {
 	if err := s.Schedule.HealthCheck(); err != nil {
 		return err
 	}
-	if err := s.Log.HealthCheck(); err != nil {
+	if err := s.Stats.HealthCheck(); err != nil {
 		return err
 	}
 	return nil

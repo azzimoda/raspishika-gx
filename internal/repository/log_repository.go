@@ -10,13 +10,25 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/model"
 )
 
-type LogRepository interface {
+type UpdateLogRepository interface {
 	LogUpdate(context.Context, model.UpdateLog) error
 	GetUpdateLogsByChatID(context.Context, int64) ([]model.UpdateLog, error)
 	GetUpdateLogsByPeriod(ctx context.Context, start, end time.Time) ([]model.UpdateLog, error)
-
+	CountUpdateLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
+	CountSuccessfulUpdateLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
+}
+type BroadcastLogRepository interface {
+	LogBroadcastTask(context.Context, *model.BroadcastTaskLog) error
+	UpdateBroadcastTaskLog(context.Context, *model.BroadcastTaskLog) error
 	LogBroadcast(context.Context, model.BroadcastLog) error
-	GetBroadcastLogsByKind(context.Context, model.BroadcastLogKind, time.Duration) ([]model.BroadcastLog, error)
+	CountBroadcastTaskLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
+	CountBroadcastLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
+	CountSuccessfulBroadcastLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
+	CountBroadcastLogsByPeriodAndKind(ctx context.Context, kind model.BroadcastKind, start, end time.Time) (int, error)
+}
+type LogRepository interface {
+	UpdateLogRepository
+	BroadcastLogRepository
 }
 
 func NewLogRepository(db *sqlx.DB) LogRepository { return &logRepository{db: db} }
@@ -25,8 +37,8 @@ type logRepository struct{ db *sqlx.DB }
 
 func (r *logRepository) LogUpdate(ctx context.Context, log model.UpdateLog) error {
 	_, err := r.db.NamedExecContext(ctx, `
-			INSERT INTO update_logs (chat_id, kind, message_id, data, handling_time, error)
-			VALUES (:chat_id, :kind, :message_id, :data, :handling_time, :error)
+			INSERT INTO update_logs (chat_id, kind, message_id, data, elapsed, error)
+			VALUES (:chat_id, :kind, :message_id, :data, :elapsed, :error)
 		`, log)
 	return err
 }
@@ -43,28 +55,94 @@ func (r *logRepository) GetUpdateLogsByPeriod(ctx context.Context, start, end ti
 	return logs, err
 
 }
+func (r *logRepository) CountUpdateLogsByPeriod(ctx context.Context, start, end time.Time) (int, error) {
+	const query = `SELECT COUNT(*) FROM update_logs WHERE created_at BETWEEN ? AND ?`
+	var count int
+	if err := r.db.GetContext(ctx, &count, query, start, end); err != nil {
+		return 0, fmt.Errorf("failed to count update logs: %w", err)
+	}
+	return count, nil
+}
+func (r *logRepository) CountSuccessfulUpdateLogsByPeriod(ctx context.Context, start, end time.Time) (int, error) {
+	const query = `SELECT COUNT(*) FROM update_logs WHERE created_at BETWEEN ? AND ? AND (error IS NULL OR error = '')`
+	var count int
+	if err := r.db.GetContext(ctx, &count, query, start, end); err != nil {
+		return 0, fmt.Errorf("failed to count successful update logs: %w", err)
+	}
+	return count, nil
+}
 
+func (r *logRepository) LogBroadcastTask(ctx context.Context, taskLog *model.BroadcastTaskLog) error {
+	if taskLog == nil {
+		return nil
+	}
+
+	res, err := r.db.NamedExecContext(ctx, `
+			INSERT INTO broadcast_task_logs (kind, elapsed) VALUES (:kind, :elapsed)
+		`, *taskLog)
+	if err != nil {
+		return err
+	}
+
+	// Update taskLog.ID and taskLog.CreatedAt
+	taskLog.ID, err = res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	taskLog.CreatedAt = time.Now()
+	return nil
+}
+func (r *logRepository) UpdateBroadcastTaskLog(ctx context.Context, taskLog *model.BroadcastTaskLog) error {
+	if taskLog == nil {
+		return nil
+	}
+
+	_, err := r.db.NamedExecContext(ctx, `UPDATE broadcast_task_logs SET elapsed = :elapsed WHERE id = :id`, *taskLog)
+	return err
+}
 func (r *logRepository) LogBroadcast(ctx context.Context, log model.BroadcastLog) error {
 	_, err := r.db.NamedExecContext(ctx, `
-			INSERT INTO sending_logs (kind, chats, groups, elapsed, fails, errors)
-			VALUES (:kind, :chats, :groups, :elapsed, :fails, :errors)
+			INSERT INTO broadcast_logs (broadcast_task_log_id, chat_id, error) VALUES (:broadcast_task_log_id, :chat_id, :error)
 		`, log)
 	return err
 }
-func (r *logRepository) GetBroadcastLogsByKind(
-	ctx context.Context,
-	kind model.BroadcastLogKind,
-	dur time.Duration,
-) ([]model.BroadcastLog, error) {
-	query := `SELECT * FROM sending_logs WHERE created_at >= ?`
-	switch kind {
-	case model.BLogDaily, model.BLogPair, model.BLogChange:
-		query += fmt.Sprintf(` AND kind = '%s'`, kind)
+func (r *logRepository) CountBroadcastTaskLogsByPeriod(ctx context.Context, start, end time.Time) (int, error) {
+	const query = `SELECT COUNT(*) FROM broadcast_task_logs WHERE created_at BETWEEN ? AND ?`
+	var count int
+	if err := r.db.GetContext(ctx, &count, query, start, end); err != nil {
+		return 0, fmt.Errorf("failed to count broadcast task logs: %w", err)
+	}
+	return count, nil
+}
+func (r *logRepository) CountBroadcastLogsByPeriod(ctx context.Context, start, end time.Time) (int, error) {
+	const query = `SELECT COUNT(*) FROM broadcast_logs WHERE created_at BETWEEN ? AND ?`
+	var count int
+	if err := r.db.GetContext(ctx, &count, query, start, end); err != nil {
+		return 0, fmt.Errorf("failed to count broadcast logs: %w", err)
+	}
+	return count, nil
+}
+func (r *logRepository) CountSuccessfulBroadcastLogsByPeriod(ctx context.Context, start, end time.Time) (int, error) {
+	const query = `SELECT COUNT(*) FROM broadcast_logs WHERE created_at BETWEEN ? AND ? AND (error IS NULL OR error = '')`
+	var count int
+	if err := r.db.GetContext(ctx, &count, query, start, end); err != nil {
+		return 0, fmt.Errorf("failed to count successful broadcast logs: %w", err)
+	}
+	return count, nil
+}
+func (r *logRepository) CountBroadcastLogsByPeriodAndKind(ctx context.Context, kind model.BroadcastKind, start, end time.Time) (int, error) {
+	if kind == model.BAny {
+		return r.CountBroadcastLogsByPeriod(ctx, start, end)
 	}
 
-	var logs []model.BroadcastLog
-	if err := r.db.SelectContext(ctx, &logs, query, time.Now().Add(-dur)); err != nil {
-		return nil, fmt.Errorf("failed to get sending logs for duration: %w", err)
+	const query = `
+		SELECT COUNT(*)
+		FROM broadcast_logs BL JOIN broadcast_task_logs BTL ON BL.broadcast_task_log_id = BTL.id
+		WHERE BL.created_at BETWEEN ? AND ? AND kind = ?
+	`
+	var count int
+	if err := r.db.GetContext(ctx, &count, query, start, end, kind); err != nil {
+		return 0, fmt.Errorf("failed to count broadcast logs by kind: %w", err)
 	}
-	return logs, nil
+	return count, nil
 }

@@ -1,23 +1,17 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/azzimoda/raspishika-gx/pkg/refutil"
+)
 
 type BroadcastLog struct {
-	ID        int              `db:"id"`
-	Kind      BroadcastLogKind `db:"kind"`
-	Chats     int              `db:"chats"`
-	Groups    int              `db:"groups"`
-	Elapsed   int              `db:"elapsed"` // milliseconds
-	Fails     int              `db:"fails"`
-	Errors    string           `db:"errors"`
-	CreatedAt time.Time        `db:"created_at"`
+	ID        int64     `db:"id"`
+	TaskID    int64     `db:"broadcast_task_log_id"` // [BroadcastTaskLog.ID]
+	ChatID    int64     `db:"chat_id"`               // [Chat.ID]
+	Error     *string   `db:"error"`                 // Empty value means update handler succeeded.
+	CreatedAt time.Time `db:"created_at"`
 }
 
-type BroadcastLogKind string
-
-const (
-	BLogAny    BroadcastLogKind = ""
-	BLogDaily  BroadcastLogKind = "daily"
-	BLogPair   BroadcastLogKind = "pair"
-	BLogChange BroadcastLogKind = "update"
-)
+func (b *BroadcastLog) IsOk() bool { return refutil.DerefOrTypeDefault(b.Error) == "" }

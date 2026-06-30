@@ -73,7 +73,7 @@ func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) erro
 
 // Every minute except Sunday
 func (s *BroadcastService) scheduleDaily(ctx context.Context) error {
-	return s.cron.AddFunc("0 * * * * 1-6", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
+	return s.cron.AddFunc("0 * * * * *", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
 }
 func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time) {
 	if s.Bot == nil {
@@ -85,7 +85,7 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 
 	start := time.Now()
 
-	chatCount, groupedChats, _, confs, shouldReturn := s.prepareBroadcast(ctx, timeStr, t)
+	groupedChats, _, confs, shouldReturn := s.prepareBroadcast(ctx, timeStr, t)
 	if shouldReturn {
 		return
 	}
@@ -100,32 +100,33 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 		s.Report().Err(err).Debug("success", len(schedules)).Msg("Failed to get some schedules for daily broadcast")
 	}
 
-	// Send schedules
-	successCount, err := s.sendDaily(ctx, schedules, groupedChats)
-	errStr := ""
-	if err != nil {
-		errStr = err.Error()
+	// Create task log
+	taskLog := model.BroadcastTaskLog{Kind: model.BDaily}
+	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
+		s.Report().Err(err).Msg("Failed to log broadcast task")
+		return
 	}
 
-	// Log
-	if err := s.Log.LogBroadcast(ctx, model.BroadcastLog{
-		Kind:    model.BLogDaily,
-		Chats:   chatCount,
-		Groups:  len(groupedChats),
-		Elapsed: int(time.Since(start).Milliseconds()),
-		Fails:   chatCount - successCount,
-		Errors:  errStr,
-	}); err != nil {
-		s.Report().Err(err).Msg("Failed to log daily broadcast")
+	// Send schedules
+	err = s.sendDaily(ctx, taskLog.ID, schedules, groupedChats)
+	if err != nil {
+		log.Error().Err(err).Msg("Errors while sending daily broadcast")
+	}
+
+	// Update task log
+	taskLog.Elapsed = time.Since(start).Milliseconds()
+	if err := s.Stats.UpdateBroadcastTaskLog(ctx, &taskLog); err != nil {
+		s.Report().Err(err).Msg("Failed to update broadcast task log")
 	}
 }
 func (s *BroadcastService) sendDaily(
 	ctx context.Context,
+	taskID int64,
 	schedules []*model.RawSchedule,
 	groupedChats map[model.GroupName][]*model.Chat,
-) (successCount int, err error) {
+) (err error) {
 	var errs []error
-	successCount = 0
+	successCount := 0
 	for _, schedule := range schedules {
 		var err error
 
@@ -156,7 +157,8 @@ func (s *BroadcastService) sendDaily(
 			if chat.DarkMode {
 				c = confDark
 			}
-			if err := botutil.SendWeekScheduleMessages(
+			var err error
+			if err = botutil.SendWeekScheduleMessages(
 				ctx,
 				s.Bot.Bot,
 				0,
@@ -168,12 +170,16 @@ func (s *BroadcastService) sendDaily(
 				log.Error().Err(err).Msg("Failed to send week schedule message")
 				errs = append(errs, err)
 			} else {
-				successCount += 1
+				successCount++
 			}
+
+			s.logBroadcast(ctx, taskID, chat, err)
 		}
 	}
 
-	return successCount, errors.Join(errs...)
+	log.Debug().Int("successCount", successCount).Msg("Daily sending finished")
+
+	return errors.Join(errs...)
 }
 
 func (s *BroadcastService) schedulePairNotification(ctx context.Context) error {
@@ -188,7 +194,7 @@ func (s *BroadcastService) schedulePairNotification(ctx context.Context) error {
 		// 15 minutes before a pair starts
 	}
 	for _, t := range times {
-		if err := s.cron.AddFunc(fmt.Sprintf("%d %d * * *", t[1], t[0]), func() {
+		if err := s.cron.AddFunc(fmt.Sprintf("%d %d * * * 1-6", t[1], t[0]), func() {
 			go s.handlePairNotification(ctx, time.Now())
 		}); err != nil {
 			return err
@@ -207,7 +213,7 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 
 	start := time.Now()
 
-	chatCount, groupedChats, groupNames, confs, shouldReturn := s.prepareBroadcast(ctx, timeStartStr, t)
+	groupedChats, groupNames, confs, shouldReturn := s.prepareBroadcast(ctx, timeStartStr, t)
 	if shouldReturn {
 		return
 	}
@@ -222,30 +228,35 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 		s.Report().Err(err).Debug("success", len(schedules)).Msg("Failed to get some schedules for daily broadcast")
 	}
 
+	// Create task log
+	taskLog := model.BroadcastTaskLog{Kind: model.BPair}
+	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
+		s.Report().Err(err).Msg("Failed to log broadcast task")
+		return
+	}
+
 	// Send notifications
-	successCount, err := s.sendPairNotificatins(ctx, schedules, groupedChats, groupNames, timeStart)
+	err = s.sendPairNotificatins(ctx, taskLog.ID, schedules, groupedChats, groupNames, timeStart)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to send pair notifications")
+	}
 
 	// Log
-	if err := s.Log.LogBroadcast(ctx, model.BroadcastLog{
-		Kind:    model.BLogPair,
-		Chats:   chatCount,
-		Groups:  len(groupedChats),
-		Elapsed: int(time.Since(start).Milliseconds()),
-		Fails:   chatCount - successCount,
-		Errors:  err.Error(),
-	}); err != nil {
-		s.Report().Err(err).Msg("Failed to log pair notification broadcast")
+	taskLog.Elapsed = time.Since(start).Milliseconds()
+	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
+		s.Report().Err(err).Msg("Failed to log broadcast task")
 	}
 }
 func (s *BroadcastService) sendPairNotificatins(
 	ctx context.Context,
+	taskID int64,
 	schedules []*model.RawSchedule,
 	groupedChats map[model.GroupName][]*model.Chat,
 	groupNames []model.GroupName,
 	t time.Time,
-) (successCount int, err error) {
+) (err error) {
 	var errs []error
-	successCount = 0
+	successCount := 0
 	messagesToDelete := make([]*models.Message, 0)
 	for i, schedule := range schedules {
 		var err error
@@ -265,18 +276,23 @@ func (s *BroadcastService) sendPairNotificatins(
 			pair.Classroom, pair.Discipline, refutil.DerefOrTypeDefault(pair.Teacher))
 
 		for _, chat := range groupedChats[groupNames[i]] {
-			if msg, err := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
+			msg, err := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID:          chat.TgChatID,
 				MessageThreadID: 0,
 				Text:            text,
 				ParseMode:       models.ParseModeHTML,
-			}); err != nil {
+			})
+			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to send pair notification: %w", err))
 			} else {
 				messagesToDelete = append(messagesToDelete, msg)
 			}
+
+			s.logBroadcast(ctx, taskID, chat, err)
 		}
 	}
+
+	log.Info().Int("successCount", successCount).Msg("Pair notifications sent")
 
 	go func(msgs []*models.Message) {
 		time.Sleep(viper.GetDuration(config.KeyPairNotificationTTL))
@@ -287,7 +303,7 @@ func (s *BroadcastService) sendPairNotificatins(
 		}
 	}(messagesToDelete)
 
-	return successCount, errors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (s *BroadcastService) runChangeNotifier(ctx context.Context) {
@@ -321,7 +337,7 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 
 	start := time.Now()
 
-	chatCount, groupedChats, groupNames, confs, shouldReturn := s.prepareBroadcast(ctx, start.Format("15:04"), start)
+	groupedChats, groupNames, confs, shouldReturn := s.prepareBroadcast(ctx, start.Format("15:04"), start)
 	if shouldReturn {
 		return
 	}
@@ -346,23 +362,29 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 		s.Report().Err(err).Debug("success", len(schedules)).Msg("Failed to get some schedules for change alert")
 	}
 
+	// Create task log
+	taskLog := model.BroadcastTaskLog{Kind: model.BChange}
+	err = s.Stats.LogBroadcastTask(ctx, &taskLog)
+	if err != nil {
+		s.Report().Err(err).Msg("Failed to start broadcast task")
+		return
+	}
+
 	// Send reports
-	successCount, err := s.sendChangeReports(ctx, schedules, groupedChats, changes)
+	_, err = s.sendChangeReports(ctx, taskLog.ID, schedules, groupedChats, changes)
+	if err != nil {
+		log.Error().Err(err).Msg("Errors while sending change reports")
+	}
 
 	// Log
-	if err := s.Log.LogBroadcast(ctx, model.BroadcastLog{
-		Kind:    model.BLogChange,
-		Chats:   chatCount,
-		Groups:  len(groupedChats),
-		Elapsed: int(time.Since(start).Milliseconds()),
-		Fails:   chatCount - successCount,
-		Errors:  err.Error(),
-	}); err != nil {
-		s.Report().Err(err).Msg("Failed to log change alert broadcast")
+	taskLog.Elapsed = time.Since(start).Milliseconds()
+	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
+		s.Report().Err(err).Msg("Failed to log broadcast task")
 	}
 }
 func (s *BroadcastService) sendChangeReports(
 	ctx context.Context,
+	taskID int64,
 	schedules []*model.RawSchedule,
 	groupedChats map[model.GroupName][]*model.Chat,
 	changes map[model.GroupName]*model.ScheduleChange,
@@ -399,7 +421,9 @@ func (s *BroadcastService) sendChangeReports(
 				c = dark
 			}
 
-			if err := botutil.SendWeekScheduleMessages(
+			var err error = nil
+
+			if errSchedule := botutil.SendWeekScheduleMessages(
 				ctx,
 				s.Bot.Bot,
 				0,
@@ -407,32 +431,45 @@ func (s *BroadcastService) sendChangeReports(
 				c.schedule.Config,
 				c.imageFileName,
 				c.imageData,
-			); err != nil {
+			); errSchedule != nil {
+				err = errSchedule
 				log.Error().Err(err).Msg("Failed to send week schedule messages")
-				errs = append(errs,
-					fmt.Errorf("failed to send week schedule messages for chat %d: %w", chat.TgChatID, err))
 			}
 
-			if _, err := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
+			if _, errReport := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID:          chat.TgChatID,
 				MessageThreadID: 0,
 				ParseMode:       models.ParseModeHTML,
 				Text:            text,
-			}); err != nil {
-				log.Error().Err(err).Msg("Failed to send schedule change alert message")
-				errs = append(errs, err)
-				continue
+			}); errReport != nil {
+				err = errors.Join(err, errReport)
+				log.Error().Err(errReport).Msg("Failed to send schedule change alert message")
+			} else {
+				successCount++
 			}
 
-			successCount++
+			s.logBroadcast(ctx, taskID, chat, err)
 		}
 	}
 
 	return successCount, errors.Join(errs...)
 }
 
+func (s *BroadcastService) logBroadcast(ctx context.Context, taskID int64, chat *model.Chat, err error) {
+	var errVal *string = nil
+	if err != nil {
+		errVal = new(err.Error())
+	}
+	if err := s.Stats.LogBroadcast(ctx, model.BroadcastLog{
+		TaskID: taskID,
+		ChatID: int64(chat.TgChatID),
+		Error:  errVal,
+	}); err != nil {
+		s.Report().Err(err).Msg("Failed to log broadcast")
+	}
+}
+
 func (s *BroadcastService) prepareBroadcast(ctx context.Context, timeStr string, t time.Time) (
-	chatCount int,
 	groupedChats map[model.GroupName][]*model.Chat,
 	groupNames []model.GroupName,
 	confs []model.ScheduleConfig,
@@ -441,13 +478,13 @@ func (s *BroadcastService) prepareBroadcast(ctx context.Context, timeStr string,
 	chats, err := s.Chat.GetChatsByDailyTime(ctx, timeStr)
 	if err != nil {
 		s.Report().Err(err).Debug("time", timeStr).Msg("Failed to get chats for broadcast")
-		return 0, nil, nil, nil, true
+		return nil, nil, nil, true
 	}
 
-	chatCount = len(chats)
+	chatCount := len(chats)
 	if chatCount == 0 {
 		log.Debug().Time("time", t).Msg("No chat for broadcast")
-		return 0, nil, nil, nil, true
+		return nil, nil, nil, true
 	}
 
 	groupedChats = groupChats(chats)
@@ -468,9 +505,9 @@ func (s *BroadcastService) prepareBroadcast(ctx context.Context, timeStr string,
 	}
 	if len(confs) == 0 {
 		log.Warn().Msg("No valid groups for daily broadcast")
-		return 0, nil, nil, nil, true
+		return nil, nil, nil, true
 	}
-	return chatCount, groupedChats, groupNames, confs, shouldReturn
+	return groupedChats, groupNames, confs, shouldReturn
 }
 
 func groupChats(chats []*model.Chat) map[model.GroupName][]*model.Chat {
