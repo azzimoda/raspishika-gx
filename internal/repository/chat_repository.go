@@ -204,14 +204,11 @@ func (r *chatRepository) CountNewChats(ctx context.Context, dur time.Duration) (
 	period := sqlPeriod(dur)
 	err := r.db.GetContext(ctx, &count, `
 		SELECT count(*) FROM chats
-		WHERE updated_at > datetime('now', ?)
+		WHERE created_at > datetime('now', ?)
 	`, period)
 	return count, err
 }
-func (r *chatRepository) GetNewChatCountByYear(
-	ctx context.Context,
-	dur time.Duration,
-) (map[int]int, error) {
+func (r *chatRepository) GetNewChatCountByYear(ctx context.Context, dur time.Duration) (map[int]int, error) {
 	result := make([]struct {
 		Group *string `db:"group"`
 		Count int     `db:"count"`
@@ -219,7 +216,7 @@ func (r *chatRepository) GetNewChatCountByYear(
 	period := sqlPeriod(dur)
 	err := r.db.SelectContext(ctx, &result, `
 		SELECT "group", count(*) AS count FROM chats
-		WHERE updated_at > datetime('now', ?)
+		WHERE created_at > datetime('now', ?)
 		GROUP BY "group"
 	`, period)
 	if err != nil {
@@ -231,9 +228,11 @@ func (r *chatRepository) GetNewChatCountByYear(
 		groupName := model.GroupName(refutil.DerefOrTypeDefault(r.Group))
 		year := 0
 		if groupName != "" {
-			_, year, _, _, _ = groupName.Parse()
+			if _, year, _, _, err = groupName.Parse(); err != nil {
+				continue
+			}
 		}
-		m[year] = r.Count
+		m[year] += r.Count
 	}
 	return m, nil
 }
