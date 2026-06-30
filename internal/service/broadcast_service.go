@@ -323,6 +323,12 @@ func (s *BroadcastService) runChangeNotifier(ctx context.Context) {
 			continue
 		}
 
+		if t := time.Now(); t.Month() == time.July || t.Month() == time.August {
+			log.Debug().Msg("Change alert notifier is disabled during summer")
+			time.Sleep(viper.GetDuration(config.KeyUpdateMonitorInterval))
+			continue
+		}
+
 		select {
 		case <-ctx.Done():
 			log.Info().Msg("Change alert notifier stopped")
