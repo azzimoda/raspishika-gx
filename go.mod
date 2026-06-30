@@ -8,6 +8,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.46
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/viper v1.21.0
 	golang.org/x/net v0.56.0
@@ -28,7 +29,6 @@ require (
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
-	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
