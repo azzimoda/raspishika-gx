@@ -67,9 +67,9 @@ func Init() error {
 	viper.SetDefault(KeyChatStateTTL, 10*time.Minute)
 	viper.SetDefault(KeyCacheScheduleTTL, 30*time.Minute)
 
-	viper.SetDefault(KeyDailyBroadcast, false)
-	viper.SetDefault(KeyPairNotification, false)
-	viper.SetDefault(KeyChangeAlert, false)
+	viper.SetDefault(KeyDailyBroadcast, true)
+	viper.SetDefault(KeyPairNotification, true)
+	viper.SetDefault(KeyChangeAlert, true)
 
 	viper.SetDefault(KeyPairNotificationTTL, 90*time.Minute)
 	viper.SetDefault(KeyUpdateMonitorInterval, 25*time.Minute)
