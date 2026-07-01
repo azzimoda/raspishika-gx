@@ -56,6 +56,10 @@ func (*handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models.U
 
 func (h *handler) handleCmdStats(ctx context.Context, b *bot.Bot, update *models.Update) {
 	_, args := botutil.ParseCommand(update.Message.Text)
+	if args == "" {
+		args = "1d"
+	}
+
 	duration, ok := parsePeriod(args)
 	if !ok {
 		duration = 24 * time.Hour
