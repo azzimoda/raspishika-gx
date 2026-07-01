@@ -9,20 +9,6 @@ import (
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-
-	"github.com/azzimoda/raspishika-gx/internal/model" // TODO: Remove this dependency to internal package.
-	"github.com/azzimoda/raspishika-gx/pkg/refutil"
-)
-
-type reportKey string
-
-const (
-	tempKey      reportKey = "temp"
-	errKey       reportKey = "err"
-	chatIDKey    reportKey = "chat_id"
-	usernameKey  reportKey = "username"
-	groupNameKey reportKey = "group_name"
-	debugKey     reportKey = "debug"
 )
 
 func NewReportBuilder(bot *bot.Bot, recipientChatID int64) ReportBuilder {
@@ -39,29 +25,12 @@ type ReportBuilder struct {
 
 	isTemp      bool
 	error       error
-	chat        *model.Chat
 	debugValues map[string]any
 }
 
 // Err adds error to report message.
 func (r ReportBuilder) Err(err error) ReportBuilder {
 	r.error = err
-	return r
-}
-
-// Chat sets the chat ID, username, and group name of the chat, whose message caused the error.
-//
-// If the chatOrID is an int64, the chat ID is set to the value, and the username and group name are set to "??".
-//
-// If the chatOrID is a *model.Chat, the chat ID, username, and group name are set to the corresponding values from the chat.
-func (r ReportBuilder) Chat(chatOrID any) ReportBuilder {
-	if tgChatID, ok := chatOrID.(int64); ok {
-		r.chat = new(model.Chat{TgChatID: model.ChatID(tgChatID)})
-	} else if chat, ok := chatOrID.(*model.Chat); ok {
-		r.chat = chat
-	} else {
-		log.Error().Type("type", chatOrID).Any("arg", chatOrID).Msg("Wrong type of chat argument")
-	}
 	return r
 }
 
@@ -101,12 +70,6 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 
 	// Assemble the message text.
 	var msgText strings.Builder
-
-	// Chat
-	if rc.chat != nil {
-		fmt.Fprintf(&msgText, "<code>/chat %d</code> @%s\n", rc.chat.TgChatID, rc.chat.UserName)
-		fmt.Fprintf(&msgText, "Group: <code>%s</code>\n", refutil.DerefOrTypeDefault(rc.chat.GroupName))
-	}
 
 	// Error
 	if rc.error != nil {

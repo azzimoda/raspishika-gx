@@ -151,7 +151,7 @@ func (h *handler) sendTeacherSchedule(
 ) error {
 	if err := h.Chat.AddChatRecentTeacher(ctx, chat.ID, teacher.ID); err != nil {
 		addHandlerCtxErr(ctx, err)
-		h.Report().Err(err).Chat(chat).Msg("Failed to add recent teacher for chat")
+		h.ReportChat(chat).Err(err).Msg("Failed to add recent teacher for chat")
 	}
 
 	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {

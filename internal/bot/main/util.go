@@ -3,6 +3,9 @@ package mainbot
 import (
 	"context"
 
+	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
+	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
@@ -38,4 +41,13 @@ func sendChatActionTyping(ctx context.Context, b *bot.Bot, chatID any, messageTh
 		addHandlerCtxErr(ctx, err)
 		log.Error().Err(err).Msg("Failed to send chat action")
 	}
+}
+
+func (h *handler) ReportChat(chat *model.Chat) reporter.ReportBuilder {
+	r := h.Report()
+	if chat == nil {
+		return r
+	}
+	return r.Debug("chatID", chat.TgChatID).Debug("username", chat.UserName).
+		Debug("group", refutil.DerefOrTypeDefault(chat.GroupName))
 }

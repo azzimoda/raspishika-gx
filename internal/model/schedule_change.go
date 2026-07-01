@@ -49,7 +49,6 @@ func (s *ScheduleChange) Diffs() []Diff {
 			}
 		}
 	}
-	// TODO: Detect relative changes.
 
 	return absDiffs
 }
@@ -127,7 +126,7 @@ func (d *Diff) HTML() (result string) {
 	if d.OldDay != nil && d.NewDay != nil && !d.OldDay.IsEqual(d.NewDay) {
 		// Pair moved to other day
 		log.Warn().Msg("Schedule difference case not yet implemented: Pair moved to other day")
-		// TODO: Implement this case later.
+		// NOTE: This case not suposed to implemented.
 
 		result = "?"
 	} else {

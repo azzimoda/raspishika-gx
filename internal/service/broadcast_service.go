@@ -550,8 +550,8 @@ func (s *BroadcastService) Stop() {
 }
 
 func (s *BroadcastService) handleForbidden(ctx context.Context, err error, chat *model.Chat) {
-	s.Report().Err(err).Chat(chat).Msg("Bot was kicked from the chat")
+	s.Report().Err(err).Debug("chatID", chat.TgChatID).Msg("Bot was kicked from the chat")
 	if err := s.Chat.DeleteChat(ctx, chat.ID); err != nil {
-		s.Report().Err(err).Chat(chat).Msg("Failed to delete chat")
+		s.Report().Err(err).Debug("chatID", chat.TgChatID).Msg("Failed to delete chat")
 	}
 }

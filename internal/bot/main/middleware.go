@@ -61,7 +61,7 @@ func (h *handler) createOrUpdateChat(b *bot.Bot, update *models.Update) (*model.
 // sendNewChatReport middlware sends a report to the admin chat when a new user chat is registered.
 // It also sends a message to the admin chat if the user chat has a group configured.
 func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
-	report, sentErr := h.Report().Chat(chat).Msg("New chat registered")
+	report, sentErr := h.ReportChat(chat).Msg("New chat registered")
 	if sentErr != nil {
 		log.Warn().Err(sentErr).Msg("Failed to send new chat report")
 		return
@@ -74,7 +74,7 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 
 		if chat, err = h.Chat.GetChatByChatID(context.Background(), chat.TgChatID); err == nil && chat.GroupName != nil {
 			b.DeleteMessage(context.Background(), &bot.DeleteMessageParams{ChatID: msg.Chat.ID, MessageID: msg.ID})
-			h.Report().Chat(chat).Msgf("Chat configured group %s", *chat.GroupName)
+			h.ReportChat(chat).Msgf("Chat configured group %s", *chat.GroupName)
 			break
 		}
 	}
@@ -198,9 +198,7 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 			log.Trace().Errs("errs", handlerErrs).Send()
 			handlerErr = errors.Join(handlerErrs...)
 			handlerErrStr = handlerErr.Error()
-			h.Report().Err(handlerErr).Chat(chat).
-				Debug("update_type", updateKind).
-				Debug("update_data", updateData).
+			h.ReportChat(chat).Err(handlerErr).Debug("update_type", updateKind).Debug("update_data", updateData).
 				Msg("Handler error")
 		}
 
@@ -227,7 +225,7 @@ func (h *handler) checkRegularAccess(next bot.HandlerFunc) bot.HandlerFunc {
 
 		isAdmin, err := isAdmin(ctx, b, update)
 		if err != nil {
-			h.Report().Err(err).Chat(chat).Msg("Failed to get chat member")
+			h.ReportChat(chat).Err(err).Msg("Failed to get chat member")
 			next(ctx, b, update)
 			return
 		}
@@ -253,7 +251,7 @@ func (h *handler) checkConfigAccess(next bot.HandlerFunc) bot.HandlerFunc {
 
 		isAdmin, err := isAdmin(ctx, b, update)
 		if err != nil {
-			h.Report().Err(err).Chat(chat).Msg("Failed to get chat member")
+			h.ReportChat(chat).Err(err).Msg("Failed to get chat member")
 			next(ctx, b, update)
 			return
 		}
