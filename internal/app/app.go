@@ -89,8 +89,7 @@ func (a *App) Run() error {
 
 	// Services
 	if err := a.services.HealthCheck(); err != nil {
-		log.Fatal().Err(err).Msg("Health check failed")
-		return err
+		return fmt.Errorf("health check failed: %w", err)
 	}
 	a.broadcast.Run(ctx, service.BroadcastConfig{
 		Daily:            viper.GetBool("daily_broadcast"),
@@ -100,8 +99,7 @@ func (a *App) Run() error {
 
 	// Bots
 	if err := a.mainBot.HealthCheck(); err != nil {
-		log.Fatal().Err(err).Msg("Main bot health check failed")
-		return err
+		return fmt.Errorf("main bot health check failed: %w", err)
 	}
 	go a.mainBot.Start(ctx)
 
@@ -131,9 +129,7 @@ func (a *App) Run() error {
 
 	<-ctx.Done()
 
-	// TODO: Graceful shutdown
-
-	return nil
+	return a.Stop()
 }
 
 func (a *App) Stop() error {
