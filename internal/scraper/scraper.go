@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/avast/retry-go/v5"
 	"github.com/playwright-community/playwright-go"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -27,7 +28,7 @@ func New(browser *browser.BrowserService) *ScraperService { return &ScraperServi
 type ScraperService struct{ browser *browser.BrowserService }
 
 func (s *ScraperService) ScrapeSchedule(url model.URL, conf model.ScheduleConfig) (*model.RawSchedule, error) {
-	resp, err := HTTPGetRequestRetryingRandomHeaders(url.String(), 10)
+	resp, err := HTTPGetRequestRetryingWithRandomHeaders(url.String(), 10)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -87,7 +88,7 @@ const DepartmentSelectionPageURL = "https://mnokol.tyuiu.ru/site/index.php?optio
 const BaseDepartmentPageURL = "https://mnokol.tyuiu.ru"
 
 func (s *ScraperService) ScrapeDepartments() ([]model.Department, error) {
-	resp, err := HTTPGetRequestRetryingRandomHeaders(DepartmentSelectionPageURL, 10)
+	resp, err := HTTPGetRequestRetryingWithRandomHeaders(DepartmentSelectionPageURL, 10)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading departments page: %w", err)
 	}
@@ -173,45 +174,42 @@ func (s *ScraperService) getScheduleHTML(url model.URL, conf model.ScheduleConfi
 	log.Trace().Msg("")
 
 	browser := s.browser
-	var lastErr error
 	var html string
-	for range maxRetries {
-		headers := GenerateHeaders()
-		lastErr = browser.WithPage(func(p playwright.Page) (err error) {
-			log.Trace().Msgf("Fetching schedule page...")
 
-			if err = p.SetExtraHTTPHeaders(headers); err != nil {
-				log.Error().Err(err).Msgf("Failed to set extra HTTP headers; retrying...")
+	err := retry.New(
+		retry.Attempts(maxRetries),
+		retry.Delay(100*time.Millisecond),
+		retry.DelayType(retry.FullJitterBackoffDelay),
+	).Do(func() error {
+		headers := GenerateHeaders()
+		if errBrowser := browser.WithPage(func(p playwright.Page) error {
+			if err := p.SetExtraHTTPHeaders(headers); err != nil {
 				return fmt.Errorf("failed to set extra HTTP headers: %w", err)
 			}
-			if _, err = p.Goto(url.String()); err != nil {
-				log.Error().Err(err).Msgf("Failed to goto URL; retrying...")
-				return fmt.Errorf("failed to goto URL: %w", err)
+			if _, err := p.Goto(url.String()); err != nil {
+				return fmt.Errorf("failed to goto '%s': %w", url, err)
 			}
 			tableLocator := p.Locator("#main_table")
-			if err = tableLocator.WaitFor(playwright.LocatorWaitForOptions{}); err != nil {
-				log.Error().Err(err).Msgf("Failed to wait for table; retrying...")
+			if err := tableLocator.WaitFor(playwright.LocatorWaitForOptions{}); err != nil {
 				return fmt.Errorf("failed to wait for table: %w", err)
 			}
 			time.Sleep(1 * time.Second)
 
-			html, err = p.Content()
-			if err != nil {
-				log.Error().Err(err).Msgf("Failed to get HTML content; retrying...")
-				return fmt.Errorf("failed to get HTML content: %w", err)
+			var errContent error
+			html, errContent = p.Content()
+			if errContent != nil {
+				return fmt.Errorf("failed to get page content: %w", errContent)
 			}
-			return err
-		})
-		if lastErr == nil {
-			break
+			return nil
+		}); errBrowser != nil {
+			log.Error().Err(errBrowser).Str("url", url.String()).Any("headers", headers).
+				Msg("Failed to fetch schedule page")
+			return errBrowser
 		}
-		log.Error().Err(lastErr).Any("url", url).Any("headers", headers).
-			Msgf("Failed to fetch schedule page; retrying...")
-		time.Sleep(1 * time.Second)
-	}
-
-	if lastErr != nil {
-		return "", fmt.Errorf("failed to fetch schedule page with browser after %d retries: %w", maxRetries, lastErr)
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch schedule page with browser after %d retries: %w", maxRetries, err)
 	}
 
 	if log.Logger.GetLevel() == zerolog.TraceLevel {

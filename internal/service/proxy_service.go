@@ -81,7 +81,14 @@ func (s *ProxyService) UpdateProxies() error {
 func getProxies() (*http.Response, error) {
 	client := new(http.Client{Timeout: 30 * time.Second})
 	var resp *http.Response
-	err := retry.New(retry.Attempts(5), retry.Delay(100*time.Millisecond), retry.DelayType(retry.BackOffDelay)).Do(
+	err := retry.New(
+		retry.Attempts(5),
+		retry.Delay(100*time.Millisecond),
+		retry.DelayType(retry.BackOffDelay),
+		retry.OnRetry(func(attempt uint, err error) {
+			log.Debug().Uint("attempt", attempt).Err(err).Msg("Retrying...")
+		}),
+	).Do(
 		func() error {
 			var err error
 			resp, err = client.Get(proxySourceURL)

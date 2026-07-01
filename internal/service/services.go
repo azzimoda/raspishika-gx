@@ -32,7 +32,6 @@ type Services struct {
 	Chat     *ChatService
 	Schedule *ScheduleService
 	Stats    *StatsService
-	// Log      *LogService
 }
 
 func (s *Services) Stop() error {
