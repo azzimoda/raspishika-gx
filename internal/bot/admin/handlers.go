@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/avast/retry-go/v5"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
@@ -171,17 +173,16 @@ func (*handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *models.
 }
 
 var me *models.User
+var meOnce sync.Once
 
 func GetMe(b *bot.Bot) *models.User {
-	if me != nil {
-		return me
-	}
-
-	var err error
-	me, err = b.GetMe(context.Background())
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to get me")
-		return nil
-	}
+	meOnce.Do(func() {
+		if err := retry.New(retry.Attempts(5), retry.Delay(100*time.Millisecond)).Do(func() (err error) {
+			me, err = b.GetMe(context.Background())
+			return
+		}); err != nil {
+			log.Error().Err(err).Msg("Failed to get me")
+		}
+	})
 	return me
 }
