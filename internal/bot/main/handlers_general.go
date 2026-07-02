@@ -66,7 +66,7 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 				botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 					ChatID:          chat.TgChatID,
 					MessageThreadID: update.Message.MessageThreadID,
-					Text:            botutil.ErrMsgTryLater, // TODO: Move those error message constants into this package
+					Text:            botutil.ErrMsgTryLater,
 				})
 				return
 			}

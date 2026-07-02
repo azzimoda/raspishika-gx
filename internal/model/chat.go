@@ -42,7 +42,7 @@ const (
 type Chat struct {
 	ID               int64           `db:"id"`
 	TgChatID         ChatID          `db:"tg_chat_id"`
-	UserName         *UserName       `db:"username"` // TODO: Make this field NOT NULL — use just empty string
+	UserName         *UserName       `db:"username"`
 	State            ChatState       `db:"state"`
 	DepartmentName   *DepartmentName `db:"department"`
 	GroupName        *GroupName      `db:"group"`

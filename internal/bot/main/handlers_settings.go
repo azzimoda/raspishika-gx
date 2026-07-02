@@ -287,24 +287,20 @@ func settingsMenuText(chat *model.Chat) string {
 	if chat.DailySendingTime != nil {
 		dailyTime = *chat.DailySendingTime
 	}
-
 	pairNotification := "выключено"
 	if chat.PairSending {
 		pairNotification = "включено"
 	}
-
 	changesNotificatin := "выключено"
 	if chat.ChangeAlert {
 		changesNotificatin = "включено"
 	}
-
 	theme := "светлая"
 	if chat.DarkMode {
 		theme = "тёмная"
 	}
 
-	// TODO: Use `text/template` here.
-	text := fmt.Sprintf(`<b>Меню настроек</b>
+	text := fmt.Sprintf(`<b>Настройки</b>
 
 Группа: <u>%s</u>
 Ежедневная рассылка: <u>%s</u>

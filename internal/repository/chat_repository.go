@@ -378,13 +378,13 @@ func (r *chatRepository) GetWatchedGroups(ctx context.Context) ([]*model.Group, 
 	return groups, err
 }
 
-// TODO: Refactor
 func (r *chatRepository) AddRecentTeacher(ctx context.Context, chatID, teacherID int64) error {
 	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create transaction: %w", err)
 	}
 
+	// Delete existing row with same teacher
 	if _, err := tx.ExecContext(
 		ctx,
 		`DELETE FROM recent_teachers WHERE chat_id = ? AND teacher_id = ?`,
@@ -392,27 +392,29 @@ func (r *chatRepository) AddRecentTeacher(ctx context.Context, chatID, teacherID
 		teacherID,
 	); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to delete same recent teachers (%d) of chat (%d): %w", teacherID, chatID, err)
+		return fmt.Errorf("failed to delete same recent teacher: %w", err)
 	}
 
+	// Get recent teachers.
 	rt, err := r.GetRecentTeachers(ctx, chatID)
 	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to get recent teachers (%d) of chat (%d): %w", teacherID, chatID, err)
+		return fmt.Errorf("failed to get recent teachers: %w", err)
 	}
 
 	if len(rt) >= 4 {
+		// Delete oldest recent teacher.
 		if _, err := tx.NamedExecContext(
 			ctx,
 			`DELETE FROM recent_teachers WHERE chat_id = :chat_id AND teacher_id = :teacher_id`,
 			rt[0],
 		); err != nil {
 			tx.Rollback()
-			return fmt.Errorf("failed to delete oldest recent teacher (%d) of chat (%d): %w",
-				rt[0].TeacherID, chatID, err)
+			return fmt.Errorf("failed to delete oldest recent teacher: %w", err)
 		}
 	}
 
+	// Add new recent teacher.
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO recent_teachers (chat_id, teacher_id) VALUES (?,?)`,
