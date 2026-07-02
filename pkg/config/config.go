@@ -17,11 +17,12 @@ const (
 	KeyDBFile         = "db_file"
 	KeyDBMigrationDir = "db_migration_dir"
 
-	KeyBrowserHeadless = "browser_headless"
-	KeyBrowserTimeout  = "browser_timeout"
-	KeyBrowserWidth    = "browser_width"
-	KeyBrowserHeight   = "browser_height"
-	KeyBrowserScale    = "browser_scale"
+	KeyBrowserHeadless        = "browser_headless"
+	KeyBrowserTimeout         = "browser_timeout"
+	KeyBrowserWidth           = "browser_width"
+	KeyBrowserHeight          = "browser_height"
+	KeyBrowserScale           = "browser_scale"
+	KeyBrowserRestartInterval = "browser_restart_interval"
 
 	KeyBotToken      = "bot_token"
 	KeyAdminBotToken = "admin_bot_token"
@@ -62,6 +63,7 @@ func Init() error {
 	viper.SetDefault(KeyBrowserWidth, 1920)
 	viper.SetDefault(KeyBrowserHeight, 1080)
 	viper.SetDefault(KeyBrowserScale, 1.0)
+	viper.SetDefault(KeyBrowserRestartInterval, 24*time.Hour)
 
 	viper.SetDefault(KeyScreenshotDir, "storage/screenshots")
 	viper.SetDefault(KeyChatStateTTL, 10*time.Minute)
