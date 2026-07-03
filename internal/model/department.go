@@ -18,5 +18,4 @@ type Department struct {
 	UpdatedAt time.Time      `db:"updated_at"`
 }
 
-// TODO: Use this method for validating departments.
 func (d *Department) IsActual(ttl time.Duration) bool { return d.UpdatedAt.Add(ttl).After(time.Now()) }

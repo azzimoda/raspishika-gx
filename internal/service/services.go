@@ -35,7 +35,6 @@ type Services struct {
 }
 
 func (s *Services) Stop() error {
-	// TODO
 	s.Browser.Close()
 	return nil
 }

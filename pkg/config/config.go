@@ -85,7 +85,5 @@ func Init() error {
 	}
 	viper.AutomaticEnv()
 
-	// TODO: Add flags
-
 	return nil
 }

@@ -254,7 +254,10 @@ func (s *ScheduleService) EnsureDepartments(ctx context.Context) error {
 	}
 
 	if len(deps) == 0 || len(outdatedDeps) > 0 {
+		log.Debug().Msg("Departments cache miss")
 		return s.UpdateDepartments(ctx)
+	} else {
+		log.Debug().Msg("Departments cache hit")
 	}
 	return nil
 }
