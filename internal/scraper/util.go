@@ -11,10 +11,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func HTTPGetRequestRetryingWithRandomHeaders(url string, maxRetries int) (*http.Response, error) {
+func HTTPGetRequestRetryingWithRandomHeaders(url string, attempts int) (*http.Response, error) {
 	var resp *http.Response
 	err := retry.New(
-		retry.Attempts(uint(maxRetries)),
+		retry.Attempts(uint(attempts)),
 		retry.Delay(time.Second),
 		retry.DelayType(retry.FullJitterBackoffDelay),
 		retry.OnRetry(func(attempt uint, err error) {

@@ -14,7 +14,8 @@ import (
 func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
-	sendChatActionTyping(ctx, b, chatID, threadID)
+	stop := sendChatActionTyping(ctx, b, chatID, threadID)
+	defer stop()
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
@@ -158,7 +159,8 @@ func (h *handler) sendTeacherSchedule(
 		return err
 	}
 
-	sendChatActionTyping(ctx, b, message.Chat.ID, message.MessageThreadID)
+	stop := sendChatActionTyping(ctx, b, message.Chat.ID, message.MessageThreadID)
+	defer stop()
 
 	conf := model.TeacherScheduleConfig(teacher, chat.DarkMode)
 	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)

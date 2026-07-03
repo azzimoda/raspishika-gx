@@ -15,7 +15,8 @@ import (
 func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.Update) {
 	threadID := update.Message.MessageThreadID
 	chatID := update.Message.Chat.ID
-	sendChatActionTyping(ctx, b, chatID, threadID)
+	stop := sendChatActionTyping(ctx, b, chatID, threadID)
+	defer stop()
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
@@ -79,7 +80,8 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
-	sendChatActionTyping(ctx, b, chatID, threadID)
+	stop := sendChatActionTyping(ctx, b, chatID, threadID)
+	defer stop()
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
@@ -141,7 +143,8 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
-	sendChatActionTyping(ctx, b, chatID, threadID)
+	stop := sendChatActionTyping(ctx, b, chatID, threadID)
+	defer stop()
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
@@ -216,7 +219,8 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
 
-	sendChatActionTyping(ctx, b, chatID, threadID)
+	stop := sendChatActionTyping(ctx, b, chatID, threadID)
+	defer stop()
 
 	groupName := model.GroupName(update.Message.Text)
 	var err error

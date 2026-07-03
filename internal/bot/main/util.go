@@ -2,6 +2,7 @@ package mainbot
 
 import (
 	"context"
+	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
@@ -31,16 +32,33 @@ func addHandlerCtxErr(ctx context.Context, err error) {
 	}
 }
 
-func sendChatActionTyping(ctx context.Context, b *bot.Bot, chatID any, messageThreadID int) {
-	// TODO: Implement repeated chat action sending with cancel context or timeout
-	if _, err := b.SendChatAction(ctx, &bot.SendChatActionParams{
-		ChatID:          chatID,
-		MessageThreadID: messageThreadID,
-		Action:          models.ChatActionTyping,
-	}); err != nil {
-		addHandlerCtxErr(ctx, err)
-		log.Error().Err(err).Msg("Failed to send chat action")
-	}
+func sendChatActionTyping(ctx context.Context, b *bot.Bot, chatID any, messageThreadID int) context.CancelFunc {
+	ctx, cancel := context.WithCancel(ctx)
+
+	go func() {
+		ticker := time.NewTicker(4 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			if _, err := b.SendChatAction(ctx, &bot.SendChatActionParams{
+				ChatID:          chatID,
+				MessageThreadID: messageThreadID,
+				Action:          models.ChatActionTyping,
+			}); err != nil {
+				addHandlerCtxErr(ctx, err)
+				log.Error().Err(err).Msg("Failed to send chat action")
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	return cancel
 }
 
 func (h *handler) ReportChat(chat *model.Chat) reporter.ReportBuilder {

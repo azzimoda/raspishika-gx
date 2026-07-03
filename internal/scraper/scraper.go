@@ -28,7 +28,9 @@ func New(browser *browser.BrowserService) *ScraperService { return &ScraperServi
 type ScraperService struct{ browser *browser.BrowserService }
 
 func (s *ScraperService) ScrapeSchedule(url model.URL, conf model.ScheduleConfig) (*model.RawSchedule, error) {
-	resp, err := HTTPGetRequestRetryingWithRandomHeaders(url.String(), 10)
+	const getScheduleRetryAttempts = 5
+
+	resp, err := HTTPGetRequestRetryingWithRandomHeaders(url.String(), getScheduleRetryAttempts)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -88,7 +90,9 @@ const DepartmentSelectionPageURL = "https://mnokol.tyuiu.ru/site/index.php?optio
 const BaseDepartmentPageURL = "https://mnokol.tyuiu.ru"
 
 func (s *ScraperService) ScrapeDepartments() ([]model.Department, error) {
-	resp, err := HTTPGetRequestRetryingWithRandomHeaders(DepartmentSelectionPageURL, 10)
+	const getDepartmentsRetryAttempts = 5
+
+	resp, err := HTTPGetRequestRetryingWithRandomHeaders(DepartmentSelectionPageURL, getDepartmentsRetryAttempts)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading departments page: %w", err)
 	}
