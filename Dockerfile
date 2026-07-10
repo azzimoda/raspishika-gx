@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y nodejs chromium
 
 WORKDIR /app
 
-RUN go run github.com/playwright-community/playwright-go/cmd/playwright@v0.5200.0 install chromium chromium-headless-shell --with-deps
+RUN go run github.com/mxschmitt/playwright-go/cmd/playwright@v0.6100.0 install chromium chromium-headless-shell --with-deps
 RUN rm -rf /var/lib/apt/lists/*
 
 COPY go.mod go.sum ./

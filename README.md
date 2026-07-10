@@ -44,7 +44,7 @@
 - Go v1.26
   - `go-telegram/bot`
   - `mattn/go-sqlite3`
-  - `playwright-community/playwright-go`
+  - `mxschmitt/playwright-go`
   - `chromedp/chromedp`
   - `spf13/viper`
 - Node.js — Playwright v0.5200.0
@@ -78,7 +78,7 @@ docker run --rm \
 2. Установить зависимости:
    ```bash
    go mod download
-   go run github.com/playwright-community/playwright-go/cmd/playwright@v0.5200.0 install chromium chromium-headless-shell --with-deps
+   go run github.com/mxschmitt/playwright-go/cmd/playwright@v0.5200.0 install chromium chromium-headless-shell --with-deps
    ```
 3. Собрать проект:
    ```bash
