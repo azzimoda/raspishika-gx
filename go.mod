@@ -46,7 +46,6 @@ require (
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
-	github.com/playwright-community/playwright-go v0.6000.0
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible
 	github.com/spf13/afero v1.15.0 // indirect

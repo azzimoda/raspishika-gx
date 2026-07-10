@@ -225,6 +225,9 @@ func (h *handler) handleVacationCommand(ctx context.Context, b *bot.Bot, update 
 			Text:            text,
 		})
 		addHandlerCtxErr(ctx, err)
+
+		_, err = b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID})
+		addHandlerCtxErr(ctx, err)
 	} else if cq := update.CallbackQuery; cq != nil {
 		_, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: cq.ID,
