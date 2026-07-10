@@ -44,6 +44,15 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerCommandHandler(b, "access", h.handleCmdAccess, h.checkConfigAccess)
 	}
 
+	// Text commands
+	{
+		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess)
+		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess)
+		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess)
+		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess)
+		registerTextHandler(b, "отмена", h.handleCmdCancel, h.checkRegularAccess)
+	}
+
 	// States
 	{
 		h.registerChatStateHandler(b, model.ChatStateSelectingGroup, h.handleTextGroup, h.checkConfigAccess)
@@ -51,37 +60,29 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		h.registerChatStateHandler(b, model.ChatStateSelectingTeacher, h.handleTextTeacherName, h.checkRegularAccess)
 	}
 
-	// Text messages
-	{
-		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess)
-		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess)
-		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess)
-		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess)
-		registerTextHandler(b, "отмена", h.handleCmdCancel, h.checkRegularAccess)
+	// Quick group text
+	b.RegisterHandlerMatchFunc(func(update *models.Update) bool {
+		if update.Message == nil {
+			return false
+		}
 
-		b.RegisterHandlerMatchFunc(func(update *models.Update) bool {
-			if update.Message == nil {
-				return false
-			}
+		chat, err := h.Chat.GetChatByChatID(context.Background(), model.ChatID(update.Message.Chat.ID))
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to get chat by chat ID")
+			return false
+		}
+		if state, _ := chat.GetState(); state == model.ChatStateSelectingGroup {
+			return false
+		}
 
-			chat, err := h.Chat.GetChatByChatID(context.Background(), model.ChatID(update.Message.Chat.ID))
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to get chat by chat ID")
-				return false
-			}
-			if state, _ := chat.GetState(); state == model.ChatStateSelectingGroup {
-				return false
-			}
-
-			// Check the group name
-			groupName := model.GroupName(update.Message.Text)
-			if _, err := h.Schedule.ValidateGroupName(context.Background(), groupName); err == nil {
-				return true
-			} else {
-				return false
-			}
-		}, h.handleTextQuickGroup, h.checkRegularAccess)
-	}
+		// Check the group name
+		groupName := model.GroupName(update.Message.Text)
+		if _, err := h.Schedule.ValidateGroupName(context.Background(), groupName); err == nil {
+			return true
+		} else {
+			return false
+		}
+	}, h.handleTextQuickGroup, h.checkRegularAccess)
 
 	// Callback queries
 	{
@@ -184,8 +185,7 @@ func callbackDataRegexp(s string) *regexp.Regexp {
 }
 
 func (h *handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.Update) {
-	noLogFlag := ctx.Value(keyNoLogFlag).(*bool)
-	*noLogFlag = true // Do not log default handler
+	setNoLogFlag(ctx) // Do not log default handler
 
 	if update.Message != nil {
 		log.Debug().Str("text", update.Message.Text).Msg("Unhandled message")
@@ -193,6 +193,56 @@ func (h *handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.
 		log.Debug().Str("data", update.CallbackQuery.Data).Msg("Unhandled callback query")
 	} else {
 		log.Debug().Any("update", update).Msg("Unhandled update type")
+	}
+}
+
+func (h *handler) handleVacationCommand(ctx context.Context, b *bot.Bot, update *models.Update, kind string) bool {
+	now := time.Now()
+	isVacation := false
+	switch kind {
+	case "week":
+		isVacation = IsVacation(now) && IsVacation(now.AddDate(0, 0, 6))
+	case "today":
+		isVacation = IsVacation(now)
+	case "tomorrow":
+		isVacation = IsVacation(now.AddDate(0, 0, 1))
+	}
+
+	if !isVacation {
+		return false
+	}
+	log.Info().Msg("Today is vacation, handling...")
+
+	setNoLogFlag(ctx)
+
+	dur := time.Until(time.Date(now.Year(), time.September, 1, 0, 0, 0, 0, now.Location()))
+	days := int(dur.Hours()) / 24
+	text := fmt.Sprintf("До конца каникул осталось %d дней", days)
+	if m := update.Message; m != nil {
+		err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+			ChatID:          m.Chat.ID,
+			MessageThreadID: m.MessageThreadID,
+			Text:            text,
+		})
+		addHandlerCtxErr(ctx, err)
+	} else if cq := update.CallbackQuery; cq != nil {
+		_, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: cq.ID,
+			Text:            text,
+			CacheTime:       3600, // 1 hour
+		})
+		addHandlerCtxErr(ctx, err)
+	}
+
+	return true
+}
+
+func setNoLogFlag(ctx context.Context) {
+	noLogFlag, ok := ctx.Value(keyNoLogFlag).(*bool)
+	if ok {
+		*noLogFlag = true
+	} else {
+		log.Warn().Msg("Failed to set no-log handler flag")
 	}
 }
 

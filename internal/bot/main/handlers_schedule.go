@@ -18,6 +18,10 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
 	defer stop()
 
+	if h.handleVacationCommand(ctx, b, update, "week") {
+		return
+	}
+
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
 		addHandlerCtxErr(ctx, ErrNoChatContext)
@@ -83,6 +87,10 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
 	defer stop()
 
+	if h.handleVacationCommand(ctx, b, update, "tomorrow") {
+		return
+	}
+
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
 		addHandlerCtxErr(ctx, ErrNoChatContext)
@@ -145,6 +153,10 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	threadID := update.Message.MessageThreadID
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
 	defer stop()
+
+	if h.handleVacationCommand(ctx, b, update, "today") {
+		return
+	}
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
@@ -218,9 +230,12 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
-
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
 	defer stop()
+
+	if h.handleVacationCommand(ctx, b, update, "week") {
+		return
+	}
 
 	groupName := model.GroupName(update.Message.Text)
 	var err error
