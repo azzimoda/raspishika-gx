@@ -47,7 +47,7 @@
   - `mxschmitt/playwright-go`
   - `chromedp/chromedp`
   - `spf13/viper`
-- Node.js — Playwright v0.5200.0
+- Node.js — Playwright v1.61.1
 - SQLite v3.37
 
 ## Сборка и запуск
