@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -26,9 +27,14 @@ type BroadcastLogRepository interface {
 	CountSuccessfulBroadcastLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
 	CountBroadcastLogsByPeriodAndKind(ctx context.Context, kind model.BroadcastKind, start, end time.Time) (int, error)
 }
+type RequestLogRepository interface {
+	CountActualRequests(ctx context.Context, start, end time.Time) (int, error)
+	CountPotentialRequests(ctx context.Context, start, end time.Time) (int, error)
+}
 type LogRepository interface {
 	UpdateLogRepository
 	BroadcastLogRepository
+	RequestLogRepository
 }
 
 func NewLogRepository(db *sqlx.DB) LogRepository { return &logRepository{db: db} }
@@ -143,6 +149,36 @@ func (r *logRepository) CountBroadcastLogsByPeriodAndKind(ctx context.Context, k
 	var count int
 	if err := r.db.GetContext(ctx, &count, query, start, end, kind); err != nil {
 		return 0, fmt.Errorf("failed to count broadcast logs by kind: %w", err)
+	}
+	return count, nil
+}
+
+func (r *logRepository) CountActualRequests(ctx context.Context, start, end time.Time) (int, error) {
+	const queryUpdates = `
+		SELECT COUNT(*) FROM update_logs
+		WHERE "group" IS NOT NULL AND "group" != '' AND cached = 0 AND created_at BETWEEN ? AND ?`
+	var countUpdates int
+	if err := r.db.GetContext(ctx, &countUpdates, queryUpdates, start, end); err != nil {
+		return 0, fmt.Errorf("failed to count actual update requests: %w", err)
+	}
+
+	const queryBroadcasts = `SELECT SUM(groups) FROM broadcast_task_logs WHERE created_at BETWEEN ? AND ?`
+	var countBroadcasts int
+	if err := r.db.GetContext(ctx, &countBroadcasts, queryBroadcasts, start, end); err != nil {
+		if strings.Contains(err.Error(), "converting NULL to int is unsupported") {
+			countBroadcasts = 0
+		} else {
+			return 0, fmt.Errorf("failed to count broadcast logs: %w", err)
+		}
+	}
+
+	return countUpdates + countBroadcasts, nil
+}
+func (r *logRepository) CountPotentialRequests(ctx context.Context, start, end time.Time) (int, error) {
+	const query = `SELECT COUNT(*) FROM update_logs WHERE "group" IS NULL OR "group" = '' AND created_at BETWEEN ? AND ?`
+	var count int
+	if err := r.db.GetContext(ctx, &count, query, start, end); err != nil {
+		return 0, fmt.Errorf("failed to count potential requests: %w", err)
 	}
 	return count, nil
 }

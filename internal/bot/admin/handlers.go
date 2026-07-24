@@ -110,6 +110,8 @@ Success: %d (%.1f%%)
 Broadcast Tasks/Sends: %d / %d
 Success: %d (%.1f%%)
 Daily/Pair/Change: %d / %d / %d
+
+Actual/Potential requests: %d / %d
 `,
 		periodStr, dur,
 		chat.ChatsTotal,
@@ -126,6 +128,8 @@ Daily/Pair/Change: %d / %d / %d
 		logs.BroadcastTasks, logs.BroadcastLogs,
 		logs.BroadcastSuccess, (float64(logs.BroadcastSuccess) / (float64(logs.BroadcastLogs) + 0.001) * 100),
 		logs.BroadcastDaily, logs.BroadcastPair, logs.BroadcastChange,
+
+		logs.RequestsActual, logs.RequestsPotential,
 	)
 }
 

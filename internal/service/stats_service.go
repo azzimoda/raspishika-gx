@@ -157,40 +157,47 @@ type ConfigStatsData struct {
 
 func (s *StatsService) GetLogStats(ctx context.Context, dur time.Duration) (*LogStatsData, error) {
 	now := time.Now()
+	past := now.Add(-dur)
 
-	updatesTotal, err := s.logRepo.CountUpdateLogsByPeriod(ctx, now.Add(-dur), now)
+	updatesTotal, err := s.logRepo.CountUpdateLogsByPeriod(ctx, past, now)
 	if err != nil {
 		return nil, err
 	}
-	updatesSuccess, err := s.logRepo.CountSuccessfulUpdateLogsByPeriod(ctx, now.Add(-dur), now)
+	updatesSuccess, err := s.logRepo.CountSuccessfulUpdateLogsByPeriod(ctx, past, now)
 	if err != nil {
 		return nil, err
 	}
 
-	broadcastTasks, err := s.logRepo.CountBroadcastTaskLogsByPeriod(ctx, now.Add(-dur), now)
+	broadcastTasks, err := s.logRepo.CountBroadcastTaskLogsByPeriod(ctx, past, now)
 	if err != nil {
 		return nil, err
 	}
-	broadcastLogs, err := s.logRepo.CountBroadcastLogsByPeriod(ctx, now.Add(-dur), now)
+	broadcastLogs, err := s.logRepo.CountBroadcastLogsByPeriod(ctx, past, now)
 	if err != nil {
 		return nil, err
 	}
-	broadcastSuccess, err := s.logRepo.CountSuccessfulBroadcastLogsByPeriod(ctx, now.Add(-dur), now)
+	broadcastSuccess, err := s.logRepo.CountSuccessfulBroadcastLogsByPeriod(ctx, past, now)
 	if err != nil {
 		return nil, err
 	}
-	broadcastDaily, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BDaily, now.Add(-dur), now)
+	broadcastDaily, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BDaily, past, now)
 	if err != nil {
 		return nil, err
 	}
-	broadcastPair, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BPair, now.Add(-dur), now)
+	broadcastPair, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BPair, past, now)
 	if err != nil {
 		return nil, err
 	}
-	broadcastChange, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BChange, now.Add(-dur), now)
+	broadcastChange, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BChange, past, now)
 	if err != nil {
 		return nil, err
 	}
+
+	requestsActual, err := s.logRepo.CountActualRequests(ctx, past, now)
+	if err != nil {
+		return nil, err
+	}
+	requestsPotential, err := s.logRepo.CountPotentialRequests(ctx, past, now)
 
 	stats := &LogStatsData{
 		UpdatesTotal:   updatesTotal,
@@ -202,6 +209,9 @@ func (s *StatsService) GetLogStats(ctx context.Context, dur time.Duration) (*Log
 		BroadcastDaily:   broadcastDaily,
 		BroadcastPair:    broadcastPair,
 		BroadcastChange:  broadcastChange,
+
+		RequestsActual:    requestsActual,
+		RequestsPotential: requestsPotential,
 	}
 	return stats, nil
 }
@@ -216,6 +226,9 @@ type LogStatsData struct {
 	BroadcastDaily   int
 	BroadcastPair    int
 	BroadcastChange  int
+
+	RequestsActual    int
+	RequestsPotential int
 }
 
 func (s *StatsService) GetGeneralStats(ctx context.Context, duration time.Duration) (*GeneralStatsData, error) {
