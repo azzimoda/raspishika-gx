@@ -15,10 +15,6 @@ import (
 const MsgScheduleUpdated = "Расписание обновлено"
 
 func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if h.handleVacationCommand(ctx, b, update, "week") {
-		return
-	}
-
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	darkMode := false
 	if ok {
@@ -91,10 +87,6 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 }
 
 func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if h.handleVacationCommand(ctx, b, update, "week") {
-		return
-	}
-
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	darkMode := false
 	if ok {
@@ -167,10 +159,6 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 }
 
 func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if h.handleVacationCommand(ctx, b, update, "week") {
-		return
-	}
-
 	callbackQueryID := update.CallbackQuery.ID
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	groupName := model.GroupName(command.Arg(0))
@@ -226,10 +214,6 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 }
 
 func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if h.handleVacationCommand(ctx, b, update, "week") {
-		return
-	}
-
 	callbackQueryID := update.CallbackQuery.ID
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	groupName := model.GroupName(command.Arg(0))

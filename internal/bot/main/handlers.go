@@ -12,13 +12,11 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
-	"github.com/azzimoda/raspishika-gx/pkg/config"
 )
 
 var ErrNoChatContext error = errors.New("failed to get chat from context")
@@ -38,20 +36,20 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerCommandHandler(b, "start", h.handleCmdStart, h.checkRegularAccess)
 		registerCommandHandler(b, "help", h.handleCmdHelp, h.checkRegularAccess)
 		registerCommandHandler(b, "stop", h.handleCmdStop, h.checkConfigAccess)
-		registerCommandHandler(b, "week", h.handleCmdWeek, h.checkRegularAccess)
-		registerCommandHandler(b, "tomorrow", h.handleCmdTomorrow, h.checkRegularAccess)
-		registerCommandHandler(b, "today", h.handleCmdToday, h.checkRegularAccess)
-		registerCommandHandler(b, "teacher", h.handleCmdTeacher, h.checkRegularAccess)
+		registerCommandHandler(b, "week", h.handleCmdWeek, h.checkRegularAccess, makePrehandlerVacation("week"))
+		registerCommandHandler(b, "tomorrow", h.handleCmdTomorrow, h.checkRegularAccess, makePrehandlerVacation("tomorrow"))
+		registerCommandHandler(b, "today", h.handleCmdToday, h.checkRegularAccess, makePrehandlerVacation("today"))
+		registerCommandHandler(b, "teacher", h.handleCmdTeacher, h.checkRegularAccess, makePrehandlerVacation("week"))
 		registerCommandHandler(b, "settings", h.handleCmdSettings, h.checkConfigAccess)
 		registerCommandHandler(b, "access", h.handleCmdAccess, h.checkConfigAccess)
 	}
 
 	// Text commands
 	{
-		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess)
-		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess)
-		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess)
-		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess)
+		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess, makePrehandlerVacation("week"))
+		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess, makePrehandlerVacation("tomorrow"))
+		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess, makePrehandlerVacation("today"))
+		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess, makePrehandlerVacation("week"))
 		registerTextHandler(b, "отмена", h.handleCmdCancel, h.checkRegularAccess)
 	}
 
@@ -89,17 +87,18 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 	// Callback queries
 	{
 		// Regular callbacks
-		registerRegularCallbackHandler := func(callbackCommand string, handler bot.HandlerFunc) {
+		registerRegularCallbackHandler := func(callbackCommand string, handler bot.HandlerFunc, middlewares ...bot.Middleware) {
+			middlewares = append(middlewares, h.checkRegularAccess)
 			b.RegisterHandlerRegexp(bot.HandlerTypeCallbackQueryData, callbackDataRegexp(callbackCommand),
-				handler, h.checkRegularAccess)
+				handler, middlewares...)
 		}
 
 		registerRegularCallbackHandler(botutil.CallbackCommandDelete, h.handleCQDelete)
 		registerRegularCallbackHandler(botutil.CallbackCommandSelectTeacher, h.handleCQTeacher)
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateGroup)
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher)
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow)
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateToday, h.handleCQUpdateToday)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateGroup, makePrehandlerVacation("week"))
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher, makePrehandlerVacation("week"))
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow, makePrehandlerVacation("tomorrow"))
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateToday, h.handleCQUpdateToday, makePrehandlerVacation("today"))
 
 		// Config callbacks
 		registerConfigCallbackHandler := func(callbackCommand string, handler bot.HandlerFunc) {
@@ -196,55 +195,6 @@ func (h *handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.
 	} else {
 		log.Debug().Any("update", update).Msg("Unhandled update type")
 	}
-}
-
-// handleVacationCommand handles command specially when today is vacation, and return true if it is.
-func (h *handler) handleVacationCommand(ctx context.Context, b *bot.Bot, update *models.Update, kind string) bool {
-	if !viper.GetBool(config.KeyHandleVacation) {
-		return false
-	}
-
-	now := time.Now()
-	isVacation := false
-	switch kind {
-	case "week":
-		isVacation = IsVacation(now) && IsVacation(now.AddDate(0, 0, 6))
-	case "today":
-		isVacation = IsVacation(now)
-	case "tomorrow":
-		isVacation = IsVacation(now.AddDate(0, 0, 1))
-	}
-
-	if !isVacation {
-		return false
-	}
-	log.Info().Msg("Today is vacation, handling...")
-
-	setNoLogFlag(ctx)
-
-	dur := time.Until(time.Date(now.Year(), time.September, 1, 0, 0, 0, 0, now.Location()))
-	days := int(dur.Hours()) / 24
-	text := fmt.Sprintf("До конца каникул осталось %d дней", days)
-	if m := update.Message; m != nil {
-		err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
-			ChatID:          m.Chat.ID,
-			MessageThreadID: m.MessageThreadID,
-			Text:            text,
-		})
-		addHandlerCtxErr(ctx, err)
-
-		_, err = b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID})
-		addHandlerCtxErr(ctx, err)
-	} else if cq := update.CallbackQuery; cq != nil {
-		_, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-			CallbackQueryID: cq.ID,
-			Text:            text,
-			CacheTime:       3600, // 1 hour
-		})
-		addHandlerCtxErr(ctx, err)
-	}
-
-	return true
 }
 
 func setNoLogFlag(ctx context.Context) {

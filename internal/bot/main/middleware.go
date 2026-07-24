@@ -9,10 +9,12 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 	"golang.org/x/sync/singleflight"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
 )
 
 var ErrUnknownUpdateType = errors.New("unknown update type")
@@ -276,6 +278,60 @@ func (h *handler) checkConfigAccess(next bot.HandlerFunc) bot.HandlerFunc {
 					Text:            "Доступ запрещен",
 				})
 			}
+		}
+	}
+}
+
+func makePrehandlerVacation(kind string) bot.Middleware {
+	return func(next bot.HandlerFunc) bot.HandlerFunc {
+		return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+			if !viper.GetBool(config.KeyHandleVacation) {
+				next(ctx, b, update)
+				return
+			}
+
+			now := time.Now()
+			isVacation := false
+			switch kind {
+			case "week":
+				isVacation = IsVacation(now) && IsVacation(now.AddDate(0, 0, 6))
+			case "today":
+				isVacation = IsVacation(now)
+			case "tomorrow":
+				isVacation = IsVacation(now.AddDate(0, 0, 1))
+			}
+
+			if !isVacation {
+				next(ctx, b, update)
+				return
+			}
+			log.Info().Msg("Today is vacation, handling...")
+
+			setNoLogFlag(ctx)
+
+			dur := time.Until(time.Date(now.Year(), time.September, 1, 0, 0, 0, 0, now.Location()))
+			days := int(dur.Hours()) / 24
+			text := fmt.Sprintf("До конца каникул осталось %d дней", days)
+			if m := update.Message; m != nil {
+				err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+					ChatID:          m.Chat.ID,
+					MessageThreadID: m.MessageThreadID,
+					Text:            text,
+				})
+				addHandlerCtxErr(ctx, err)
+
+				_, err = b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID})
+				addHandlerCtxErr(ctx, err)
+			} else if cq := update.CallbackQuery; cq != nil {
+				_, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+					CallbackQueryID: cq.ID,
+					Text:            text,
+					CacheTime:       3600, // 1 hour
+				})
+				addHandlerCtxErr(ctx, err)
+			}
+
+			// Do not call next handler during vacation.
 		}
 	}
 }

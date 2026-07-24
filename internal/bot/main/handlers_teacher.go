@@ -17,10 +17,6 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
 	defer stop()
 
-	if h.handleVacationCommand(ctx, b, update, "week") {
-		return
-	}
-
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
 		addHandlerCtxErr(ctx, ErrNoChatContext)
@@ -119,10 +115,6 @@ func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *model
 	message := update.CallbackQuery.Message.Message
 	_, err := botutil.DeleteMessage(ctx, b, message)
 	addHandlerCtxErr(ctx, err)
-
-	if h.handleVacationCommand(ctx, b, update, "week") {
-		return
-	}
 
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
