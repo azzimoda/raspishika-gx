@@ -89,7 +89,7 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 		return
 	}
 
-	groupedChats, _, confs, shouldReturn := s.prepareBroadcast(ctx, timeStr, t)
+	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, timeStr, t)
 	if shouldReturn {
 		return
 	}
@@ -105,7 +105,7 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 	}
 
 	// Create task log
-	taskLog := model.BroadcastTaskLog{Kind: model.BDaily}
+	taskLog := model.BroadcastTaskLog{Kind: model.BDaily, Groups: len(groups)}
 	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast task")
 		return
@@ -221,7 +221,7 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 
 	start := time.Now()
 
-	groupedChats, groupNames, confs, shouldReturn := s.prepareBroadcast(ctx, timeStartStr, t)
+	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, timeStartStr, t)
 	if shouldReturn {
 		return
 	}
@@ -237,21 +237,21 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 	}
 
 	// Create task log
-	taskLog := model.BroadcastTaskLog{Kind: model.BPair}
+	taskLog := model.BroadcastTaskLog{Kind: model.BPair, Groups: len(groups)}
 	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast task")
 		return
 	}
 
 	// Send notifications
-	err = s.sendPairNotificatins(ctx, taskLog.ID, schedules, groupedChats, groupNames, timeStart)
+	err = s.sendPairNotificatins(ctx, taskLog.ID, schedules, groupedChats, groups, timeStart)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to send pair notifications")
 	}
 
-	// Log
+	// Update task log
 	taskLog.Elapsed = time.Since(start).Milliseconds()
-	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
+	if err := s.Stats.UpdateBroadcastTaskLog(ctx, &taskLog); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast task")
 	}
 }
@@ -355,13 +355,13 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 
 	start := time.Now()
 
-	groupedChats, groupNames, confs, shouldReturn := s.prepareBroadcast(ctx, start.Format("15:04"), start)
+	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, start.Format("15:04"), start)
 	if shouldReturn {
 		return
 	}
 
 	// Get changes
-	changes, err := s.Schedule.GetChanges(ctx, groupNames)
+	changes, err := s.Schedule.GetChanges(ctx, groups)
 	if err != nil {
 		if len(changes) == 0 {
 			s.Report().Err(err).Msg("Failed to get schedule changes")
@@ -381,7 +381,7 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 	}
 
 	// Create task log
-	taskLog := model.BroadcastTaskLog{Kind: model.BChange}
+	taskLog := model.BroadcastTaskLog{Kind: model.BChange, Groups: len(groups)}
 	err = s.Stats.LogBroadcastTask(ctx, &taskLog)
 	if err != nil {
 		s.Report().Err(err).Msg("Failed to start broadcast task")
@@ -394,9 +394,9 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 		log.Error().Err(err).Msg("Errors while sending change reports")
 	}
 
-	// Log
+	// Update task log
 	taskLog.Elapsed = time.Since(start).Milliseconds()
-	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
+	if err := s.Stats.UpdateBroadcastTaskLog(ctx, &taskLog); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast task")
 	}
 }

@@ -1,0 +1,1 @@
+ALTER TABLE broadcast_task_logs ADD COLUMN groups INTEGER NOT NULL DEFAULT 0;
