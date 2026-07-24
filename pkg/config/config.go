@@ -39,6 +39,8 @@ const (
 	KeyPairNotification = "pair_notification"
 	KeyChangeAlert      = "change_alert"
 
+	KeyHandleVacation = "handle_vacation"
+
 	KeyPairNotificationTTL   = "pair_notification_ttl"
 	KeyUpdateMonitorInterval = "update_monitor_interval"
 
@@ -72,6 +74,8 @@ func Init() error {
 	viper.SetDefault(KeyDailyBroadcast, true)
 	viper.SetDefault(KeyPairNotification, true)
 	viper.SetDefault(KeyChangeAlert, true)
+
+	viper.SetDefault(KeyHandleVacation, true)
 
 	viper.SetDefault(KeyPairNotificationTTL, 90*time.Minute)
 	viper.SetDefault(KeyUpdateMonitorInterval, 25*time.Minute)

@@ -12,11 +12,13 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
 )
 
 var ErrNoChatContext error = errors.New("failed to get chat from context")
@@ -196,7 +198,12 @@ func (h *handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.
 	}
 }
 
+// handleVacationCommand handles command specially when today is vacation, and return true if it is.
 func (h *handler) handleVacationCommand(ctx context.Context, b *bot.Bot, update *models.Update, kind string) bool {
+	if !viper.GetBool(config.KeyHandleVacation) {
+		return false
+	}
+
 	now := time.Now()
 	isVacation := false
 	switch kind {
