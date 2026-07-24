@@ -15,9 +15,10 @@ import (
 type contextKey string
 
 const (
-	keyChat      contextKey = "chat"
-	keyError     contextKey = "error"
-	keyNoLogFlag contextKey = "default_handler"
+	keyChat           contextKey = "chat"
+	keyError          contextKey = "error"
+	keyNoLogFlag      contextKey = "default_handler"
+	keyGroupOrTeacher contextKey = "group_or_teacher"
 )
 
 // addHandlerCtxErr adds an error to the handler error context.

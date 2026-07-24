@@ -485,6 +485,7 @@ func (s *BroadcastService) logBroadcast(ctx context.Context, taskID int64, chat 
 	if err := s.Stats.LogBroadcast(ctx, model.BroadcastLog{
 		TaskID: taskID,
 		ChatID: int64(chat.TgChatID),
+		Group:  refutil.DerefOrTypeDefault(chat.GroupName), // chat.GroupName must be not empty here
 		Error:  errVal,
 	}); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast")

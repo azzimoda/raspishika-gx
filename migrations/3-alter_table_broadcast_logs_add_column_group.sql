@@ -1,0 +1,1 @@
+ALTER TABLE broadcast_logs ADD COLUMN "group" TEXT NOT NULL DEFAULT '';

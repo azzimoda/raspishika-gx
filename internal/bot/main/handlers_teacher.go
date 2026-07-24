@@ -147,6 +147,8 @@ func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *model
 		return
 	}
 
+	setGroupOrTeacher(ctx, string(teacher.Name))
+
 	err = h.sendTeacherSchedule(ctx, b, message, chat, teacher)
 	addHandlerCtxErr(ctx, err)
 }

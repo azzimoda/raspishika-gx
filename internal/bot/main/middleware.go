@@ -140,6 +140,9 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 		var noLogFlag bool
 		ctx = context.WithValue(ctx, keyNoLogFlag, &noLogFlag)
 
+		var groupOrTeacher string
+		ctx = context.WithValue(ctx, keyGroupOrTeacher, &groupOrTeacher)
+
 		// Call the handler
 
 		startTime := time.Now()
@@ -203,12 +206,13 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 		}
 
 		h.Stats.LogUpdate(ctx, model.UpdateLog{
-			ChatID:    chat.ID,
-			Kind:      updateKind,
-			MessageID: messageID,
-			Data:      updateData,
-			Elapsed:   int(elapsedTime.Milliseconds()),
-			Error:     &handlerErrStr,
+			ChatID:         chat.ID,
+			Kind:           updateKind,
+			MessageID:      messageID,
+			Data:           updateData,
+			GroupOrTeacher: groupOrTeacher,
+			Elapsed:        int(elapsedTime.Milliseconds()),
+			Error:          &handlerErrStr,
 		})
 	}
 }
@@ -300,4 +304,19 @@ func isAdmin(ctx context.Context, b *bot.Bot, update *models.Update) (bool, erro
 	}
 
 	return chatMember.Type == models.ChatMemberTypeAdministrator || chatMember.Type == models.ChatMemberTypeOwner, nil
+}
+
+func setGroupOrTeacher(ctx context.Context, value string) {
+	if ctx == nil {
+		return
+	}
+	groupOrTeacher := ctx.Value(keyGroupOrTeacher)
+	if groupOrTeacher != nil {
+		p, ok := groupOrTeacher.(*string)
+		if ok {
+			*p = value
+		} else {
+			log.Warn().Msg("groupOrTeacher is not a string pointer")
+		}
+	}
 }

@@ -41,6 +41,8 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 		return
 	}
 
+	setGroupOrTeacher(ctx, string(groupName))
+
 	conf := model.GroupScheduleConfig(group, darkMode)
 	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
@@ -115,6 +117,8 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 		return
 	}
 
+	setGroupOrTeacher(ctx, string(teacher.Name))
+
 	conf := model.TeacherScheduleConfig(teacher, darkMode)
 	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
@@ -180,6 +184,8 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 		})
 		return
 	}
+
+	setGroupOrTeacher(ctx, string(groupName))
 
 	conf := model.GroupScheduleConfig(group, false)
 	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
@@ -265,6 +271,8 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		})
 		return
 	}
+
+	setGroupOrTeacher(ctx, string(groupName))
 
 	conf := model.GroupScheduleConfig(group, false)
 	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)

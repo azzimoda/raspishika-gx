@@ -40,6 +40,8 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 		return
 	}
 
+	setGroupOrTeacher(ctx, string(*chat.GroupName))
+
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get group by name")
@@ -109,6 +111,8 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 		return
 	}
 
+	setGroupOrTeacher(ctx, string(*chat.GroupName))
+
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get group by name")
@@ -175,6 +179,8 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 		addHandlerCtxErr(ctx, h.sendDepartmentSelectionMenu(ctx, b, chat, threadID))
 		return
 	}
+
+	setGroupOrTeacher(ctx, string(*chat.GroupName))
 
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
@@ -250,6 +256,8 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 		})
 		return
 	}
+
+	setGroupOrTeacher(ctx, string(groupName))
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
