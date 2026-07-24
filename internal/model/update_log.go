@@ -13,7 +13,8 @@ type UpdateLog struct {
 	Kind           string    `db:"kind"`             // Variants: "message", "callback_query".
 	MessageID      int       `db:"message_id"`       // ID of User's message or of the message of inline keyboard of the callback query.
 	Data           string    `db:"data"`             // Message text or callback query data.
-	GroupOrTeacher string    `db:"group_or_teacher"` // [Group.GroupName] or [Teacher.Name] or empty
+	IsCached       bool      `db:"cached"`           // true if schedule sent from cache.
+	GroupOrTeacher string    `db:"group_or_teacher"` // [Group.GroupName] or [Teacher.Name] or empty.
 	Elapsed        int       `db:"elapsed"`          // Milliseconds
 	Error          *string   `db:"error"`            // Empty value means update handler succeeded.
 	CreatedAt      time.Time `db:"created_at"`

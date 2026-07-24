@@ -45,33 +45,40 @@ type ScheduleService struct {
 }
 
 // GetSchedule returns the schedule for the given config and uses cache if available.
-func (s *ScheduleService) GetSchedule(ctx context.Context, conf model.ScheduleConfig) (*model.RawSchedule, error) {
+func (s *ScheduleService) GetSchedule(ctx context.Context, conf model.ScheduleConfig) (
+	schedule *model.RawSchedule,
+	cached bool,
+	err error,
+) {
 	key := conf.ScheduleKey()
 	if rawSchedule, ok := s.GetScheduleCache(key); ok {
-		log.Debug().Str("cacheKey", key).Msg("Cache hit")
+		log.Debug().Str("cacheKey", key).Msg("Cache hit") // Use cache
 		rawSchedule.Config.IsDark = conf.IsDark
-		return rawSchedule, nil
+		return rawSchedule, true, nil
 	}
-	log.Debug().Str("cacheKey", key).Msg("Cache miss")
+	log.Debug().Str("cacheKey", key).Msg("Cache miss") // Update cache
 	rawSchedule, err := s.UpdateScheduleCache(ctx, s.browser, conf)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	rawSchedule.Config.IsDark = conf.IsDark
-	return rawSchedule, nil
+	return rawSchedule, false, nil
 }
 
 // GetSchedules returns the schedules for the given configs and uses cache if available.
 //
 // If errors occur on any of the configs, they are accumulated and returned as a single error. Successfully
 // processed configs are returned along with any errors that occurred during processing.
-func (s *ScheduleService) GetSchedules(ctx context.Context, confs []model.ScheduleConfig) ([]*model.RawSchedule, error) {
+func (s *ScheduleService) GetSchedules(
+	ctx context.Context,
+	confs []model.ScheduleConfig,
+) ([]*model.RawSchedule, error) {
 	var (
 		rawSchedules []*model.RawSchedule
 		errs         []error
 	)
 	for _, conf := range confs {
-		rawSchedule, err := s.GetSchedule(ctx, conf)
+		rawSchedule, _, err := s.GetSchedule(ctx, conf)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to get schedule: %w", err))
 		} else {

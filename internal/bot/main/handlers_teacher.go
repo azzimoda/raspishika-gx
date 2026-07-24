@@ -147,8 +147,6 @@ func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *model
 		return
 	}
 
-	setGroupOrTeacher(ctx, string(teacher.Name))
-
 	err = h.sendTeacherSchedule(ctx, b, message, chat, teacher)
 	addHandlerCtxErr(ctx, err)
 }
@@ -173,10 +171,12 @@ func (h *handler) sendTeacherSchedule(
 	defer stop()
 
 	conf := model.TeacherScheduleConfig(teacher, chat.DarkMode)
-	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
+	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		return err
 	}
+
+	setGroupOrTeacherAndCached(ctx, string(teacher.Name), cached)
 
 	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
 	if err != nil {

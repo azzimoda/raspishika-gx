@@ -19,6 +19,7 @@ const (
 	keyError          contextKey = "error"
 	keyNoLogFlag      contextKey = "default_handler"
 	keyGroupOrTeacher contextKey = "group_or_teacher"
+	keyCached         contextKey = "cached"
 )
 
 // addHandlerCtxErr adds an error to the handler error context.

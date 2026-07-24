@@ -40,8 +40,6 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 		return
 	}
 
-	setGroupOrTeacher(ctx, string(*chat.GroupName))
-
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get group by name")
@@ -55,7 +53,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	}
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
+	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -66,6 +64,8 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 		})
 		return
 	}
+
+	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), cached)
 
 	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
 	if err != nil {
@@ -111,8 +111,6 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 		return
 	}
 
-	setGroupOrTeacher(ctx, string(*chat.GroupName))
-
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get group by name")
@@ -126,7 +124,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	}
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
+	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -137,6 +135,8 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 		})
 		return
 	}
+
+	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), cached)
 
 	schedule := rawSchedule.Transform()
 	tomorrow := schedule.Tomorrow(time.Now())
@@ -180,8 +180,6 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 		return
 	}
 
-	setGroupOrTeacher(ctx, string(*chat.GroupName))
-
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get group by name")
@@ -208,7 +206,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	// Otherwise, send today's schedule
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
+	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -219,6 +217,8 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 		})
 		return
 	}
+
+	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), cached)
 
 	schedule := rawSchedule.Transform()
 	today := schedule.Today()
@@ -257,8 +257,6 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 		return
 	}
 
-	setGroupOrTeacher(ctx, string(groupName))
-
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
 		addHandlerCtxErr(ctx, ErrNoChatContext)
@@ -283,7 +281,7 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 	}
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, err := h.Schedule.GetSchedule(ctx, conf)
+	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -294,6 +292,8 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 		})
 		return
 	}
+
+	setGroupOrTeacherAndCached(ctx, string(groupName), cached)
 
 	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
 	if err != nil {

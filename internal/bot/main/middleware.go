@@ -142,6 +142,8 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 
 		var groupOrTeacher string
 		ctx = context.WithValue(ctx, keyGroupOrTeacher, &groupOrTeacher)
+		var cachedSchedule bool
+		ctx = context.WithValue(ctx, keyCached, &cachedSchedule)
 
 		// Call the handler
 
@@ -211,6 +213,7 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 			MessageID:      messageID,
 			Data:           updateData,
 			GroupOrTeacher: groupOrTeacher,
+			IsCached:       cachedSchedule,
 			Elapsed:        int(elapsedTime.Milliseconds()),
 			Error:          &handlerErrStr,
 		})
@@ -306,17 +309,22 @@ func isAdmin(ctx context.Context, b *bot.Bot, update *models.Update) (bool, erro
 	return chatMember.Type == models.ChatMemberTypeAdministrator || chatMember.Type == models.ChatMemberTypeOwner, nil
 }
 
-func setGroupOrTeacher(ctx context.Context, value string) {
+func setGroupOrTeacherAndCached(ctx context.Context, groupOrTeacher string, cached bool) {
 	if ctx == nil {
 		return
 	}
-	groupOrTeacher := ctx.Value(keyGroupOrTeacher)
-	if groupOrTeacher != nil {
-		p, ok := groupOrTeacher.(*string)
-		if ok {
-			*p = value
-		} else {
-			log.Warn().Msg("groupOrTeacher is not a string pointer")
-		}
+
+	groupOrTeacherValue := ctx.Value(keyGroupOrTeacher)
+	if p, ok := groupOrTeacherValue.(*string); ok {
+		*p = groupOrTeacher
+	} else {
+		log.Warn().Msg("groupOrTeacherValue is not a string pointer")
+	}
+
+	cachedValue := ctx.Value(keyCached)
+	if p, ok := cachedValue.(*bool); ok {
+		*p = cached
+	} else {
+		log.Warn().Msg("cachedValue is not a bool pointer")
 	}
 }
