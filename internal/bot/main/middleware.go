@@ -158,6 +158,7 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 		log.Trace().Any("update", update).Msg("Update processed")
 
 		if noLogFlag {
+			log.Trace().Msg("No log flag enabled")
 			return
 		}
 
@@ -282,7 +283,7 @@ func (h *handler) checkConfigAccess(next bot.HandlerFunc) bot.HandlerFunc {
 	}
 }
 
-func makePrehandlerVacation(kind string) bot.Middleware {
+func (h *handler) makePrehandlerVacation(kind string) bot.Middleware {
 	return func(next bot.HandlerFunc) bot.HandlerFunc {
 		return func(ctx context.Context, b *bot.Bot, update *models.Update) {
 			if !viper.GetBool(config.KeyHandleVacation) {
@@ -306,8 +307,6 @@ func makePrehandlerVacation(kind string) bot.Middleware {
 				return
 			}
 			log.Info().Msg("Today is vacation, handling...")
-
-			setNoLogFlag(ctx)
 
 			dur := time.Until(time.Date(now.Year(), time.September, 1, 0, 0, 0, 0, now.Location()))
 			days := int(dur.Hours()) / 24
