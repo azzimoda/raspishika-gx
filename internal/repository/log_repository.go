@@ -156,7 +156,7 @@ func (r *logRepository) CountBroadcastLogsByPeriodAndKind(ctx context.Context, k
 func (r *logRepository) CountActualRequests(ctx context.Context, start, end time.Time) (int, error) {
 	const queryUpdates = `
 		SELECT COUNT(*) FROM update_logs
-		WHERE "group" IS NOT NULL AND "group" != '' AND cached = 0 AND created_at BETWEEN ? AND ?`
+		WHERE group_or_teacher IS NOT NULL AND group_or_teacher != '' AND cached = 0 AND created_at BETWEEN ? AND ?`
 	var countUpdates int
 	if err := r.db.GetContext(ctx, &countUpdates, queryUpdates, start, end); err != nil {
 		return 0, fmt.Errorf("failed to count actual update requests: %w", err)

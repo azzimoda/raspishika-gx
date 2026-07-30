@@ -175,6 +175,7 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 		logEvent := log.Info().Dur("elapsed_time", elapsedTime)
 		if update.Message != nil {
 			message := update.Message
+			messageID = message.ID
 			updateKind = "message"
 			updateData = message.Text
 			logEvent.
