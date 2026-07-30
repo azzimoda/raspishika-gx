@@ -107,21 +107,10 @@ func (a *App) Run() error {
 		if err := a.adminBot.HealthCheck(); err != nil {
 			log.Error().Err(err).Msg("Admin bot health check failed")
 		} else {
-			go a.adminBot.Start(ctx)
-			for a.adminBot.Bot == nil || a.mainBot.Bot == nil {
-				select {
-				case <-ctx.Done():
-					log.Warn().Msg("Context cancelled!")
-					return nil
-				default:
-				}
-				log.Debug().Msg("Wating for bots...")
-				time.Sleep(5 * time.Second)
+			shouldReturn := a.startAdminBot(ctx)
+			if shouldReturn {
+				return a.Stop()
 			}
-			time.Sleep(1 * time.Second)
-			log.Info().Msg("All bots started")
-			a.appReporter.Reporter = reporter.NewReporter(a.adminBot.Bot, viper.GetInt64(config.KeyAdminID))
-			a.Report().Msg("Started on bot @" + mainbot.GetMe(a.mainBot.Bot).Username)
 		}
 	} else {
 		log.Debug().Msg("Admin bot is disabled")
@@ -130,6 +119,26 @@ func (a *App) Run() error {
 	<-ctx.Done()
 
 	return a.Stop()
+}
+
+func (a *App) startAdminBot(ctx context.Context) bool {
+	go a.adminBot.Start(ctx)
+	for a.adminBot.Bot == nil || a.mainBot.Bot == nil {
+		select {
+		case <-ctx.Done():
+			log.Warn().Msg("Context cancelled!")
+			return true
+		default:
+		}
+		log.Debug().Msg("Wating for bots...")
+		time.Sleep(5 * time.Second)
+	}
+	time.Sleep(1 * time.Second)
+	log.Info().Msg("All bots started")
+
+	a.appReporter.Reporter = reporter.NewReporter(a.adminBot.Bot, viper.GetInt64(config.KeyAdminID))
+	a.Report().Msg("Started on bot @" + mainbot.GetMe(a.mainBot.Bot).Username)
+	return false
 }
 
 func (a *App) Stop() error {

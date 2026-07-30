@@ -98,7 +98,7 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 			return
 		} else {
 			addHandlerCtxErr(ctx, ErrNoChatContext)
-			// Failed to change chat's status, send list with one teacher to let user select it manually
+			// Failed to send schedule right now, send list with one teacher to let user select it manually
 		}
 	}
 

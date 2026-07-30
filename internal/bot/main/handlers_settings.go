@@ -284,17 +284,11 @@ func updateSettingsMenuMessage(ctx context.Context, b *bot.Bot, message *models.
 
 func settingsMenuText(chat *model.Chat) string {
 	dailyTime := "выключено"
-	if chat.DailySendingTime != nil {
-		dailyTime = *chat.DailySendingTime
+	if t := refutil.DerefOrTypeDefault(chat.DailySendingTime); t != "" {
+		dailyTime = t
 	}
-	pairNotification := "выключено"
-	if chat.PairSending {
-		pairNotification = "включено"
-	}
-	changesNotificatin := "выключено"
-	if chat.ChangeAlert {
-		changesNotificatin = "включено"
-	}
+	pairNotification := onOffStr(chat.PairSending)
+	changesNotificatin := onOffStr(chat.ChangeAlert)
 	theme := "светлая"
 	if chat.DarkMode {
 		theme = "тёмная"
@@ -657,4 +651,11 @@ func groupMenuMarkup(groups []*model.Group) models.ReplyKeyboardMarkup {
 		Selective:       true,
 	}
 
+}
+
+func onOffStr(isOn bool) string {
+	if isOn {
+		return "включено"
+	}
+	return "выключено"
 }

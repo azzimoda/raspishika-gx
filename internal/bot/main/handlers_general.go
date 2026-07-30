@@ -56,23 +56,29 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 	addHandlerCtxErr(ctx, err)
 
 	if err == nil {
-		if chat, ok := ctx.Value(keyChat).(*model.Chat); !ok {
+		chat, ok := ctx.Value(keyChat).(*model.Chat)
+		if !ok {
 			addHandlerCtxErr(ctx, fmt.Errorf("failed to get chat from handler context"))
-		} else if chat.GroupName == nil || string(refutil.DerefOrTypeDefault(chat.GroupName)) == "" {
-			err := h.sendDepartmentSelectionMenu(ctx, b, chat, update.Message.MessageThreadID)
-			addHandlerCtxErr(ctx, err)
-			if err != nil {
-				log.Warn().Err(err).Msg("Failed to send department selection menu")
-				botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
-					ChatID:          chat.TgChatID,
-					MessageThreadID: update.Message.MessageThreadID,
-					Text:            botutil.ErrMsgTryLater,
-				})
-				return
-			}
+			return
+		}
+		if chat.GroupName == nil || string(refutil.DerefOrTypeDefault(chat.GroupName)) == "" {
+			h.offerToSetGroupOnStart(ctx, b, chat, update)
 		}
 	}
 }
+func (h *handler) offerToSetGroupOnStart(ctx context.Context, b *bot.Bot, chat *model.Chat, update *models.Update) {
+	err := h.sendDepartmentSelectionMenu(ctx, b, chat, update.Message.MessageThreadID)
+	addHandlerCtxErr(ctx, err)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to send department selection menu")
+		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
+			ChatID:          chat.TgChatID,
+			MessageThreadID: update.Message.MessageThreadID,
+			Text:            botutil.ErrMsgTryLater,
+		})
+	}
+}
+
 func (h *handler) handleCmdHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
@@ -81,6 +87,7 @@ func (h *handler) handleCmdHelp(ctx context.Context, b *bot.Bot, update *models.
 	})
 	addHandlerCtxErr(ctx, err)
 }
+
 func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
