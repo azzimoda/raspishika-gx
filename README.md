@@ -84,11 +84,7 @@ docker run --rm \
    ```bash
    go build ./cmd/bot
    ```
-4. Скачать список прокси:
-   ```bash
-   bash ./scripts/update_proxy_list.sh
-   ```
-5. Подготовить конфигурацию, указав токен бота и другие параметры в файле `.env`, например:
+4. Подготовить конфигурацию, указав токен бота и другие параметры в файле `.env`, например:
    ```bash
    # Required
    BOT_TOKEN=your_bot_token_here
@@ -97,7 +93,7 @@ docker run --rm \
    ADMIN_BOT_TOKEN=your_admin_bot_token_here
    ADMIN_ID=admin_user_id_here
    ```
-6. Запустить бота:
+5. Запустить бота:
    ```bash
    ./bot
    ```
