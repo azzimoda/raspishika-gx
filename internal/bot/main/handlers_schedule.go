@@ -13,6 +13,8 @@ import (
 )
 
 func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling command week...")
+
 	threadID := update.Message.MessageThreadID
 	chatID := update.Message.Chat.ID
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
@@ -47,6 +49,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 		})
 		return
 	}
+	log.Trace().Str("name", string(group.GroupName)).Msg("Got group")
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
@@ -60,6 +63,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 		})
 		return
 	}
+	log.Trace().Msg("Got schedule")
 
 	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), cached)
 
@@ -74,12 +78,17 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 		})
 		return
 	}
+	log.Trace().Msg("Prepared schedule image")
 
 	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData)
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled command week")
 }
 
 func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling command tomorrow...")
+
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
@@ -142,9 +151,13 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 		ReplyMarkup:     botutil.UpdateScheduleMarkup("tomorrow", string(group.GroupName)),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled command tomorrow")
 }
 
 func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling command today...")
+
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
@@ -219,9 +232,13 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 		ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName)),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled command today")
 }
 
 func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling quick group...")
+
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
@@ -293,4 +310,6 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 
 	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData)
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled quick group")
 }

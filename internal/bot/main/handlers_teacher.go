@@ -14,6 +14,7 @@ import (
 func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
+
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
 	defer stop()
 
@@ -53,6 +54,8 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 		ReplyMarkup:     botutil.TeacherMenuMarkup(recentTeachers),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled command teacher")
 }
 
 func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -109,9 +112,13 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 		ReplyMarkup:     botutil.TeacherMenuMarkup(teachers),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled text teacher name")
 }
 
 func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling CQ teacher...")
+
 	message := update.CallbackQuery.Message.Message
 	_, err := botutil.DeleteMessage(ctx, b, message)
 	addHandlerCtxErr(ctx, err)
@@ -141,6 +148,8 @@ func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *model
 
 	err = h.sendTeacherSchedule(ctx, b, message, chat, teacher)
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ teacher")
 }
 
 func (h *handler) sendTeacherSchedule(
@@ -167,6 +176,7 @@ func (h *handler) sendTeacherSchedule(
 	if err != nil {
 		return err
 	}
+	log.Trace().Bool("cached", cached).Msg("Got teacher schedule")
 
 	setGroupOrTeacherAndCached(ctx, string(teacher.Name), cached)
 
@@ -174,6 +184,7 @@ func (h *handler) sendTeacherSchedule(
 	if err != nil {
 		return err
 	}
+	log.Trace().Msg("Prepared schedule image")
 
 	return botutil.SendWeekScheduleMessages(ctx, b, message.MessageThreadID, chat, conf, imageFilename, imageData)
 }

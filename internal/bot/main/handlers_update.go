@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
@@ -84,9 +85,13 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 		Text:            MsgScheduleUpdated,
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ update group")
 }
 
 func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling CQ update teacher...")
+
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	darkMode := false
 	if ok {
@@ -119,6 +124,7 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 		})
 		return
 	}
+	log.Trace().Bool("cached", cached).Msg("Got teacher schedule")
 
 	setGroupOrTeacherAndCached(ctx, string(teacher.Name), cached)
 
@@ -131,6 +137,7 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 		})
 		return
 	}
+	log.Trace().Msg("Prepared schedule image")
 
 	message := update.CallbackQuery.Message.Message
 	_, err = b.EditMessageMedia(ctx, &bot.EditMessageMediaParams{
@@ -156,6 +163,8 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 		Text:            MsgScheduleUpdated,
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ update teacher")
 }
 
 func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -211,6 +220,8 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 		Text:            MsgScheduleUpdated,
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ update tomorrow")
 }
 
 func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -293,4 +304,6 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		Text:            MsgScheduleUpdated,
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ update today")
 }

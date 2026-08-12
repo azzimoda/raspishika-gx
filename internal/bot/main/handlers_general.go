@@ -48,6 +48,7 @@ const (
 )
 
 func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling command start...")
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
@@ -65,6 +66,7 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 			h.offerToSetGroupOnStart(ctx, b, chat, update)
 		}
 	}
+	log.Info().Msg("Handled start")
 }
 func (h *handler) offerToSetGroupOnStart(ctx context.Context, b *bot.Bot, chat *model.Chat, update *models.Update) {
 	err := h.sendDepartmentSelectionMenu(ctx, b, chat, update.Message.MessageThreadID)
@@ -86,9 +88,13 @@ func (h *handler) handleCmdHelp(ctx context.Context, b *bot.Bot, update *models.
 		Text:            helpMessageText,
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled help")
 }
 
 func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling command stop...")
+
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
 		addHandlerCtxErr(ctx, fmt.Errorf("failed to get chat from handler context"))
@@ -109,6 +115,7 @@ func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.
 		})
 		return
 	}
+	log.Trace().Int64("tgChatID", int64(chat.TgChatID)).Msg("Chat deleted from DB")
 
 	h.ReportChat(chat).Msg("User stopped the bot :(")
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
@@ -118,10 +125,43 @@ func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.
 		ReplyMarkup:     models.ReplyKeyboardRemove{RemoveKeyboard: true},
 	})
 	addHandlerCtxErr(ctx, err)
+	log.Info().Msg("Handled command stop")
 }
 
 func (h *handler) handleCmdCancel(ctx context.Context, b *bot.Bot, update *models.Update) {
-	panic("unimplemented")
+	log.Debug().Msg("Handling command cancel...")
+
+	chat, ok := ctx.Value(keyChat).(*model.Chat)
+	if !ok {
+		addHandlerCtxErr(ctx, fmt.Errorf("failed to get chat from handler context"))
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:          update.Message.Chat.ID,
+			MessageThreadID: update.Message.MessageThreadID,
+			Text:            "Произошла ошибка, попробуйте позже",
+		})
+		return
+	}
+
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+		addHandlerCtxErr(ctx, fmt.Errorf("failed to get chat from handler context"))
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID:          update.Message.Chat.ID,
+			MessageThreadID: update.Message.MessageThreadID,
+			Text:            "Произошла ошибка, попробуйте позже",
+		})
+		return
+	}
+	log.Trace().Msg("Set user's state to default")
+
+	err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+		ChatID:          update.Message.Chat.ID,
+		MessageThreadID: update.Message.MessageThreadID,
+		Text:            "Настройка отменена",
+		// NOTE: This command is accessible during setting of group and time.
+	})
+	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Hanlded command cancel")
 }
 
 // handleCQDelete deletes the message of the callback button
@@ -138,4 +178,6 @@ func (h *handler) handleCQDelete(ctx context.Context, b *bot.Bot, update *models
 	} else if !deleted {
 		log.Debug().Any("update", update).Msg("Message is not deleted")
 	}
+
+	log.Info().Msg("Handled CQ delete")
 }

@@ -15,6 +15,8 @@ import (
 )
 
 func (h *handler) handleCmdSettings(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling command settings...")
+
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
 
@@ -40,9 +42,13 @@ func (h *handler) handleCmdSettings(ctx context.Context, b *bot.Bot, update *mod
 		ReplyMarkup:     settingsMenuMarkup(chat),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled command settings")
 }
 
 func (h *handler) handleCQConfigGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling CQ config group...")
+
 	message := update.CallbackQuery.Message.Message
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
@@ -61,9 +67,13 @@ func (h *handler) handleCQConfigGroup(ctx context.Context, b *bot.Bot, update *m
 
 	err = h.sendDepartmentSelectionMenu(ctx, b, chat, message.MessageThreadID)
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ config group")
 }
 
 func (h *handler) handleCQConfigDailyTime(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling CQ config daily time...")
+
 	message := update.CallbackQuery.Message.Message
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
@@ -106,8 +116,12 @@ func (h *handler) handleCQConfigDailyTime(ctx context.Context, b *bot.Bot, updat
 		},
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ config daily time")
 }
 func (h *handler) handleTextTime(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling text time...")
+
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
 		addHandlerCtxErr(ctx, ErrNoChatContext)
@@ -149,8 +163,12 @@ func (h *handler) handleTextTime(ctx context.Context, b *bot.Bot, update *models
 		Text:            fmt.Sprintf("Время рассылки установлено на <u>%s</u>", timeStr),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled text time")
 }
 func (h *handler) handleCQDailyOff(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling CQ daily off...")
+
 	message := update.CallbackQuery.Message.Message
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
@@ -176,6 +194,8 @@ func (h *handler) handleCQDailyOff(ctx context.Context, b *bot.Bot, update *mode
 	}
 
 	addHandlerCtxErr(ctx, updateSettingsMenuMessage(ctx, b, message, chat))
+
+	log.Info().Msg("Handled CQ daily off")
 }
 
 func (h *handler) handleCQConfigReminder(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -207,6 +227,8 @@ func (h *handler) handleCQConfigReminder(ctx context.Context, b *bot.Bot, update
 	}
 
 	addHandlerCtxErr(ctx, updateSettingsMenuMessage(ctx, b, message, chat))
+
+	log.Info().Msg("Handled CQ config reminder")
 }
 
 func (h *handler) handleCQConfigChange(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -238,6 +260,8 @@ func (h *handler) handleCQConfigChange(ctx context.Context, b *bot.Bot, update *
 	}
 
 	addHandlerCtxErr(ctx, updateSettingsMenuMessage(ctx, b, message, chat))
+
+	log.Info().Msg("Handled CQ config change")
 }
 
 func (h *handler) handleCQConfigDarkMode(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -269,6 +293,8 @@ func (h *handler) handleCQConfigDarkMode(ctx context.Context, b *bot.Bot, update
 	}
 
 	addHandlerCtxErr(ctx, updateSettingsMenuMessage(ctx, b, message, chat))
+
+	log.Info().Msg("Handled CQ config dark mode")
 }
 
 func updateSettingsMenuMessage(ctx context.Context, b *bot.Bot, message *models.Message, chat *model.Chat) error {
@@ -433,6 +459,8 @@ func (h *handler) handleCQSelectDepartment(ctx context.Context, b *bot.Bot, upda
 		ReplyMarkup:     groupMenuMarkup(groups),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ select department")
 }
 func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
 	groupName, err := h.Schedule.ValidateGroupName(ctx, model.GroupName(update.Message.Text))
@@ -489,6 +517,8 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 		ReplyMarkup:     botutil.MainMenuMarkup(chat.IsPrivate()),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled text group")
 }
 
 func (h *handler) handleCmdAccess(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -518,6 +548,8 @@ func (h *handler) handleCmdAccess(ctx context.Context, b *bot.Bot, update *model
 		})
 		addHandlerCtxErr(ctx, err)
 	}
+
+	log.Info().Msg("Handled command access")
 }
 func (h *handler) handleCQSetAccess(ctx context.Context, b *bot.Bot, update *models.Update) {
 	message := update.CallbackQuery.Message.Message
@@ -567,6 +599,8 @@ func (h *handler) handleCQSetAccess(ctx context.Context, b *bot.Bot, update *mod
 		ReplyMarkup: botutil.AccessMenuMarkup(chat.Access),
 	})
 	addHandlerCtxErr(ctx, err)
+
+	log.Info().Msg("Handled CQ set access")
 }
 func accessMenuText(chat *model.Chat) string {
 	text := fmt.Sprintf(
