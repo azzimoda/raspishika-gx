@@ -35,10 +35,7 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	container, err := repository.NewContainer(db)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create container: %w", err)
-	}
+	container := repository.NewContainer(db)
 
 	appReporter := new(appReporter)
 

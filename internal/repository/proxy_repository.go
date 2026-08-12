@@ -21,8 +21,8 @@ type ProxyRepository interface {
 	UpdatedAt() time.Time
 }
 
-func NewProxyRepository() (ProxyRepository, error) {
-	return &proxyRepository{proxies: make([]string, 0)}, nil
+func NewProxyRepository() ProxyRepository {
+	return &proxyRepository{proxies: make([]string, 0)}
 }
 
 type proxyRepository struct {

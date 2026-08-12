@@ -2,19 +2,14 @@ package repository
 
 import "github.com/jmoiron/sqlx"
 
-func NewContainer(db *sqlx.DB) (*Container, error) {
-	proxyRepo, err := NewProxyRepository()
-	if err != nil {
-		return nil, err
-	}
-
+func NewContainer(db *sqlx.DB) *Container {
 	return &Container{
-		Proxy:    proxyRepo,
+		Proxy:    NewProxyRepository(),
 		Chat:     NewChatRepository(db),
 		Group:    NewGroupRepository(db),
 		Schedule: NewScheduleRepository(db),
 		Log:      NewLogRepository(db),
-	}, nil
+	}
 }
 
 type Container struct {
