@@ -327,7 +327,7 @@ func (r *chatRepository) CountDarkEnabled(ctx context.Context) (int, error) {
 
 // GetAvgChatPerGroup returns the average number of chats per group.
 func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error) {
-	var avg float64
+	var avg *float64
 	err := r.db.GetContext(ctx, &avg, `
 		SELECT AVG(chats) FROM (
 			SELECT COUNT(*) AS chats FROM chats
@@ -335,7 +335,7 @@ func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error
 			GROUP BY "group"
 		)
 	`)
-	return avg, err
+	return refutil.DerefOrTypeDefault(avg), err
 }
 
 func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) ([]TimeCount, error) {
@@ -362,20 +362,22 @@ func (r *chatRepository) DeleteChat(ctx context.Context, id int64) error {
 func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.GetContext(ctx, &count, `
-		SELECT count(*) from (
-			SELECT DISTINCT g.* FROM groups g JOIN chats c ON g.group_name = c."group"
+		SELECT count(*) FROM (
+			SELECT DISTINCT "group" FROM chats
 			WHERE "group" != '' AND "group" IS NOT NULL
 		)
 	`)
 	return count, err
 }
-func (r *chatRepository) GetWatchedGroups(ctx context.Context) ([]*model.Group, error) {
-	var groups []*model.Group
-	err := r.db.SelectContext(ctx, &groups, `
-		SELECT DISTINCT g.* FROM groups g JOIN chats c ON g.group_name = c."group"
-		WHERE "group" != '' AND "group" IS NOT NULL AND update_notification = 1
+
+// TODO: Use in config stats
+func (r *chatRepository) GetWatchedGroupNames(ctx context.Context) ([]string, error) {
+	var groupNames []string
+	err := r.db.SelectContext(ctx, &groupNames, `
+		SELECT DISTINCT "group" FROM chats
+		WHERE "group" IS NOT NULL AND "group" != '' AND update_notification = 1
 	`)
-	return groups, err
+	return groupNames, err
 }
 
 func (r *chatRepository) AddRecentTeacher(ctx context.Context, chatID, teacherID int64) error {
