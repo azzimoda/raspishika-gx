@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -52,6 +53,20 @@ type ChromedpBrowser struct {
 }
 
 func (b *ChromedpBrowser) initializeBrowser(ctx context.Context) error {
+	b.chromedpMu.Lock()
+	defer b.chromedpMu.Unlock()
+	return b.reinit(ctx)
+}
+
+// reinit (re)builds the chromedp exec allocator and context.
+// Callers must hold b.chromedpMu.
+func (b *ChromedpBrowser) reinit(ctx context.Context) error {
+	// Tear down the previous browser (if any) so its process and temp dir
+	// are cleaned up before we start a fresh one.
+	if b.chromedpCancel != nil {
+		b.chromedpCancel()
+	}
+
 	isHeadless := viper.GetBool(config.KeyBrowserHeadless)
 
 	width, height := scale(
@@ -59,27 +74,59 @@ func (b *ChromedpBrowser) initializeBrowser(ctx context.Context) error {
 		viper.GetInt(config.KeyBrowserHeight),
 		viper.GetFloat64(config.KeyBrowserScale),
 	)
-	ctx, cancelExecAllocator := chromedp.NewExecAllocator(ctx,
+
+	// NewExecAllocator only applies the options it is given, ignoring
+	// DefaultExecAllocatorOptions. Merge the defaults in so container-critical
+	// flags (--disable-dev-shm-usage, --disable-gpu, --no-first-run, ...) are
+	// present. Otherwise a 64MB /dev/shm in Docker exhausts the shared memory
+	// and crashes the browser mid-screenshot ("context canceled").
+	opts := append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
+	opts = append(opts,
 		chromedp.Flag("headless", isHeadless),
 		chromedp.WindowSize(width, height),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-gpu", true),
+		// Chromium 129+ needs this to fall back to software GL when no GPU is
+		// present (e.g. in a container), otherwise the GPU process crash-loops.
+		chromedp.Flag("enable-unsafe-swiftshader", true),
+		// Surface chromium's own stderr (crash reasons, GPU errors) in our logs.
+		chromedp.CombinedOutput(chromiumOutputWriter{}),
 	)
-	ctx, cancelChromeDP := chromedp.NewContext(ctx,
-		chromedp.WithBrowserOption(chromedp.WithDialTimeout(20*time.Second)))
 
-	b.chromedpMu.Lock()
+	ctx, cancelExecAllocator := chromedp.NewExecAllocator(ctx, opts...)
+	ctx, cancelChromeDP := chromedp.NewContext(ctx,
+		chromedp.WithBrowserOption(chromedp.WithDialTimeout(20*time.Second)),
+		chromedp.WithLogf(func(format string, args ...any) {
+			log.Trace().Msgf("chromedp: "+format, args...)
+		}),
+		chromedp.WithErrorf(func(format string, args ...any) {
+			log.Error().Msgf("chromedp: "+format, args...)
+		}),
+	)
+
 	b.chromedpCtx = ctx
 	b.chromedpCancel = func() {
-		log.Warn().Msg("BROWSER CONTEXT CANCELLED!!!")
+		log.Debug().Msg("Cancelling Chromedp context")
 		cancelChromeDP()
 		cancelExecAllocator()
 	}
-	b.chromedpMu.Unlock()
 
 	b.restarterMu.Lock()
 	b.restarting = false
 	b.restarterMu.Unlock()
 
 	return nil
+}
+
+// chromiumOutputWriter forwards chromium's combined stdout/stderr to the log.
+type chromiumOutputWriter struct{}
+
+func (chromiumOutputWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		log.Trace().Msg("chromium: " + string(p))
+	}
+	return len(p), nil
 }
 
 func (b *ChromedpBrowser) Close() error {
@@ -135,12 +182,6 @@ func (b *ChromedpBrowser) runRestarter() {
 func (b *ChromedpBrowser) restart() error {
 	log.Info().Msg("Restarting Chromedp...")
 
-	b.chromedpMu.Lock()
-	if b.chromedpCancel != nil {
-		b.chromedpCancel()
-	}
-	b.chromedpMu.Unlock()
-
 	if err := b.initializeBrowser(b.parentContext); err != nil {
 		log.Error().Err(err).Msg("Failed to initialize Chromedp")
 		return fmt.Errorf("failed to initialize new browser: %w", err)
@@ -154,15 +195,41 @@ func (b *ChromedpBrowser) ScreenshotHTML(html string) ([]byte, error) {
 	b.chromedpMu.Lock()
 	defer b.chromedpMu.Unlock()
 
-	log.Debug().Msg("Taking screenshot...")
-
-	ctx := b.chromedpCtx
-	if ctx == nil {
-		return nil, fmt.Errorf("browser context not initialized")
+	if b.parentContext.Err() != nil {
+		return nil, fmt.Errorf("browser shutting down: %w", b.parentContext.Err())
 	}
 
+	// The previous browser may have crashed (e.g. it lost connection), which
+	// cancels its context. Re-initialize it so screenshots keep working.
+	if b.chromedpCtx == nil || b.chromedpCtx.Err() != nil {
+		if err := b.reinit(b.parentContext); err != nil {
+			return nil, fmt.Errorf("failed to re-initialize browser: %w", err)
+		}
+		log.Warn().Msg("Browser context was cancelled; re-initialized Chromedp")
+	}
+
+	log.Debug().Msg("Taking screenshot...")
+
+	imageData, err := b.runScreenshot(html)
+	if err != nil && errors.Is(err, context.Canceled) && b.chromedpCtx.Err() != nil {
+		// The browser died mid-screenshot; re-initialize and retry once.
+		log.Warn().Err(err).Msg("Browser died during screenshot, re-initializing and retrying...")
+		if rerr := b.reinit(b.parentContext); rerr != nil {
+			return nil, fmt.Errorf("failed to re-initialize browser after crash: %w", rerr)
+		}
+		imageData, err = b.runScreenshot(html)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to take screenshot: %w", err)
+	}
+	log.Trace().Msg("Taken screenshot")
+
+	return imageData, nil
+}
+
+func (b *ChromedpBrowser) runScreenshot(html string) ([]byte, error) {
 	var imageData []byte
-	if err := chromedp.Run(ctx, chromedp.Tasks{
+	if err := chromedp.Run(b.chromedpCtx, chromedp.Tasks{
 		chromedp.Navigate("about:blank"),
 		LogAction("Navigated to about:blank"),
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -176,10 +243,8 @@ func (b *ChromedpBrowser) ScreenshotHTML(html string) ([]byte, error) {
 		chromedp.FullScreenshot(&imageData, 100),
 		LogAction("Taken full screenshot. Done."),
 	}); err != nil {
-		return nil, fmt.Errorf("failed to take screenshot: %w", err)
+		return nil, err
 	}
-	log.Trace().Msg("Taken screenshot")
-
 	return imageData, nil
 }
 

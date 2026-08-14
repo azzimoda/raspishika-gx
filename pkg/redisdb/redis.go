@@ -61,9 +61,7 @@ func (s *SmartClient) Get(ctx context.Context, key string) (data []byte, fresh b
 		log.Error().Err(err).Str("key", key).Msg("Failed to get redis cache")
 		return nil, false, false
 	} else {
-		log.Debug().Str("key", key).
-			// RawJSON("data", data).
-			Msg("Cache hit")
+		log.Debug().Str("key", key).Msg("Cache hit")
 		return data, fresh, true
 	}
 }
