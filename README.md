@@ -42,31 +42,42 @@
 Основные использованные технологии:
 
 - Go v1.26
-  - `go-telegram/bot`
-  - `mattn/go-sqlite3`
-  - `mxschmitt/playwright-go`
-  - `chromedp/chromedp`
   - `spf13/viper`
+  - API:
+    - `gin-gonic/gin`
+    - `mxschmitt/playwright-go`
+    - `swaggo/swag` (Swagger-документация)
+  - Бот:
+    - `go-telegram/bot`
+    - `mattn/go-sqlite3`
+    - `chromedp/chromedp`
+- Redis (кэш API)
 - Node.js — Playwright v1.61.1
 - SQLite v3.37
+
+## Архитектура
+
+Проект состоит из двух сервисов:
+
+- `cmd/bot` — Telegram-бот. Хранит данные в SQLite, рендерит скриншоты расписания через собственный браузер Chromium (`chromedp`), расписания получает по HTTP от API.
+- `cmd/api` — HTTP-сервис скрейпинга. Собирает расписание с `coworking.tyuiu.ru` с помощью Playwright, кэширует результаты в Redis и отдаёт по `/api/v1/*` (Swagger-документация доступна по адресам `/swagger/index.html` (UI) и `/swagger/doc.json`). Бот обращается к нему через `internal/apiclient` по `SCRAPER_HOST`/`SCRAPER_PORT`.
+
+Для локальной разработки с демо-данными (без реального скрейпинга) есть `cmd/fakeapi` и `cmd/fakebot`.
 
 ## Сборка и запуск
 
 ### Docker
 
+Поднять Redis, API и бота:
+
 ```sh
-docker-compose up --build --remove-orphans
+docker compose up --build
 ```
 
-или
+Для локальной разработки с демо-данными (вместо реального скрейпинга):
 
 ```sh
-docker build -t raspishika .
-docker run --rm \
-    -v ./.env:/app/.env \
-    -v ./configs:/app/configs \
-    -v ./database/db.sqlite3:/app/database/db.sqlite3 \
-    raspishika # --help
+docker compose -f compose-fakeapi.yaml up --build
 ```
 
 ### Ручная сборка
@@ -78,13 +89,21 @@ docker run --rm \
 2. Установить зависимости:
    ```bash
    go mod download
-   go run github.com/mxschmitt/playwright-go/cmd/playwright@v0.5200.0 install chromium chromium-headless-shell --with-deps
+   go run github.com/mxschmitt/playwright-go/cmd/playwright@v0.6100.0 install chromium chromium-headless-shell --with-deps
    ```
-3. Собрать проект:
+3. Собрать API-сервис:
+   ```bash
+   go build ./cmd/api
+   ```
+4. Собрать бота (нужен CGO для sqlite3 и Chromium в PATH для скриншотов):
    ```bash
    go build ./cmd/bot
    ```
-4. Подготовить конфигурацию, указав токен бота и другие параметры в файле `.env`, например:
+5. Запустить Redis (для кэша API):
+   ```bash
+   docker run --rm -p 6379:6379 redis:alpine
+   ```
+6. Подготовить конфигурацию, указав токен бота и другие параметры в файле `.env`, например:
    ```bash
    # Required
    BOT_TOKEN=your_bot_token_here
@@ -92,11 +111,22 @@ docker run --rm \
    # Optional
    ADMIN_BOT_TOKEN=your_admin_bot_token_here
    ADMIN_ID=admin_user_id_here
+   REDIS_PASSWORD=your_redis_password_here
+   HANDLE_VACATION=true
+   BROWSER_SCALE=1
+   LOG_LEVEL=debug
    ```
-5. Запустить бота:
+7. Запустить API-сервис и бота:
    ```bash
+   ./api
    ./bot
    ```
+
+Альтернативно, вместо реального API можно запустить `cmd/fakeapi` с демо-данными (`go build ./cmd/fakeapi && ./fakeapi`), или `cmd/fakebot` без API сервиса (`go build ./cmd/fakebot && ./fakebot`).
+
+## Развёртывание
+
+При push в ветку `main` GitHub Actions (`.github/workflows/deploy.yaml`) собирает и публикует образы `raspishika-api` и `raspishika-bot` в Docker Hub, после чего по SSH перезапускает сервисы на VPS (`docker compose pull && docker compose up -d`).
 
 ---
 
