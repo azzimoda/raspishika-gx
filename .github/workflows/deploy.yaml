@@ -57,6 +57,8 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd ~/raspishika-gx
+
+            git pull
             docker compose pull
             docker compose down
             docker compose up -d
