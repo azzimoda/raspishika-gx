@@ -2,7 +2,9 @@ services:
   redis:
     image: redis:8.10-alpine
     container_name: raspishika-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    ports:
+      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -17,8 +19,11 @@ services:
     restart: unless-stopped
 
   api:
-    image: azzimoda/raspishika-api:latest
+    build:
+      context: .
+      dockerfile: api.Dockerfile
     container_name: raspishika-api
+    command: ["/app/api"]
     ports:
       - "8080:8080"
     environment:
@@ -36,8 +41,11 @@ services:
     restart: unless-stopped
 
   bot:
-    image: azzimoda/raspishika:latest
+    build:
+      context: .
+      dockerfile: bot.Dockerfile
     container_name: raspishika-bot
+    command: ["/app/bot"]
     shm_size: 2g
     environment:
       - BOT_TOKEN=${BOT_TOKEN}

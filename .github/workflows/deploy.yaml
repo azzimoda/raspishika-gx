@@ -1,9 +1,17 @@
-# .github/workflows/deploy.yml
 name: Deploy
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - '.github/workflows/deploy.yaml'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'migrations/*'
+      - 'templates/*'
+      - 'compose.yaml'
+      - 'go.*'
 
 jobs:
   deploy:
@@ -21,7 +29,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Build and push API image
+      - name: Build and push API
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -31,7 +39,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Bot image
+      - name: Build and push Bot
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -52,3 +60,29 @@ jobs:
             docker compose pull
             docker compose down
             docker compose up -d
+
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -f http://localhost:8080/api/v1/departments; then
+                echo "API is ready"
+                exit 00
+              fi
+              echo "Waiting for API... $i/10"
+              sleep 5
+            done
+            exit 1
+
+      - name: Notify success
+        if: success()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.ADMIN_ID }}
+          token: ${{ secrets.ADMIN_BOT_TOKEN }}
+          message: "Deploy successed! SHA: ${{ github.sha }}"
+
+      - name: Notify failure
+        if: failure()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.ADMIN_ID }}
+          token: ${{ secrets.ADMIN_BOT_TOKEN }}
+          message: "Deploy failed! Job: ${{ github.job }}"
