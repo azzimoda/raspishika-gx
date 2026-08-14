@@ -71,9 +71,9 @@ func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) erro
 	return nil
 }
 
-// Every minute except Sunday
+// Every minute
 func (s *BroadcastService) scheduleDaily(ctx context.Context) error {
-	_, err := s.cron.AddFunc("0 * * * 1-6,9-12 *", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
+	_, err := s.cron.AddFunc("0 * * * * *", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
 	return err
 }
 func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time) {
@@ -82,14 +82,21 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 		return
 	}
 
-	timeStr := t.Format("15:04")
-	start := time.Now()
-	if start.Month() == time.July || start.Month() == time.August {
-		log.Debug().Msg("Skipping daily broadcast during summer")
+	if viper.GetBool(config.KeyHandleVacation) && botutil.IsVacation(t) {
+		log.Debug().Msg("Skipped daily broadcast because of vacation")
 		return
 	}
 
-	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, timeStr, t)
+	timeStr := t.Format("15:04")
+	start := time.Now()
+
+	chats, err := s.Chat.GetChatsByDailyTime(ctx, timeStr)
+	if err != nil {
+		log.Error().Err(err).Str("time", timeStr).Msg("Failed to get chats for daily broadcast")
+		return
+	}
+
+	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, chats)
 	if shouldReturn {
 		return
 	}
@@ -126,30 +133,33 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 func (s *BroadcastService) sendDaily(
 	ctx context.Context,
 	taskID int64,
-	schedules []*model.RawSchedule,
+	schedules []*model.ScheduleData,
 	groupedChats map[model.GroupName][]*model.Chat,
 ) (err error) {
 	var errs []error
-	successCount := 0
 	for _, schedule := range schedules {
+		if schedule == nil {
+			log.Warn().Msg("Nil schedule in daily broadcast")
+			continue
+		}
+
 		var err error
 
 		type msgConf struct {
-			schedule      model.RawSchedule
+			schedule      model.ScheduleData
 			imageFileName string
 			imageData     []byte
 		}
-		confLight := new(msgConf{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(false))})
-		confLight.imageFileName, confLight.imageData, err = s.Schedule.PrepareScheduleImage(ctx, schedule)
+		light := new(msgConf{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(false))})
+		light.imageFileName, light.imageData, err = s.Schedule.PrepareScheduleImage(ctx, &light.schedule)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to prepare light schedule image")
 			errs = append(errs, err)
 			continue
 		}
 
-		scheduleDark := schedule.WithConfig(schedule.Config.WithDarkMode(true))
-		confDark := new(msgConf{schedule: scheduleDark})
-		confDark.imageFileName, confDark.imageData, err = s.Schedule.PrepareScheduleImage(ctx, &scheduleDark)
+		dark := new(msgConf{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(true))})
+		dark.imageFileName, dark.imageData, err = s.Schedule.PrepareScheduleImage(ctx, &dark.schedule)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to prepare dark schedule image")
 			errs = append(errs, err)
@@ -157,9 +167,9 @@ func (s *BroadcastService) sendDaily(
 		}
 
 		for _, chat := range groupedChats[schedule.Config.Group.GroupName] {
-			c := confLight
+			c := light
 			if chat.DarkMode {
-				c = confDark
+				c = dark
 			}
 			var err error
 			if err = botutil.SendWeekScheduleMessages(
@@ -170,6 +180,7 @@ func (s *BroadcastService) sendDaily(
 				c.schedule.Config,
 				c.imageFileName,
 				c.imageData,
+				c.schedule.IsOld,
 			); err != nil {
 				errs = append(errs, err)
 				if errors.Is(err, bot.ErrorForbidden) {
@@ -177,15 +188,13 @@ func (s *BroadcastService) sendDaily(
 					continue
 				}
 				log.Error().Err(err).Msg("Failed to send week schedule message")
-			} else {
-				successCount++
 			}
 
 			s.logBroadcast(ctx, taskID, chat, err)
 		}
 	}
 
-	log.Debug().Int("successCount", successCount).Msg("Daily sending finished")
+	log.Debug().Msg("Daily sending finished")
 
 	return errors.Join(errs...)
 }
@@ -202,7 +211,7 @@ func (s *BroadcastService) schedulePairNotification(ctx context.Context) error {
 		// 15 minutes before a pair starts
 	}
 	for _, t := range times {
-		if _, err := s.cron.AddFunc(fmt.Sprintf("0 %d %d * 1-6,9-12 1-6", t[1], t[0]), func() {
+		if _, err := s.cron.AddFunc(fmt.Sprintf("0 %d %d * * 1-6", t[1], t[0]), func() {
 			go s.handlePairNotification(ctx, time.Now())
 		}); err != nil {
 			return err
@@ -216,40 +225,43 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 		return
 	}
 
-	timeStart := t.Add(15 * time.Minute)
-	timeStartStr := timeStart.Format("15:04")
+	if viper.GetBool(config.KeyHandleVacation) && botutil.IsVacation(t) {
+		log.Debug().Msg("Skipped pair notification because of vacation")
+		return
+	}
 
 	start := time.Now()
 
-	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, timeStartStr, t)
+	pairTimeStart := t.Add(15 * time.Minute)
+	pairTimeStartStr := pairTimeStart.Format("15:04")
+
+	chats, err := s.Chat.GetChatsWithPairNotification(ctx)
+	if err != nil {
+		log.Error().Err(err).Str("time", pairTimeStartStr).Msg("Failed to get chats for pair notificatoin")
+		return
+	}
+
+	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, chats)
 	if shouldReturn {
 		return
 	}
 
-	// Get schedules
 	schedules, err := s.Schedule.GetSchedules(ctx, confs)
 	if err != nil {
-		if len(schedules) == 0 {
-			s.Report().Err(err).Msg("Failed to get schedules for daily broadcast")
-			return
-		}
 		s.Report().Err(err).Debug("success", len(schedules)).Msg("Failed to get some schedules for daily broadcast")
 	}
 
-	// Create task log
 	taskLog := model.BroadcastTaskLog{Kind: model.BPair, Groups: len(groups)}
 	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast task")
 		return
 	}
 
-	// Send notifications
-	err = s.sendPairNotificatins(ctx, taskLog.ID, schedules, groupedChats, groups, timeStart)
+	err = s.sendPairNotificatins(ctx, taskLog.ID, schedules, groupedChats, groups, pairTimeStart)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to send pair notifications")
 	}
 
-	// Update task log
 	taskLog.Elapsed = time.Since(start).Milliseconds()
 	if err := s.Stats.UpdateBroadcastTaskLog(ctx, &taskLog); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast task")
@@ -258,7 +270,7 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 func (s *BroadcastService) sendPairNotificatins(
 	ctx context.Context,
 	taskID int64,
-	schedules []*model.RawSchedule,
+	schedules []*model.ScheduleData,
 	groupedChats map[model.GroupName][]*model.Chat,
 	groupNames []model.GroupName,
 	t time.Time,
@@ -267,10 +279,19 @@ func (s *BroadcastService) sendPairNotificatins(
 	successCount := 0
 	messagesToDelete := make([]*models.Message, 0)
 	for i, schedule := range schedules {
+		if schedule == nil {
+			log.Warn().Msg("Nil schedule in pair notificatoin")
+			continue
+		}
+
 		var err error
 
-		pair, err := schedule.Transform().Days[0].CurrentPair(t)
+		pair, err := schedule.Days[0].CurrentPair(t)
 		if err != nil {
+			if errors.Is(err, model.ErrAllPairsPassed) {
+				continue
+			}
+
 			errs = append(errs, fmt.Errorf("failed to get current pair: %w", err))
 			continue
 		}
@@ -281,7 +302,7 @@ func (s *BroadcastService) sendPairNotificatins(
 			continue
 		}
 		text := fmt.Sprintf("Следующая пара в кабинете %s:\n\t<b>%s</b>\n\t%s",
-			pair.Classroom, pair.Discipline, refutil.DerefOrTypeDefault(pair.Teacher))
+			pair.Classroom, pair.Discipline, pair.Teacher)
 
 		for _, chat := range groupedChats[groupNames[i]] {
 			msg, err := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
@@ -331,8 +352,8 @@ func (s *BroadcastService) runChangeNotifier(ctx context.Context) {
 			continue
 		}
 
-		if t := time.Now(); t.Month() == time.July || t.Month() == time.August {
-			log.Debug().Msg("Change alert notifier is disabled during summer")
+		if viper.GetBool(config.KeyHandleVacation) && botutil.IsVacation(time.Now()) {
+			log.Debug().Msg("Change alert is skipped because of vacation")
 			time.Sleep(viper.GetDuration(config.KeyUpdateMonitorInterval))
 			continue
 		}
@@ -355,12 +376,17 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 
 	start := time.Now()
 
-	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, start.Format("15:04"), start)
+	chats, err := s.Chat.GetChatsWithChangeAlert(ctx)
+	if err != nil {
+		s.Report().Err(err).Msg("Failed to get chats for change alert")
+		return
+	}
+
+	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, chats)
 	if shouldReturn {
 		return
 	}
 
-	// Get changes
 	changes, err := s.Schedule.GetChanges(ctx, groups)
 	if err != nil {
 		if len(changes) == 0 {
@@ -370,7 +396,6 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 		s.Report().Err(err).Debug("success", len(changes)).Msg("Failed to get schdule changes for some groups")
 	}
 
-	// Get schedules
 	schedules, err := s.Schedule.GetSchedules(ctx, confs)
 	if err != nil {
 		if len(schedules) == 0 {
@@ -380,7 +405,6 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 		s.Report().Err(err).Debug("success", len(schedules)).Msg("Failed to get some schedules for change alert")
 	}
 
-	// Create task log
 	taskLog := model.BroadcastTaskLog{Kind: model.BChange, Groups: len(groups)}
 	err = s.Stats.LogBroadcastTask(ctx, &taskLog)
 	if err != nil {
@@ -388,13 +412,11 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 		return
 	}
 
-	// Send reports
 	_, err = s.sendChangeReports(ctx, taskLog.ID, schedules, groupedChats, changes)
 	if err != nil {
 		log.Error().Err(err).Msg("Errors while sending change reports")
 	}
 
-	// Update task log
 	taskLog.Elapsed = time.Since(start).Milliseconds()
 	if err := s.Stats.UpdateBroadcastTaskLog(ctx, &taskLog); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast task")
@@ -403,20 +425,37 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 func (s *BroadcastService) sendChangeReports(
 	ctx context.Context,
 	taskID int64,
-	schedules []*model.RawSchedule,
+	schedules []*model.ScheduleData,
 	groupedChats map[model.GroupName][]*model.Chat,
 	changes map[model.GroupName]*model.ScheduleChange,
 ) (successCount int, err error) {
 	var errs []error
 	successCount = 0
 	for _, schedule := range schedules {
+		if schedule == nil {
+			log.Warn().Msg("Nil schedule in change alert")
+			continue
+		}
+
+		sch, ok := changes[schedule.Config.Group.GroupName]
+		if !ok {
+			log.Error().Str("group", string(schedule.Config.Group.GroupName)).
+				Msg("Group schedule changes not found; supposed to be unreachable")
+			continue
+		}
+		if sch == nil {
+			log.Warn().Str("group", string(schedule.Config.Group.GroupName)).
+				Msg("Group scheduel changes are nil; supposed to be unreachable")
+			continue
+		}
+
 		type msgConf struct {
-			schedule      model.RawSchedule
+			schedule      model.ScheduleData
 			imageFileName string
 			imageData     []byte
 		}
 		light := new(msgConf{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(false))})
-		light.imageFileName, light.imageData, err = s.Schedule.PrepareScheduleImage(ctx, schedule)
+		light.imageFileName, light.imageData, err = s.Schedule.PrepareScheduleImage(ctx, &light.schedule)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to prepare light schedule image")
 			errs = append(errs, err)
@@ -424,14 +463,13 @@ func (s *BroadcastService) sendChangeReports(
 		}
 
 		dark := new(msgConf{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(true))})
-		dark.imageFileName, dark.imageData, err = s.Schedule.PrepareScheduleImage(ctx, schedule)
+		dark.imageFileName, dark.imageData, err = s.Schedule.PrepareScheduleImage(ctx, &dark.schedule)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to prepare dark schedule image")
 			errs = append(errs, err)
 			continue
 		}
-
-		text := changes[schedule.Config.Group.GroupName].HTML()
+		text := sch.HTML()
 
 		for _, chat := range groupedChats[schedule.Config.Group.GroupName] {
 			c := light
@@ -449,6 +487,7 @@ func (s *BroadcastService) sendChangeReports(
 				c.schedule.Config,
 				c.imageFileName,
 				c.imageData,
+				c.schedule.IsOld,
 			); errSchedule != nil {
 				err = errSchedule
 				log.Error().Err(err).Msg("Failed to send week schedule messages")
@@ -492,29 +531,23 @@ func (s *BroadcastService) logBroadcast(ctx context.Context, taskID int64, chat 
 	}
 }
 
-func (s *BroadcastService) prepareBroadcast(ctx context.Context, timeStr string, t time.Time) (
+func (s *BroadcastService) prepareBroadcast(ctx context.Context, chats []*model.Chat) (
 	groupedChats map[model.GroupName][]*model.Chat,
 	groupNames []model.GroupName,
 	confs []model.ScheduleConfig,
 	shouldReturn bool,
 ) {
-	chats, err := s.Chat.GetChatsByDailyTime(ctx, timeStr)
-	if err != nil {
-		s.Report().Err(err).Debug("time", timeStr).Msg("Failed to get chats for broadcast")
-		return nil, nil, nil, true
-	}
-
 	chatCount := len(chats)
 	if chatCount == 0 {
-		log.Debug().Time("time", t).Msg("No chat for broadcast")
+		log.Debug().Msg("No chat for broadcast")
 		return nil, nil, nil, true
 	}
 
 	groupedChats = groupChats(chats)
-	groupCount := len(groupedChats)
-	log.Info().Time("time", t).Int("chats", chatCount).Int("groups", groupCount).Msg("Processing broadcast...")
+	log.Debug().Int("chats", chatCount).Int("groups", len(groupedChats)).Msg("Processing broadcast...")
 
 	// Prepare schedule configs
+
 	groupNames = make([]model.GroupName, 0, len(groupedChats))
 	confs = make([]model.ScheduleConfig, 0, len(groupedChats))
 	for gn := range groupedChats {

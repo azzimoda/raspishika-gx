@@ -1,8 +1,74 @@
 services:
-  raspishika:
-    restart: unless-stopped
-    environment:
-      - TZ=Asia/Yekaterinburg
+  redis:
+    image: redis:8.10-alpine
+    container_name: raspishika-redis
+    # command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
     volumes:
-      - ./.env:/app/.env
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - raspishika-network
+    # environment:
+    #   - REDIS_PASSWORD=${REDIS_PASSWORD:-secret}
+
+  api:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    container_name: raspishika-api
+    command: ["/app/api"]
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # - REDIS_PASSWORD=${REDIS_PASSWORD:-secret}
+      - REDIS_DB=0
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - TZ=Asia/Yekaterinburg
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - raspishika-network
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: bot.Dockerfile
+    container_name: raspishika-bot
+    command: ["/app/bot"]
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID:-0}
+      - SCRAPER_HOST=api
+      - SCRAPER_PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - TZ=Asia/Yekaterinburg
+      - BROWSER_SCALE=${BROWSER_SCALE:-1}
+      - HANDLE_VACATION=${HANDLE_VACATION:-true}
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
       - ./storage:/app/storage
+    networks:
+      - raspishika-network
+    restart: unless-stopped
+
+networks:
+  raspishika-network:
+    driver: bridge
+
+volumes:
+  redis-data:

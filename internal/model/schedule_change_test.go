@@ -49,9 +49,6 @@ func TestSynchronize(t *testing.T) {
 }
 
 func TestSchedule(t *testing.T) {
-	teacher1 := "Teacher 1"
-	teacher2 := "Teacher 2"
-
 	pairEmpty := Pair{Kind: PairKindEmpty}
 	pair1 := Pair{
 		Kind:       PairKindSubject,
@@ -59,7 +56,7 @@ func TestSchedule(t *testing.T) {
 		StartTime:  "8:00",
 		EndTime:    "9:35",
 		Discipline: "Pair 1",
-		Teacher:    &teacher1,
+		Teacher:    "Teacher 1",
 		Classroom:  "1(1)",
 	}
 	pair2 := Pair{
@@ -68,7 +65,7 @@ func TestSchedule(t *testing.T) {
 		StartTime:  "8:00",
 		EndTime:    "9:35",
 		Discipline: "Pair 2",
-		Teacher:    &teacher2,
+		Teacher:    "Teacher 2",
 		Classroom:  "2(2)",
 	}
 

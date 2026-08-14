@@ -1,33 +1,37 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
-	"github.com/azzimoda/raspishika-gx/internal/scraper"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
+	"github.com/spf13/viper"
 )
 
-func NewServices(container *repository.Container) (*Services, error) {
-	browser, err := browser.New()
+func NewServices(ctx context.Context, container *repository.Container) (*Services, error) {
+	browser, err := browser.New(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("browser: %w", err)
 	}
 
-	scraper := scraper.New(browser)
+	scraperAddr := fmt.Sprintf("%s:%s",
+		viper.GetString(config.KeyScraperHost), viper.GetString(config.KeyScraperPort))
+	scraperAPI := apiclient.New(scraperAddr)
 
 	return &Services{
 		Browser:  browser,
 		Proxy:    NewProxyService(container.Proxy),
 		Chat:     NewChatService(container.Chat),
-		Schedule: NewScheduleService(browser, scraper, container.Schedule, container.Group),
+		Schedule: NewScheduleService(scraperAPI, browser, container.Schedule),
 		Stats:    NewStatsService(container.Log, container.Chat),
-		// Log:      NewLogService(container.Log),
 	}, nil
 }
 
 type Services struct {
-	Browser  *browser.BrowserService
+	Browser  *browser.ChromedpBrowser
 	Proxy    *ProxyService
 	Chat     *ChatService
 	Schedule *ScheduleService
@@ -41,19 +45,19 @@ func (s *Services) Stop() error {
 
 func (s *Services) HealthCheck() error {
 	if err := s.Browser.HealthCheck(); err != nil {
-		return err
+		return fmt.Errorf("browser: %w", err)
 	}
 	if err := s.Proxy.HealthCheck(); err != nil {
-		return err
+		return fmt.Errorf("proxy: %w", err)
 	}
 	if err := s.Chat.HealthCheck(); err != nil {
-		return err
+		return fmt.Errorf("chat: %w", err)
 	}
 	if err := s.Schedule.HealthCheck(); err != nil {
-		return err
+		return fmt.Errorf("schedule: %w", err)
 	}
 	if err := s.Stats.HealthCheck(); err != nil {
-		return err
+		return fmt.Errorf("stats: %w", err)
 	}
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
@@ -298,14 +299,18 @@ func (h *handler) handleCQConfigDarkMode(ctx context.Context, b *bot.Bot, update
 }
 
 func updateSettingsMenuMessage(ctx context.Context, b *bot.Bot, message *models.Message, chat *model.Chat) error {
-	_, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+	if _, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
 		ChatID:      message.Chat.ID,
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        settingsMenuText(chat),
 		ReplyMarkup: settingsMenuMarkup(chat),
-	})
-	return err
+	}); err != nil {
+		log.Warn().Msg("Failed to update settings menu message")
+		return err
+	}
+	log.Debug().Msg("Updated settings menu message")
+	return nil
 }
 
 func settingsMenuText(chat *model.Chat) string {
@@ -544,7 +549,7 @@ func (h *handler) handleCmdAccess(ctx context.Context, b *bot.Bot, update *model
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,
 			Text:            accessMenuText(chat),
-			ReplyMarkup:     botutil.AccessMenuMarkup(chat.Access),
+			ReplyMarkup:     accessMenuMarkup(chat.Access),
 		})
 		addHandlerCtxErr(ctx, err)
 	}
@@ -596,7 +601,7 @@ func (h *handler) handleCQSetAccess(ctx context.Context, b *bot.Bot, update *mod
 		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
 		MessageID:   update.CallbackQuery.Message.Message.ID,
 		Text:        accessMenuText(chat),
-		ReplyMarkup: botutil.AccessMenuMarkup(chat.Access),
+		ReplyMarkup: accessMenuMarkup(chat.Access),
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -620,10 +625,6 @@ func (h *handler) sendDepartmentSelectionMenu(
 	chat *model.Chat,
 	messageThreadID int,
 ) error {
-	if _, err := h.Schedule.EnsureGroups(ctx); err != nil {
-		return err
-	}
-
 	departments, err := h.Schedule.GetDepartments(ctx)
 	if err != nil {
 		return err
@@ -658,8 +659,11 @@ func departmentMenuMarkup(departments []model.Department) models.InlineKeyboardM
 	for i := 0; i < len(departments); i += 2 {
 		row := make([]models.InlineKeyboardButton, 0)
 		for j := i; j < len(departments) && j < i+2; j++ {
-			row = append(row, models.InlineKeyboardButton{Text: departments[j].Name.String(),
-				CallbackData: fmt.Sprintf("%s\n%s", botutil.CallbackCommandSelectDepartment, departments[j].Name)})
+			row = append(row, models.InlineKeyboardButton{
+				Text: departments[j].Name,
+				CallbackData: fmt.Sprintf("%s\n%s",
+					botutil.CallbackCommandSelectDepartment, departments[j].Name),
+			})
 		}
 		keyboard = append(keyboard, row)
 	}
@@ -669,7 +673,7 @@ func departmentMenuMarkup(departments []model.Department) models.InlineKeyboardM
 	})
 	return models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }
-func groupMenuMarkup(groups []*model.Group) models.ReplyKeyboardMarkup {
+func groupMenuMarkup(groups []model.Group) models.ReplyKeyboardMarkup {
 	keyboard := [][]models.KeyboardButton{{{Text: "Отмена"}}}
 	for i := 0; i < len(groups); i += 2 {
 		row := make([]models.KeyboardButton, 0)
@@ -692,4 +696,22 @@ func onOffStr(isOn bool) string {
 		return "включено"
 	}
 	return "выключено"
+}
+
+func accessMenuMarkup(accessLevel model.ChatAccessLevel) models.InlineKeyboardMarkup {
+	keyboard := [][]models.InlineKeyboardButton{
+		{},
+		{{Text: "Закрыть", CallbackData: botutil.CallbackCommandDeleteConfig}},
+	}
+	for i := range 3 {
+		text := fmt.Sprint(i)
+		if i == int(accessLevel) {
+			text = fmt.Sprintf("[%d]", i)
+		}
+		keyboard[0] = append(keyboard[0], models.InlineKeyboardButton{
+			Text:         text,
+			CallbackData: fmt.Sprintf("%s\n%d", botutil.CallbackCommandSetAccess, i),
+		})
+	}
+	return models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }

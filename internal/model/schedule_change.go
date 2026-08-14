@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 	"github.com/rs/zerolog/log"
 )
 
@@ -65,13 +64,13 @@ func (s *ScheduleChange) HTML() string {
 			return diffs[i].Number() < diffs[j].Number()
 		}
 
-		date1, err := time.Parse("02.01.2006", diffs[i].Day().Date.String())
+		date1, err := time.Parse("02.01.2006", diffs[i].Day().Date)
 		if err != nil {
-			log.Warn().Err(err).Str("timeStr", diffs[i].Day().Date.String()).Msg("Failed to parse date")
+			log.Warn().Err(err).Str("timeStr", diffs[i].Day().Date).Msg("Failed to parse date")
 		}
-		date2, err := time.Parse("02.01.2006", diffs[j].Day().Date.String())
+		date2, err := time.Parse("02.01.2006", diffs[j].Day().Date)
 		if err != nil {
-			log.Warn().Err(err).Str("timeStr", diffs[j].Day().Date.String()).Msg("Failed to parse date")
+			log.Warn().Err(err).Str("timeStr", diffs[j].Day().Date).Msg("Failed to parse date")
 		}
 
 		return date1.Before(date2)
@@ -81,7 +80,7 @@ func (s *ScheduleChange) HTML() string {
 	var text strings.Builder
 	fmt.Fprintf(&text, "Изменения в расписании группы %s:", s.New.Config.Group.GroupName)
 
-	var currentDate Date
+	var currentDate string
 	for _, diff := range diffs {
 		date := diff.Day().Date
 		if currentDate != date {
@@ -141,7 +140,7 @@ func (d *Diff) IsFullChange() bool {
 func (d *Diff) IsClassroomChanged() bool  { return d.OldPair.Classroom != d.NewPair.Classroom }
 func (d *Diff) IsDisciplineChanged() bool { return d.OldPair.Discipline != d.NewPair.Discipline }
 func (d *Diff) IsTeacherChanged() bool {
-	return refutil.DerefOrTypeDefault(d.OldPair.Teacher) != refutil.DerefOrTypeDefault(d.NewPair.Teacher)
+	return d.OldPair.Teacher != d.NewPair.Teacher
 }
 func (d *Diff) IsMovedInDay() bool { return d.OldPair.Number != d.NewPair.Number }
 func (d *Diff) IsCancelled() bool  { return d.NewPair.IsEmpty() }
@@ -160,7 +159,7 @@ func (d *Diff) pairChangeHTML() string {
 	} else {
 		switch d.NewPair.Kind {
 		case PairKindSubject:
-			text = "<i>Замена :</i>\n" + d.NewPair.TimeSlotString()
+			text = "<i>Замена :</i>\n" + d.NewPair.timeSlotString()
 
 			if d.IsClassroomChanged() {
 				text += fmt.Sprintf(" | <s>%s</s> <b><i>%s</i></b>", d.OldPair.Classroom, d.NewPair.Classroom)
@@ -176,11 +175,9 @@ func (d *Diff) pairChangeHTML() string {
 
 			if d.IsTeacherChanged() {
 				text += fmt.Sprintf("\n    <s>%s</s> <b><i>%s</i></b>",
-					refutil.DerefOrTypeDefault(d.OldPair.Teacher),
-					refutil.DerefOrTypeDefault(d.NewPair.Teacher),
-				)
+					d.OldPair.Teacher, d.NewPair.Teacher)
 			} else {
-				text += fmt.Sprintf("\n    %s", refutil.DerefOrTypeDefault(d.NewPair.Teacher))
+				text += fmt.Sprintf("\n    %s", d.NewPair.Teacher)
 			}
 
 		default:

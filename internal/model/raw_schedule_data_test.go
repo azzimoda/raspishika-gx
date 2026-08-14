@@ -21,8 +21,8 @@ func TestRawSchedule_WithConfig(t *testing.T) {
 		},
 		{
 			name:   "with group",
-			config: model.ScheduleConfig{Group: &model.Group{ID: 1}},
-			want:   model.RawSchedule{Config: model.ScheduleConfig{Group: &model.Group{ID: 1}}},
+			config: model.ScheduleConfig{Group: &model.Group{GroupName: "Group"}},
+			want:   model.RawSchedule{Config: model.ScheduleConfig{Group: &model.Group{GroupName: "Group"}}},
 		},
 	}
 	for _, tt := range tests {

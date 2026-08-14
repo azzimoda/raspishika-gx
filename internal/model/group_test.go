@@ -1,46 +1,162 @@
-package model_test
+package model
 
 import (
+	"errors"
 	"testing"
-
-	"github.com/azzimoda/raspishika-gx/internal/model"
 )
 
-func TestGroupName_ValidateFormat(t *testing.T) {
+func TestGroupNameValidateFormat(t *testing.T) {
 	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		groupName model.GroupName
-		want      model.GroupName
-		wantErr   bool
+		name    string
+		input   GroupName
+		want    GroupName
+		wantErr error
 	}{
-		{"valid group name must be validated", "ИСПт-22-(9)-2", "ИСПт-22-(9)-2", false},
-		{"name without parens be validated", "ИСПт-22-9-2", "ИСПт-22-(9)-2", false},
-		{"name without dashes be validated", "ИСПт 22 (11) 2", "ИСПт-22-(11)-2", false},
-		{"name without dashes and parens be validated", "ИСПт 22 11 2", "ИСПт-22-(11)-2", false},
-		{"name without spaces and parens be validated", "ИСПт2292", "ИСПт-22-(9)-2", false},
-
-		{"invalid case must valudate format but not case", "испт-22-(11)-2", "испт-22-(11)-2", false},
-		{"invalid case without spaces and parens must valudate format but not case", "испт2292", "испт-22-(9)-2", false},
-
-		{"must validate CЭЗт-25-(9)-1 (C is latin capital letter)", "CЭЗт-25-(9)-1", "CЭЗт-25-(9)-1", false},
-
-		{"empty string must cause error", "", "", true},
+		{
+			name:  "already normalized",
+			input: "ИСПт-22-(9)-2",
+			want:  "ИСПт-22-(9)-2",
+		},
+		{
+			name:  "base without parentheses",
+			input: "ГРПт-23-11-1",
+			want:  "ГРПт-23-(11)-1",
+		},
+		{
+			name:  "separated by spaces",
+			input: "ГРПт 24 (9) 1",
+			want:  "ГРПт-24-(9)-1",
+		},
+		{
+			name:  "no separators",
+			input: "ГРПт23(9)1",
+			want:  "ГРПт-23-(9)-1",
+		},
+		{
+			name:  "base eleven",
+			input: "ИСПт-25-(11)-1",
+			want:  "ИСПт-25-(11)-1",
+		},
+		{
+			name:  "min prefix length",
+			input: "АБВ-26-(9)-3",
+			want:  "АБВ-26-(9)-3",
+		},
+		{
+			name:  "max prefix length",
+			input: "АБВГД-27-(11)-4",
+			want:  "АБВГД-27-(11)-4",
+		},
+		{
+			name:  "latin prefix",
+			input: "ABC-22-(9)-1",
+			want:  "ABC-22-(9)-1",
+		},
+		{
+			name:    "empty string",
+			input:   "",
+			want:    "",
+			wantErr: ErrInvalidGroupNameFormat,
+		},
+		{
+			name:    "prefix too short",
+			input:   "АБ-22-(9)-1",
+			want:    "АБ-22-(9)-1",
+			wantErr: ErrInvalidGroupNameFormat,
+		},
+		{
+			name:    "prefix too long",
+			input:   "АБВГДЕ-22-(9)-1",
+			want:    "АБВГДЕ-22-(9)-1",
+			wantErr: ErrInvalidGroupNameFormat,
+		},
+		{
+			name:    "base not 9 or 11",
+			input:   "ИСПт-22-(10)-1",
+			want:    "ИСПт-22-(10)-1",
+			wantErr: ErrInvalidGroupNameFormat,
+		},
+		{
+			name:    "group number not a single digit",
+			input:   "ИСПт-22-(9)-12",
+			want:    "ИСПт-22-(9)-12",
+			wantErr: ErrInvalidGroupNameFormat,
+		},
+		{
+			name:    "year longer than two digits",
+			input:   "ИСПт-222-(9)-1",
+			want:    "ИСПт-222-(9)-1",
+			wantErr: ErrInvalidGroupNameFormat,
+		},
+		{
+			name:    "trailing whitespace",
+			input:   "ИСПт-22-(9)-1 ",
+			want:    "ИСПт-22-(9)-1 ",
+			wantErr: ErrInvalidGroupNameFormat,
+		},
+		{
+			name:    "non-digit group number",
+			input:   "ИСПт-22-(9)-x",
+			want:    "ИСПт-22-(9)-x",
+			wantErr: ErrInvalidGroupNameFormat,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := tt.groupName.ValidateFormat()
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("ValidateGroupName() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("ValidateGroupName() succeeded unexpectedly")
+			got, err := tt.input.ValidateFormat()
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ValidateFormat() error = %v, want %v", err, tt.wantErr)
 			}
 			if got != tt.want {
-				t.Errorf("ValidateGroupName() = %v, want %v", got, tt.want)
+				t.Fatalf("ValidateFormat() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGroupNameParse(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     GroupName
+		wantName  string
+		wantYear  int
+		wantBase  int
+		wantN     int
+		wantError error
+	}{
+		{
+			name:     "normalized name",
+			input:    "ИСПт-22-(9)-1",
+			wantName: "ИСПт",
+			wantYear: 22,
+			wantBase: 9,
+			wantN:    1,
+		},
+		{
+			name:     "base eleven",
+			input:    "ГРПт-23-11-2",
+			wantName: "ГРПт",
+			wantYear: 23,
+			wantBase: 11,
+			wantN:    2,
+		},
+		{
+			name:      "invalid format",
+			input:     "не-группа",
+			wantError: ErrInvalidGroupNameFormat,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name, year, base, n, err := tt.input.Parse()
+			if !errors.Is(err, tt.wantError) {
+				t.Fatalf("Parse() error = %v, want %v", err, tt.wantError)
+			}
+			if name != tt.wantName || year != tt.wantYear || base != tt.wantBase || n != tt.wantN {
+				t.Fatalf("Parse() = (%q, %d, %d, %d), want (%q, %d, %d, %d)",
+					name, year, base, n, tt.wantName, tt.wantYear, tt.wantBase, tt.wantN)
 			}
 		})
 	}

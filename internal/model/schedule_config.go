@@ -9,6 +9,8 @@ func TeacherScheduleConfig(teacher *Teacher, isDark bool) ScheduleConfig {
 	return ScheduleConfig{Teacher: teacher, IsDark: isDark}
 }
 
+// ScheduleConfig describes who the schedule is requested for:
+// either a group or a teacher.
 type ScheduleConfig struct {
 	Group   *Group   `json:"group"`
 	Teacher *Teacher `json:"teacher"`
@@ -19,11 +21,22 @@ func (cs ScheduleConfig) WithDarkMode(isDark bool) ScheduleConfig {
 	return ScheduleConfig{Group: cs.Group, Teacher: cs.Teacher, IsDark: isDark}
 }
 
+func (s *ScheduleConfig) IsEqual(other *ScheduleConfig) bool {
+	if s.Group != nil && other.Group != nil {
+		return s.Group.GroupID == other.Group.GroupID && s.Group.DepartmentID == other.Group.DepartmentID
+	} else if s.Teacher != nil && other.Teacher != nil {
+		return s.Teacher.TeacherID == other.Teacher.TeacherID
+	} else if (*s == ScheduleConfig{}) && (*other == ScheduleConfig{}) {
+		return true
+	}
+	return false
+}
+
 func (cs *ScheduleConfig) ScheduleKey() string {
 	if cs.Group != nil {
 		return fmt.Sprintf("schedule_%s_%s", cs.Group.DepartmentName, cs.Group.GroupName)
 	} else if cs.Teacher != nil {
-		return fmt.Sprintf("teacher_%s", cs.Teacher.Name.Safe())
+		return fmt.Sprintf("teacher_%s", cs.Teacher.SafeName())
 	}
 	return ""
 }
@@ -44,15 +57,4 @@ func (sc *ScheduleConfig) FormatHTML() string {
 	default:
 		return "?"
 	}
-}
-
-func (s *ScheduleConfig) IsEqual(other *ScheduleConfig) bool {
-	if s.Group != nil && other.Group != nil {
-		return s.Group.ID == other.Group.ID
-	} else if s.Teacher != nil && other.Teacher != nil {
-		return s.Teacher.ID == other.Teacher.ID
-	} else if (*s == ScheduleConfig{}) && (*other == ScheduleConfig{}) {
-		return true
-	}
-	return false
 }

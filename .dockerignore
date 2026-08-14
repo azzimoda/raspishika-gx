@@ -2,9 +2,12 @@
 !.
 
 Dockerfile
+*.Dockerfile
 compose.yaml
+compose*.yaml
 
 LICENCE
 README.md
 
 storage
+docs

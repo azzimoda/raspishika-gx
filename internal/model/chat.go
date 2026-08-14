@@ -21,10 +21,10 @@ func (n UserName) String() string { return string(n) }
 type ChatState string
 
 const (
-	ChatStateDefault             ChatState = "default"
-	ChatStateSelectingGroup      ChatState = "selecting_group"
-	ChatStateSelectingTeacher    ChatState = "selecting_teacher"
-	ChatStateSelectingTime       ChatState = "selecting_time"
+	ChatStateDefault          ChatState = "default"
+	ChatStateSelectingGroup   ChatState = "selecting_group"
+	ChatStateSelectingTeacher ChatState = "selecting_teacher"
+	ChatStateSelectingTime    ChatState = "selecting_time"
 )
 
 type ChatAccessLevel int
@@ -44,7 +44,7 @@ type Chat struct {
 	TgChatID         ChatID          `db:"tg_chat_id"`
 	UserName         *UserName       `db:"username"`
 	State            ChatState       `db:"state"`
-	DepartmentName   *DepartmentName `db:"department"`
+	DepartmentName   *string         `db:"department"`
 	GroupName        *GroupName      `db:"group"`
 	DailySendingTime *string         `db:"daily_sending_time"`
 	PairSending      bool            `db:"pair_sending"`

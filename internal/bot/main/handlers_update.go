@@ -39,7 +39,7 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 	}
 
 	conf := model.GroupScheduleConfig(group, darkMode)
-	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
+	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -49,9 +49,9 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 		return
 	}
 
-	setGroupOrTeacherAndCached(ctx, string(groupName), cached)
+	setGroupOrTeacherAndCached(ctx, string(groupName), schedule.IsOld)
 
-	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
+	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, schedule)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -102,9 +102,9 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 
 	callbackQueryID := update.CallbackQuery.ID
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
-	teacherID := model.TeacherID(command.Arg(0))
+	teacherID := command.Arg(0)
 
-	teacher, err := h.Schedule.GetTeacherByTeacherID(ctx, teacherID)
+	teacher, err := h.Schedule.GetTeacherByNameOrID(ctx, teacherID)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -115,7 +115,7 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 	}
 
 	conf := model.TeacherScheduleConfig(teacher, darkMode)
-	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
+	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -124,11 +124,11 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 		})
 		return
 	}
-	log.Trace().Bool("cached", cached).Msg("Got teacher schedule")
+	log.Trace().Bool("old", schedule.IsOld).Msg("Got teacher schedule")
 
-	setGroupOrTeacherAndCached(ctx, string(teacher.Name), cached)
+	setGroupOrTeacherAndCached(ctx, string(schedule.Config.Teacher.Name), schedule.IsOld)
 
-	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
+	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, schedule)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -183,7 +183,7 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 	}
 
 	conf := model.GroupScheduleConfig(group, false)
-	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
+	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -193,9 +193,8 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 		return
 	}
 
-	setGroupOrTeacherAndCached(ctx, string(groupName), cached)
+	setGroupOrTeacherAndCached(ctx, string(groupName), schedule.IsOld)
 
-	schedule := rawSchedule.Transform()
 	tomorrow := schedule.Tomorrow(time.Now())
 
 	message := update.CallbackQuery.Message.Message
@@ -268,7 +267,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 	}
 
 	conf := model.GroupScheduleConfig(group, false)
-	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
+	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -278,9 +277,8 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		return
 	}
 
-	setGroupOrTeacherAndCached(ctx, string(groupName), cached)
+	setGroupOrTeacherAndCached(ctx, string(groupName), schedule.IsOld)
 
-	schedule := rawSchedule.Transform()
 	today := schedule.Today()
 
 	_, err = b.EditMessageText(ctx, &bot.EditMessageTextParams{

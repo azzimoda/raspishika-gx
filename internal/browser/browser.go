@@ -2,52 +2,46 @@ package browser
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/mxschmitt/playwright-go"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-
-	"github.com/azzimoda/raspishika-gx/pkg/config"
 )
 
-func New() (*BrowserService, error) {
+func New(ctx context.Context) (*ChromedpBrowser, error) {
 	restartInterval := viper.GetDuration("browser.restart_interval")
 	if restartInterval == 0 {
 		restartInterval = 24 * time.Hour
 	}
 
-	bs := &BrowserService{
+	b := &ChromedpBrowser{
+		parentContext:   ctx,
 		restartInterval: restartInterval,
 		stopRestarter:   make(chan struct{}),
 		restartDone:     make(chan struct{}),
 	}
 
-	if err := bs.initializeBrowser(); err != nil {
+	if err := b.initializeBrowser(b.parentContext); err != nil {
 		return nil, err
 	}
 
-	if bs.restartInterval > 0 {
-		go bs.runRestarter()
+	if b.restartInterval > 0 {
+		go b.runRestarter()
 	}
 
-	return bs, nil
+	return b, nil
 }
 
-type BrowserService struct {
-	pw             *playwright.Playwright
-	pwBrowser      playwright.Browser
+type ChromedpBrowser struct {
+	parentContext  context.Context
 	chromedpCtx    context.Context
 	chromedpCancel context.CancelFunc
 
-	pwMu        sync.RWMutex
 	chromedpMu  sync.RWMutex
 	restarterMu sync.Mutex
 
@@ -57,39 +51,25 @@ type BrowserService struct {
 	restarting      bool
 }
 
-func (b *BrowserService) initializeBrowser() error {
-	pw, err := playwright.Run()
-	if err != nil {
-		return fmt.Errorf("failed to start Playwright instance: %w", err)
-	}
-
+func (b *ChromedpBrowser) initializeBrowser(ctx context.Context) error {
 	isHeadless := viper.GetBool(config.KeyBrowserHeadless)
 
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: &isHeadless,
-		Timeout:  new(float64(viper.GetDuration(config.KeyBrowserTimeout).Milliseconds())),
-	})
-	if err != nil {
-		pw.Stop()
-		return fmt.Errorf("failed to launch browser: %w", err)
-	}
-
-	width, height := scale(viper.GetInt(config.KeyBrowserWidth), viper.GetInt(config.KeyBrowserHeight), viper.GetFloat64(config.KeyBrowserScale))
-	ctx, cancelExecAllocator := chromedp.NewExecAllocator(
-		context.Background(),
+	width, height := scale(
+		viper.GetInt(config.KeyBrowserWidth),
+		viper.GetInt(config.KeyBrowserHeight),
+		viper.GetFloat64(config.KeyBrowserScale),
+	)
+	ctx, cancelExecAllocator := chromedp.NewExecAllocator(ctx,
 		chromedp.Flag("headless", isHeadless),
 		chromedp.WindowSize(width, height),
 	)
-	ctx, cancelChromeDP := chromedp.NewContext(ctx, chromedp.WithBrowserOption())
-
-	b.pwMu.Lock()
-	b.pw = pw
-	b.pwBrowser = browser
-	b.pwMu.Unlock()
+	ctx, cancelChromeDP := chromedp.NewContext(ctx,
+		chromedp.WithBrowserOption(chromedp.WithDialTimeout(20*time.Second)))
 
 	b.chromedpMu.Lock()
 	b.chromedpCtx = ctx
 	b.chromedpCancel = func() {
+		log.Warn().Msg("BROWSER CONTEXT CANCELLED!!!")
 		cancelChromeDP()
 		cancelExecAllocator()
 	}
@@ -102,7 +82,7 @@ func (b *BrowserService) initializeBrowser() error {
 	return nil
 }
 
-func (b *BrowserService) Close() error {
+func (b *ChromedpBrowser) Close() error {
 	select {
 	case <-b.stopRestarter:
 	default:
@@ -117,29 +97,10 @@ func (b *BrowserService) Close() error {
 	}
 	b.chromedpMu.Unlock()
 
-	// Close Playwright
-	b.pwMu.Lock()
-	defer b.pwMu.Unlock()
-
-	var errs []error
-	if b.pwBrowser != nil {
-		if err := b.pwBrowser.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if b.pw != nil {
-		if err := b.pw.Stop(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("Browser services closed with errors: %v", errors.Join(errs...))
-	}
 	return nil
 }
 
-func (b *BrowserService) runRestarter() {
+func (b *ChromedpBrowser) runRestarter() {
 	defer close(b.restartDone)
 
 	ticker := time.NewTicker(b.restartInterval)
@@ -171,124 +132,70 @@ func (b *BrowserService) runRestarter() {
 	}
 }
 
-func (b *BrowserService) restart() error {
-	// Close old Chromedp
+func (b *ChromedpBrowser) restart() error {
+	log.Info().Msg("Restarting Chromedp...")
+
 	b.chromedpMu.Lock()
 	if b.chromedpCancel != nil {
 		b.chromedpCancel()
 	}
 	b.chromedpMu.Unlock()
 
-	// Close old Playwright
-	b.pwMu.Lock()
-	if b.pwBrowser != nil {
-		if err := b.pwBrowser.Close(); err != nil {
-			b.pwMu.Unlock()
-			return fmt.Errorf("failed to close old browser: %w", err)
-		}
-	}
-	if b.pw != nil {
-		if err := b.pw.Stop(); err != nil {
-			b.pwMu.Unlock()
-			return fmt.Errorf("failed to stop old playwright: %w", err)
-		}
-	}
-	b.pwMu.Unlock()
-
-	// Initialize new browser
-	if err := b.initializeBrowser(); err != nil {
+	if err := b.initializeBrowser(b.parentContext); err != nil {
+		log.Error().Err(err).Msg("Failed to initialize Chromedp")
 		return fmt.Errorf("failed to initialize new browser: %w", err)
 	}
+	log.Info().Msg("Restarted Chromedp successfully")
 
 	return nil
 }
 
-func (b *BrowserService) WithContext(f func(playwright.BrowserContext) error) error {
-	b.pwMu.RLock()
-	browser := b.pwBrowser
-	b.pwMu.RUnlock()
-
-	if browser == nil {
-		return fmt.Errorf("browser not initialized")
-	}
-
-	ctx, err := browser.NewContext()
-	if err != nil {
-		return fmt.Errorf("failed to create browser context: %w", err)
-	}
-	defer ctx.Close()
-
-	return f(ctx)
-}
-func (b *BrowserService) WithPage(f func(playwright.Page) error) error {
-	return b.WithContext(func(bc playwright.BrowserContext) error {
-		page, err := bc.NewPage()
-		if err != nil {
-			return fmt.Errorf("failed to create page: %w", err)
-		}
-		defer page.Close()
-
-		return f(page)
-	})
-}
-
-func (b *BrowserService) TakeScreenshotHTML(html, outputFilename string) error {
+func (b *ChromedpBrowser) ScreenshotHTML(html string) ([]byte, error) {
 	b.chromedpMu.Lock()
 	defer b.chromedpMu.Unlock()
 
+	log.Debug().Msg("Taking screenshot...")
+
 	ctx := b.chromedpCtx
 	if ctx == nil {
-		return fmt.Errorf("browser context not initialized")
+		return nil, fmt.Errorf("browser context not initialized")
 	}
 
 	var imageData []byte
-	screenshotElement := chromedp.Tasks{
+	if err := chromedp.Run(ctx, chromedp.Tasks{
 		chromedp.Navigate("about:blank"),
+		LogAction("Navigated to about:blank"),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			frameTree, err := page.GetFrameTree().Do(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to get frame tree: %w", err)
 			}
 			return page.SetDocumentContent(frameTree.Frame.ID, html).Do(ctx)
 		}),
+		LogAction("Set document content"),
 		chromedp.FullScreenshot(&imageData, 100),
+		LogAction("Taken full screenshot. Done."),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to take screenshot: %w", err)
 	}
-	if err := chromedp.Run(ctx, screenshotElement); err != nil {
-		return fmt.Errorf("failed to take screenshot: %w", err)
-	}
+	log.Trace().Msg("Taken screenshot")
 
-	if err := os.MkdirAll(viper.GetString(config.KeyScreenshotDir), 0755); err != nil {
-		return fmt.Errorf("failed to create screenshot directory: %w", err)
-	}
-
-	if err := os.WriteFile(outputFilename, imageData, 0644); err != nil {
-		return fmt.Errorf("failed to write screenshot to file: %w", err)
-	}
-	return nil
+	return imageData, nil
 }
 
-func (b *BrowserService) HealthCheck() error {
-	b.pwMu.RLock()
-	if b.pwBrowser == nil {
-		b.pwMu.RUnlock()
-		return fmt.Errorf("browser not initialized")
-	}
-	browser := b.pwBrowser
-	b.pwMu.RUnlock()
-
-	page, err := browser.NewPage()
-	if err != nil {
-		return fmt.Errorf("failed to create page: %w", err)
-	}
-	defer page.Close()
-
-	tempDir := os.TempDir()
-	if err := b.TakeScreenshotHTML(`<html><body>test</body></html>`, filepath.Join(tempDir, "screenshot.png")); err != nil {
+func (b *ChromedpBrowser) HealthCheck() error {
+	if _, err := b.ScreenshotHTML(`<html><body>test</body></html>`); err != nil {
 		return fmt.Errorf("failed to take screenshot: %w", err)
 	}
 
 	return nil
 }
+
+func LogAction(msg string) *chromedpLogAction { return &chromedpLogAction{msg} }
+
+type chromedpLogAction struct{ msg string }
+
+func (a *chromedpLogAction) Do(context.Context) error { log.Trace().Msg(a.msg); return nil }
 
 func scale(width, height int, scale float64) (int, int) {
 	return int(float64(width) * scale), int(float64(height) * scale)

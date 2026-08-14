@@ -52,7 +52,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	log.Trace().Str("name", string(group.GroupName)).Msg("Got group")
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
+	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -65,9 +65,9 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	}
 	log.Trace().Msg("Got schedule")
 
-	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), cached)
+	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), schedule.IsOld)
 
-	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
+	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, schedule)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to prepare schedule image")
 		addHandlerCtxErr(ctx, err)
@@ -80,7 +80,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	}
 	log.Trace().Msg("Prepared schedule image")
 
-	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData)
+	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData, schedule.IsOld)
 	addHandlerCtxErr(ctx, err)
 
 	log.Info().Msg("Handled command week")
@@ -125,7 +125,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	}
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
+	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -137,9 +137,8 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 		return
 	}
 
-	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), cached)
+	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), schedule.IsOld)
 
-	schedule := rawSchedule.Transform()
 	tomorrow := schedule.Tomorrow(time.Now())
 
 	text := tomorrow.HTML()
@@ -207,7 +206,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	// Otherwise, send today's schedule
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
+	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -219,9 +218,8 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 		return
 	}
 
-	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), cached)
+	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), schedule.IsOld)
 
-	schedule := rawSchedule.Transform()
 	today := schedule.Today()
 	text := today.DynamicFormatHTML(time.Now())
 	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
@@ -282,7 +280,7 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 	}
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	rawSchedule, cached, err := h.Schedule.GetSchedule(ctx, conf)
+	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
@@ -294,9 +292,9 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 		return
 	}
 
-	setGroupOrTeacherAndCached(ctx, string(groupName), cached)
+	setGroupOrTeacherAndCached(ctx, string(groupName), schedule.IsOld)
 
-	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, rawSchedule)
+	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, schedule)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to prepare schedule image")
 		addHandlerCtxErr(ctx, err)
@@ -308,7 +306,7 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 		return
 	}
 
-	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData)
+	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData, schedule.IsOld)
 	addHandlerCtxErr(ctx, err)
 
 	log.Info().Msg("Handled quick group")

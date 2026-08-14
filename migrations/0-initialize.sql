@@ -61,6 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_teachers_updated_at ON teachers(updated_at);
 CREATE TABLE IF NOT EXISTS recent_teachers(
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	chat_id INTEGER NOT NULL REFERENCES chat(id) ON DELETE CASCADE ON UPDATE CASCADE,
+		-- NOTE: Reference to nonexistent table (must be chats), fixed in migration 6.
 	teacher_id INTEGER NOT NULL REFERENCES teachers(id) ON DELETE CASCADE ON UPDATE CASCADE,
 	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

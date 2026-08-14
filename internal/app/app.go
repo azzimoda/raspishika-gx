@@ -39,8 +39,11 @@ func New() (*App, error) {
 
 	appReporter := new(appReporter)
 
-	services, err := service.NewServices(container)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	services, err := service.NewServices(ctx, container)
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("failed to create services: %w", err)
 	}
 
@@ -56,6 +59,8 @@ func New() (*App, error) {
 	broadcast := service.NewBroadcastService(mainBot, services, appReporter)
 
 	a := &App{
+		ctx:         ctx,
+		cancel:      cancel,
 		db:          db,
 		services:    services,
 		broadcast:   broadcast,
@@ -71,6 +76,8 @@ func New() (*App, error) {
 }
 
 type App struct {
+	ctx       context.Context
+	cancel    context.CancelFunc
 	db        *sqlx.DB
 	services  *service.Services
 	broadcast *service.BroadcastService
@@ -80,8 +87,10 @@ type App struct {
 }
 
 func (a *App) Run() error {
+	defer a.cancel()
+
 	log.Info().Msg("Starting app...")
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(a.ctx, os.Interrupt)
 	defer cancel()
 
 	// Services

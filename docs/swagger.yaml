@@ -1,0 +1,307 @@
+basePath: /api/v1
+definitions:
+  github_com_azzimoda_raspishika-gx_internal_model.Department:
+    properties:
+      name:
+        type: string
+      url:
+        type: string
+    type: object
+  github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse:
+    properties:
+      error:
+        example: group not found
+        type: string
+    type: object
+  github_com_azzimoda_raspishika-gx_internal_model.Group:
+    properties:
+      department_id:
+        example: "15"
+        type: string
+      department_name:
+        example: Отделение СОНХ
+        type: string
+      group_id:
+        example: "205"
+        type: string
+      group_name:
+        example: ИСПт-22-(9)-2
+        type: string
+      year:
+        example: 2026
+        type: integer
+    type: object
+  github_com_azzimoda_raspishika-gx_internal_model.Pair:
+    properties:
+      classroom:
+        example: "215"
+        type: string
+      discipline:
+        example: Математика
+        type: string
+      end_time:
+        example: "9:45"
+        type: string
+      group:
+        example: ИСПт-22-(9)-2
+        type: string
+      kind:
+        allOf:
+        - $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.PairKind'
+        example: subject
+      label:
+        example: Математика
+        type: string
+      number:
+        example: 1
+        type: integer
+      replaced:
+        type: boolean
+      start_time:
+        example: "8:00"
+        type: string
+      subgroup:
+        example: "1"
+        type: string
+      teacher:
+        example: Иванов Иван Иванович
+        type: string
+      title:
+        example: Консультация
+        type: string
+    type: object
+  github_com_azzimoda_raspishika-gx_internal_model.PairKind:
+    enum:
+    - empty
+    - vacation
+    - event
+    - session
+    - iga
+    - subject
+    - practice
+    - exam
+    - consultation
+    type: string
+    x-enum-varnames:
+    - PairKindEmpty
+    - PairKindVacation
+    - PairKindEvent
+    - PairKindSession
+    - PairKindIGA
+    - PairKindSubject
+    - PairKindPractice
+    - PairKindExam
+    - PairKindConsultation
+  github_com_azzimoda_raspishika-gx_internal_model.ScheduleConfig:
+    properties:
+      group:
+        $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Group'
+      is_dark:
+        type: boolean
+      teacher:
+        $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Teacher'
+    type: object
+  github_com_azzimoda_raspishika-gx_internal_model.ScheduleData:
+    properties:
+      config:
+        $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ScheduleConfig'
+      days:
+        items:
+          $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ScheduleDay'
+        type: array
+      isOld:
+        type: boolean
+    type: object
+  github_com_azzimoda_raspishika-gx_internal_model.ScheduleDay:
+    properties:
+      date:
+        example: "2026-09-01"
+        type: string
+      pairs:
+        items:
+          $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Pair'
+        type: array
+      week_day:
+        example: вторник
+        type: string
+      week_kind:
+        example: нечетная
+        type: string
+    type: object
+  github_com_azzimoda_raspishika-gx_internal_model.Teacher:
+    properties:
+      name:
+        example: Иванов Иван Иванович
+        type: string
+      teacher_id:
+        example: "205"
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API для доступа к расписанию МПК ТИУ (демо-версия)
+  title: Raspishika API Demo
+  version: "1.0"
+paths:
+  /departments:
+    get:
+      description: Returns list of all existing departments
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Department'
+            type: array
+      summary: Get departments
+      tags:
+      - schedule
+      - departments
+  /groups:
+    get:
+      description: Returns list of all existing groups, optionally filtered by department
+      parameters:
+      - description: Department name
+        in: query
+        name: department
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Group'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+      summary: Get groups
+      tags:
+      - schedule
+      - groups
+  /groups/{name}:
+    get:
+      description: Returns a group by name
+      parameters:
+      - description: Group name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Group'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+      summary: Get group
+      tags:
+      - groups
+  /schedule:
+    get:
+      description: Returns schedule of a group or a teacher
+      parameters:
+      - description: Group name
+        in: query
+        name: group
+        type: string
+      - description: Teacher name or college internal ID
+        in: query
+        name: teacher
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ScheduleData'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+      summary: Get schedule
+      tags:
+      - schedule
+      - groups
+      - teachers
+  /teachers:
+    get:
+      description: Returns list of all existing teachers
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Teacher'
+            type: array
+      summary: Get teachers
+      tags:
+      - schedule
+      - teachers
+  /teachers/{name_or_id}:
+    get:
+      description: Returns a teacher by name or college internal ID
+      parameters:
+      - description: Teacher name or college internal ID
+        in: path
+        name: name_or_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Teacher'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+      summary: Get teacher
+      tags:
+      - teachers
+  /teachers/search:
+    get:
+      description: Returns a list of teachers matched by part of name
+      parameters:
+      - description: Teacher name part
+        in: query
+        name: q
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Teacher'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+      summary: Search teachers
+      tags:
+      - teachers
+swagger: "2.0"

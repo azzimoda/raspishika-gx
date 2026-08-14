@@ -52,9 +52,9 @@ type ChatRepository interface {
 	DeleteChat(ctx context.Context, id int64) error
 
 	CountAllConfiguredGroups(context.Context) (int, error)
-	GetWatchedGroups(context.Context) ([]*model.Group, error)
+	GetWatchedGroupNames(context.Context) ([]string, error)
 
-	AddRecentTeacher(ctx context.Context, chatID, teacherID int64) error
+	AddRecentTeacher(context.Context, *model.RecentTeacher) error
 	GetRecentTeachers(ctx context.Context, chatID int64) ([]*model.RecentTeacher, error)
 }
 
@@ -380,25 +380,24 @@ func (r *chatRepository) GetWatchedGroupNames(ctx context.Context) ([]string, er
 	return groupNames, err
 }
 
-func (r *chatRepository) AddRecentTeacher(ctx context.Context, chatID, teacherID int64) error {
+func (r *chatRepository) AddRecentTeacher(ctx context.Context, recentTeacher *model.RecentTeacher) error {
 	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create transaction: %w", err)
 	}
 
 	// Delete existing row with same teacher
-	if _, err := tx.ExecContext(
+	if _, err := tx.NamedExecContext(
 		ctx,
-		`DELETE FROM recent_teachers WHERE chat_id = ? AND teacher_id = ?`,
-		chatID,
-		teacherID,
+		`DELETE FROM recent_teachers WHERE chat_id = :chat_id AND teacher_id = :teacher_id`,
+		recentTeacher,
 	); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to delete same recent teacher: %w", err)
 	}
 
 	// Get recent teachers.
-	rt, err := r.GetRecentTeachers(ctx, chatID)
+	rt, err := r.GetRecentTeachers(ctx, recentTeacher.ChatID)
 	if err != nil {
 		tx.Rollback()
 		return fmt.Errorf("failed to get recent teachers: %w", err)
@@ -406,23 +405,20 @@ func (r *chatRepository) AddRecentTeacher(ctx context.Context, chatID, teacherID
 
 	if len(rt) >= 4 {
 		// Delete oldest recent teacher.
-		if _, err := tx.NamedExecContext(
-			ctx,
-			`DELETE FROM recent_teachers WHERE chat_id = :chat_id AND teacher_id = :teacher_id`,
-			rt[0],
-		); err != nil {
+		if _, err := tx.NamedExecContext(ctx, `
+			DELETE FROM recent_teachers WHERE chat_id = :chat_id AND teacher_id = :teacher_id
+		`, rt[0]); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("failed to delete oldest recent teacher: %w", err)
 		}
 	}
 
 	// Add new recent teacher.
-	if _, err := tx.ExecContext(
-		ctx,
-		`INSERT INTO recent_teachers (chat_id, teacher_id) VALUES (?,?)`,
-		chatID,
-		teacherID,
-	); err != nil {
+	if _, err := tx.NamedExecContext(ctx, `
+		INSERT INTO recent_teachers (chat_id, teacher_id, teacher_name)
+		VALUES (:chat_id, :teacher_id, :teacher_name)
+	`, recentTeacher); err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to insert recent teacher: %w", err)
 	}
 

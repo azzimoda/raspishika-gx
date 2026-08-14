@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func NewSchedule(cacheKey string, rawSchedule RawSchedule) (*Schedule, error) {
+func NewSchedule(cacheKey string, rawSchedule ScheduleData) (*Schedule, error) {
 	jsonData, err := json.Marshal(rawSchedule)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal raw schedule: %w", err)
@@ -24,8 +24,8 @@ type Schedule struct {
 
 func (s *Schedule) IsActual(ttl time.Duration) bool { return s.UpdatedAt.Add(ttl).After(time.Now()) }
 
-func (s *Schedule) Unmarshal() (*RawSchedule, error) {
-	var rawSchedule RawSchedule
-	err := json.Unmarshal([]byte(s.Data), &rawSchedule)
-	return &rawSchedule, err
+func (s *Schedule) Unmarshal() (*ScheduleData, error) {
+	var scheduleData ScheduleData
+	err := json.Unmarshal([]byte(s.Data), &scheduleData)
+	return &scheduleData, err
 }

@@ -17,6 +17,14 @@ const (
 	KeyDBFile         = "db_file"
 	KeyDBMigrationDir = "db_migration_dir"
 
+	KeyRedisHost     = "redis_host"
+	KeyRedisPort     = "redis_port"
+	KeyRedisDB       = "redis_db"
+	KeyRedisPassword = "redis_password"
+
+	KeyScraperHost = "scraper_host"
+	KeyScraperPort = "scraper_port"
+
 	KeyBrowserHeadless        = "browser_headless"
 	KeyBrowserTimeout         = "browser_timeout"
 	KeyBrowserWidth           = "browser_width"
@@ -59,6 +67,14 @@ func Init() error {
 
 	viper.SetDefault(KeyDBFile, "storage/database/data.db")
 	viper.SetDefault(KeyDBMigrationDir, "migrations")
+
+	viper.SetDefault(KeyRedisHost, "redis")
+	viper.SetDefault(KeyRedisPort, "6379")
+	viper.SetDefault(KeyRedisDB, 1)
+	viper.SetDefault(KeyRedisPassword, "")
+
+	viper.SetDefault(KeyScraperHost, "localhost")
+	viper.SetDefault(KeyScraperPort, "8080")
 
 	viper.SetDefault(KeyBrowserHeadless, true)
 	viper.SetDefault(KeyBrowserTimeout, 30*time.Second)

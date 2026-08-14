@@ -178,12 +178,11 @@ func (h *handler) logUpdate(next bot.HandlerFunc) bot.HandlerFunc {
 			messageID = message.ID
 			updateKind = "message"
 			updateData = message.Text
-			logEvent.
-				Int64("chat_id", message.Chat.ID).
+			logEvent.Int64("chat_id", message.Chat.ID).
 				Str("username", message.From.Username).
 				Str("first_name", message.From.FirstName).
 				Str("last_name", message.From.LastName).
-				Str("text", botutil.ShortenText(message.Text, 100)).
+				Str("text", shortenText(message.Text, 100)).
 				Msg("Message handled")
 		} else if update.CallbackQuery != nil {
 			updateKind = "callback_query"
@@ -296,11 +295,11 @@ func (h *handler) makePrehandlerVacation(kind string) bot.Middleware {
 			isVacation := false
 			switch kind {
 			case "week":
-				isVacation = IsVacation(now) && IsVacation(now.AddDate(0, 0, 6))
+				isVacation = botutil.IsVacation(now) && botutil.IsVacation(now.AddDate(0, 0, 6))
 			case "today":
-				isVacation = IsVacation(now)
+				isVacation = botutil.IsVacation(now)
 			case "tomorrow":
-				isVacation = IsVacation(now.AddDate(0, 0, 1))
+				isVacation = botutil.IsVacation(now.AddDate(0, 0, 1))
 			}
 
 			if !isVacation {
@@ -383,4 +382,11 @@ func setGroupOrTeacherAndCached(ctx context.Context, groupOrTeacher string, cach
 	} else {
 		log.Warn().Msg("cachedValue is not a bool pointer")
 	}
+}
+
+func shortenText(text string, maxLength int) string {
+	if len(text) > maxLength {
+		return text[:maxLength-2] + "…"
+	}
+	return text
 }

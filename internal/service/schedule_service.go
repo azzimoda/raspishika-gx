@@ -7,88 +7,80 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strings"
 
 	"github.com/rs/zerolog/log"
-	"github.com/schollz/closestmatch"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
-	"github.com/azzimoda/raspishika-gx/internal/scraper"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 )
 
+type APIClient interface {
+	GetDepartments(context.Context) ([]model.Department, error)
+	GetGroup(ctx context.Context, name string) (*model.Group, error)
+	GetGroups(ctx context.Context, departmentName string) ([]model.Group, error)
+
+	GetTeacher(ctx context.Context, nameOrID string) (*model.Teacher, error)
+	SearchTeachers(context.Context, string) ([]model.Teacher, error)
+	GetTeachers(context.Context) ([]model.Teacher, error)
+	GetSchedule(context.Context, *apiclient.GetScheduleParams) (schedule *model.ScheduleData, err error)
+}
+
 func NewScheduleService(
-	browserService *browser.BrowserService,
-	scraper *scraper.ScraperService,
+	scraperAPI APIClient,
+	browser *browser.ChromedpBrowser,
 	scheduleRepo repository.ScheduleRepository,
-	groupRepo repository.GroupRepository,
 ) *ScheduleService {
 	return &ScheduleService{
-		browser:  browserService,
-		scraper:  scraper,
+		scraper:  scraperAPI,
+		browser:  browser,
 		schedule: scheduleRepo,
-		groups:   groupRepo,
 		sf:       new(singleflight.Group),
 	}
 }
 
 type ScheduleService struct {
-	browser  *browser.BrowserService
-	scraper  *scraper.ScraperService
+	scraper  APIClient
+	browser  *browser.ChromedpBrowser
 	schedule repository.ScheduleRepository
-	groups   repository.GroupRepository
 	sf       *singleflight.Group
 }
 
 // GetSchedule returns the schedule for the given config and uses cache if available.
-func (s *ScheduleService) GetSchedule(ctx context.Context, conf model.ScheduleConfig) (
-	schedule *model.RawSchedule,
-	cached bool,
-	err error,
-) {
-	key := conf.ScheduleKey()
-	if rawSchedule, ok := s.GetScheduleCache(key); ok {
-		log.Debug().Str("cacheKey", key).Msg("Cache hit") // Use cache
-		rawSchedule.Config.IsDark = conf.IsDark
-		return rawSchedule, true, nil
-	}
-	log.Debug().Str("cacheKey", key).Msg("Cache miss") // Update cache
-	rawSchedule, err := s.UpdateScheduleCache(ctx, s.browser, conf)
+func (s *ScheduleService) GetSchedule(
+	ctx context.Context, conf model.ScheduleConfig,
+) (schedule *model.ScheduleData, err error) {
+	schedule, err = s.scraper.GetSchedule(ctx, scheduleConfigToAPIParams(&conf))
 	if err != nil {
-		return nil, false, err
+		return
 	}
-	rawSchedule.Config.IsDark = conf.IsDark
-	return rawSchedule, false, nil
+	schedule.Config = conf
+	return
 }
 
 // GetSchedules returns the schedules for the given configs and uses cache if available.
-//
-// If errors occur on any of the configs, they are accumulated and returned as a single error. Successfully
-// processed configs are returned along with any errors that occurred during processing.
 func (s *ScheduleService) GetSchedules(
-	ctx context.Context,
-	confs []model.ScheduleConfig,
-) ([]*model.RawSchedule, error) {
-	var (
-		rawSchedules []*model.RawSchedule
-		errs         []error
-	)
-	for _, conf := range confs {
-		rawSchedule, _, err := s.GetSchedule(ctx, conf)
+	ctx context.Context, confs []model.ScheduleConfig,
+) ([]*model.ScheduleData, error) {
+	schedules := make([]*model.ScheduleData, len(confs))
+	errs := make([]error, len(confs))
+
+	for i, conf := range confs {
+		schedule, err := s.GetSchedule(ctx, conf)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to get schedule: %w", err))
+			errs[i] = fmt.Errorf("failed to get schedule: %w", err)
 		} else {
-			rawSchedules = append(rawSchedules, rawSchedule)
+			schedules[i] = schedule
 		}
 	}
 	if len(errs) > 0 {
-		return rawSchedules, fmt.Errorf("errors occurred: %w", errors.Join(errs...))
+		return schedules, fmt.Errorf("errors occurred: %w", errors.Join(errs...))
 	}
-	return rawSchedules, nil
+	return schedules, nil
 }
 
 // GetScheduleCache checks if the schedule cache is actual for the given key.
@@ -99,14 +91,14 @@ func (s *ScheduleService) GetSchedules(
 // When cache exists and is expired, returns raw schedule and false.
 //
 // When cache does not exist, returns nil and false.
-func (s *ScheduleService) GetScheduleCache(key string) (rawSchedule *model.RawSchedule, ok bool) {
+func (s *ScheduleService) GetScheduleCache(key string) (rawSchedule *model.ScheduleData, ok bool) {
 	if scheduleCache, err := s.schedule.GetByKey(context.Background(), key); err == nil {
-		rawSchedule, errUnmarshal := scheduleCache.Unmarshal()
+		schedule, errUnmarshal := scheduleCache.Unmarshal()
 		if scheduleCache.IsActual(viper.GetDuration(config.KeyCacheScheduleTTL)) {
-			return rawSchedule, errUnmarshal == nil
+			return schedule, errUnmarshal == nil
 		}
 		log.Trace().Msg("Cache expired for schedule key")
-		return rawSchedule, false
+		return schedule, false
 	} else if errors.Is(err, sql.ErrNoRows) {
 		log.Trace().Err(err).Msg("No cache found for schedule key")
 	} else {
@@ -115,19 +107,22 @@ func (s *ScheduleService) GetScheduleCache(key string) (rawSchedule *model.RawSc
 	return nil, false
 }
 func (s *ScheduleService) UpdateScheduleCache(
-	ctx context.Context,
-	browser *browser.BrowserService,
-	conf model.ScheduleConfig,
-) (*model.RawSchedule, error) {
+	ctx context.Context, conf model.ScheduleConfig,
+) (*model.ScheduleData, error) {
 	// Fetch schedule
+
 	key := conf.ScheduleKey()
-	result, err, _ := s.sf.Do(key, func() (any, error) { return s.scrapeSchedule(ctx, conf) })
+	result, err, _ := s.sf.Do(key, func() (any, error) {
+		sch, err := s.scraper.GetSchedule(ctx, scheduleConfigToAPIParams(&conf))
+		return sch, err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to scrape schedule: %w", err)
 	}
-	rawSchedule := result.(*model.RawSchedule)
+	rawSchedule := result.(*model.ScheduleData)
 
 	// Save cache
+
 	scheduleCache, err := model.NewSchedule(key, *rawSchedule)
 	if err != nil {
 		return rawSchedule, fmt.Errorf("cache not updated: %w", err)
@@ -138,6 +133,7 @@ func (s *ScheduleService) UpdateScheduleCache(
 	}
 	return rawSchedule, nil
 }
+
 func (s *ScheduleService) GetChanges(
 	ctx context.Context,
 	groupNames []model.GroupName,
@@ -157,20 +153,25 @@ func (s *ScheduleService) GetChanges(
 		oldRawSchedule, ok := s.GetScheduleCache(conf.ScheduleKey())
 		if !ok || oldRawSchedule == nil {
 			log.Warn().Err(err).Str("key", conf.ScheduleKey()).Msg("No change for the schedule config")
-			if _, err := s.UpdateScheduleCache(ctx, s.browser, conf); err != nil {
+			if _, err := s.UpdateScheduleCache(ctx, conf); err != nil {
 				errs = append(errs, fmt.Errorf("failed to update schedule cache: %w", err))
 			}
 			continue
 		}
 
-		newRawSchedule, err := s.UpdateScheduleCache(ctx, s.browser, conf)
+		newSchedule, err := s.UpdateScheduleCache(ctx, conf)
 		if err != nil {
 			log.Error().Err(err).Str("key", conf.ScheduleKey()).Msg("Failed to update schedule cache")
 			errs = append(errs, fmt.Errorf("failed to update schedule cache: %w", err))
 			continue
 		}
 
-		change := model.NewScheduleChange(oldRawSchedule.Transform(), newRawSchedule.Transform())
+		change := model.NewScheduleChange(*oldRawSchedule, *newSchedule)
+		if change == nil {
+			log.Warn().Msg("Unexpected different schedule configs; supposed to be unreachable")
+			continue
+		}
+
 		diffs := change.Diffs()
 		if len(diffs) > 0 {
 			log.Debug().Any("conf", conf).Msg("Schedule change detected")
@@ -182,212 +183,73 @@ func (s *ScheduleService) GetChanges(
 }
 
 func (s *ScheduleService) PrepareScheduleImage(
-	ctx context.Context,
-	rawSchedule *model.RawSchedule,
+	ctx context.Context, schedule *model.ScheduleData,
 ) (fileName string, bytes []byte, err error) {
-	if rawSchedule == nil {
-		return "", nil, fmt.Errorf("schedule is nil")
-	}
+	log.Trace().Msg("Preparing schedule image...")
 
-	fileName, bytes, err = s.htmlToImage(rawSchedule.Config, rawSchedule.HTML(getScheduleTemplate(rawSchedule.Config.IsDark)))
+	template := getScheduleTemplate(schedule.Config.IsDark)
+	fileName, bytes, err = s.screenshot(schedule.Config, schedule.HTML(template))
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to generate schedule image: %w", err)
 	}
 	return fileName, bytes, nil
 }
 
-func (s *ScheduleService) EnsureGroups(ctx context.Context) (updated bool, err error) {
-	if err := s.EnsureDepartments(ctx); err != nil {
-		return false, fmt.Errorf("failed to ensure departments: %w", err)
-	}
-
-	actualGroupsCount := 0
-	if actualGroups, err := s.groups.GetAllActualGroups(ctx); err == nil {
-		actualGroupsCount = len(actualGroups)
-	} else {
-		log.Debug().Err(err).Msg("Failed to get actual groups from repository, fallback to 0")
-	}
-
-	outdatedGroups, err := s.groups.GetOutdatedActualGroups(ctx)
-	if err != nil {
-		return false, fmt.Errorf("failed to check outdated groups: %w", err)
-	}
-
-	if actualGroupsCount == 0 || len(outdatedGroups) > 0 {
-		if err := s.UpdateGroups(ctx); err != nil {
-			return false, fmt.Errorf("failed to udpate groups: %w", err)
-		}
-		return true, nil
-	}
-
-	log.Trace().Msg("Group data is up to date")
-	return false, nil
-}
-func (s *ScheduleService) UpdateGroups(ctx context.Context) error {
-	log.Info().Msg("Updating group data...")
-	newGroups, err := s.scraper.ScrapeGroups()
-	if err != nil {
-		return fmt.Errorf("failed to scrape groups: %w", err)
-	}
-
-	if err := s.groups.UpdateGroups(ctx, newGroups); err != nil {
-		return fmt.Errorf("failed to update groups: %w", err)
-	}
-	return nil
-}
 func (s *ScheduleService) GetGroupByName(ctx context.Context, name model.GroupName) (*model.Group, error) {
-	return s.groups.GetGroupByName(ctx, name)
+	return s.scraper.GetGroup(ctx, string(name))
 }
-func (s *ScheduleService) GetGroupsByDepartmentName(ctx context.Context, name string) ([]*model.Group, error) {
-	return s.groups.GetDepartmentActualGroups(ctx, name)
+func (s *ScheduleService) GetGroupsByDepartmentName(ctx context.Context, name string) ([]model.Group, error) {
+	return s.scraper.GetGroups(ctx, name)
 }
 func (s *ScheduleService) ValidateGroupName(ctx context.Context, name model.GroupName) (model.GroupName, error) {
-	return s.groups.ValidateName(ctx, name)
-}
-func (s *ScheduleService) DeleteAllGroups(ctx context.Context) error {
-	log.Warn().Msg("Deleting all groups...")
-	return s.groups.DeleteAllGroups(ctx)
-}
-
-func (s *ScheduleService) EnsureDepartments(ctx context.Context) error {
-	deps, err := s.groups.GetAllDepartments(ctx)
+	g, err := s.scraper.GetGroup(ctx, string(name))
 	if err != nil {
-		return fmt.Errorf("failed to get departments: %w", err)
+		return name, err
 	}
-
-	outdatedDeps, err := s.groups.GetOutdatedDepartments(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get outdated departments: %w", err)
-	}
-
-	if len(deps) == 0 || len(outdatedDeps) > 0 {
-		log.Debug().Msg("Departments cache miss")
-		return s.UpdateDepartments(ctx)
-	} else {
-		log.Debug().Msg("Departments cache hit")
-	}
-	return nil
+	return g.GroupName, nil
 }
-func (s *ScheduleService) UpdateDepartments(ctx context.Context) error {
-	log.Info().Msg("Updating departments data...")
-	newDeps, err := s.scraper.ScrapeDepartments()
-	if err != nil {
-		return fmt.Errorf("failed to scrape departments: %w", err)
-	}
 
-	for _, d := range newDeps {
-		if err := s.groups.InsertOrUpdateDepartment(ctx, &d); err != nil {
-			log.Error().Err(err).Any("department", d).Msg("Failed to insert or update department")
-		}
-	}
-	return nil
-}
 func (s *ScheduleService) GetDepartments(ctx context.Context) ([]model.Department, error) {
-	return s.groups.GetAllDepartments(ctx)
+	return s.scraper.GetDepartments(ctx)
 }
 
-func (s *ScheduleService) EnsureTeachers(ctx context.Context) error {
-	teachers, err := s.groups.GetAllTeachers(ctx)
+func (s *ScheduleService) GetTeacherByNameOrID(ctx context.Context, nameOrID string) (*model.Teacher, error) {
+	return s.scraper.GetTeacher(ctx, nameOrID)
+}
+
+func (s *ScheduleService) FindTeachersByName(ctx context.Context, name string) ([]model.Teacher, error) {
+	return s.scraper.SearchTeachers(ctx, name)
+}
+
+func (s *ScheduleService) screenshot(conf model.ScheduleConfig, html string) (string, []byte, error) {
+	log.Debug().Msg("Taking screenshot...")
+
+	imageData, err := s.browser.ScreenshotHTML(html)
 	if err != nil {
-		return fmt.Errorf("failed to get teachers: %w", err)
-	}
-
-	outdatedTeachers, err := s.groups.GetOutdatedTeachers(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get outdated teachers: %w", err)
-	}
-
-	if len(teachers) == 0 || len(outdatedTeachers) > 0 {
-		return s.UpdateTeachers(ctx)
-	}
-	return nil
-}
-func (s *ScheduleService) UpdateTeachers(ctx context.Context) error {
-	log.Info().Msg("Updating teachers data...")
-	newTeachers, err := s.scraper.ScrapeTeachers()
-	if err != nil {
-		return fmt.Errorf("failed to scrape teachers: %w", err)
-	}
-
-	return s.groups.UpdateTeachers(ctx, newTeachers)
-}
-func (s *ScheduleService) GetTeacherByTeacherID(ctx context.Context, teacherID model.TeacherID) (*model.Teacher, error) {
-	return s.groups.GetTeacherByID(ctx, teacherID)
-}
-func (s *ScheduleService) FindTeachersByName(ctx context.Context, name string) ([]*model.Teacher, error) {
-	log.Debug().Msg("Finding teachers by name...")
-
-	teachers, err := s.groups.GetAllTeachers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get teachers: %w", err)
-	}
-	log.Trace().Int("teachers", len(teachers)).Send()
-
-	names := make([]string, len(teachers))
-	for i, t := range teachers {
-		names[i] = t.Name.String()
-	}
-
-	matchedNames := matchStrings(names, name, 5)
-	log.Trace().Any("matchedNames", matchedNames).Send()
-
-	matchedTeachers := make([]*model.Teacher, len(matchedNames))
-	for i, n := range matchedNames {
-		for _, t := range teachers {
-			if t.Name.String() == n {
-				matchedTeachers[i] = t
-				break
-			}
-		}
-	}
-	log.Trace().Any("matchedTeachers", matchedTeachers).Send()
-	return matchedTeachers, nil
-}
-func (s *ScheduleService) GetChatRecentTeachers(ctx context.Context, chatID int64) ([]*model.Teacher, error) {
-	return s.groups.GetChatRecentTeachers(ctx, chatID)
-}
-
-func (s *ScheduleService) htmlToImage(conf model.ScheduleConfig, html string) (string, []byte, error) {
-	imageFileName := path.Join(viper.GetString(config.KeyScreenshotDir), scheduleScreenshotFileName(conf))
-	if err := s.browser.TakeScreenshotHTML(html, imageFileName); err != nil {
 		return "", nil, fmt.Errorf("failed to take screenshot: %w", err)
 	}
+	log.Trace().Msg("Taken screenshot")
 
-	imageData, err := os.ReadFile(imageFileName)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to read screenshot: %w", err)
+	imageFileName := path.Join(viper.GetString(config.KeyScreenshotDir), scheduleScreenshotFileName(conf))
+	if err := os.MkdirAll(viper.GetString(config.KeyScreenshotDir), 0755); err != nil {
+		return imageFileName, nil, fmt.Errorf("failed to create screenshot directory: %w", err)
 	}
+
+	if err := os.WriteFile(imageFileName, imageData, 0644); err != nil {
+		return imageFileName, nil, fmt.Errorf("failed to write screenshot to file: %w", err)
+	}
+	log.Trace().Msg("Saved image file")
+
 	return imageFileName, imageData, nil
 }
 
-func (s *ScheduleService) scrapeSchedule(
-	ctx context.Context,
-	conf model.ScheduleConfig,
-) (*model.RawSchedule, error) {
-	departmentIDs, err := s.groups.GetAllDepartmentIDs(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get department IDs: %w", err)
-	}
-
-	url := scraper.ScheduleURL(conf, departmentIDs)
-	if conf.Group != nil {
-		return s.scraper.ScrapeSchedule(url, conf)
-	} else if conf.Teacher != nil {
-		return s.scraper.ScrapeScheduleWithBrowser(url, conf)
-	} else {
-		return nil, fmt.Errorf("invalid schedule config")
-	}
-}
-
 func (s *ScheduleService) HealthCheck() error {
-	if _, err := s.groups.GetAllGroups(context.Background()); err != nil {
-		return err
+	departments, err := s.GetDepartments(context.Background())
+	if err != nil || len(departments) == 0 {
+		return fmt.Errorf("departments: %w", err)
 	}
-	if _, err := s.GetDepartments(context.Background()); err != nil {
-		return err
-	}
-	if _, err := s.groups.GetAllTeachers(context.Background()); err != nil {
-		return err
+	if _, err := s.GetGroupsByDepartmentName(context.Background(), departments[0].Name); err != nil {
+		return fmt.Errorf("groups: %w", err)
 	}
 	return nil
 }
@@ -420,12 +282,13 @@ func getScheduleTemplate(is_dark bool) string {
 
 func scheduleScreenshotFileName(conf model.ScheduleConfig) string { return conf.ImageKey() + ".png" }
 
-// matchStrings returns the closest matches for a given target string from a list of strings.
-func matchStrings(strs []string, target string, n int) []string {
-	for _, s := range strs {
-		if strings.EqualFold(s, target) {
-			return []string{s}
-		}
+func scheduleConfigToAPIParams(conf *model.ScheduleConfig) *apiclient.GetScheduleParams {
+	params := new(apiclient.GetScheduleParams)
+	if conf.Group != nil {
+		params.Group = string(conf.Group.GroupName)
 	}
-	return closestmatch.New(strs, []int{2, 3, 4}).ClosestN(target, n)
+	if conf.Teacher != nil {
+		params.Teacher = conf.Teacher.TeacherID
+	}
+	return params
 }

@@ -7,63 +7,16 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/mxschmitt/playwright-go"
+	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/html"
-
-	"github.com/azzimoda/raspishika-gx/internal/model"
 )
 
+// ErrParserPanicked is returned by parseSchedule when the HTML parser
+// recovers from a panic while processing the page.
 var ErrParserPanicked = errors.New("parser panicked")
 
-func parseDepartmentGroups(p playwright.Page, department *model.Department) ([]model.Group, error) {
-	log.Trace().Msg("Navigating to department page")
-	if _, err := p.Goto(department.URL.String()); err != nil {
-		return nil, fmt.Errorf("failed to navigate to department page: %w", err)
-	}
-
-	frameLocator := p.FrameLocator("div.com-content-article__body iframe")
-	if err := frameLocator.Locator("#groups").WaitFor(playwright.LocatorWaitForOptions{
-		Timeout: playwright.Float(60_000),
-	}); err != nil {
-		return nil, fmt.Errorf("failed to wait for groups iframe: %w", err)
-	}
-
-	options, err := frameLocator.Locator("#groups option").EvaluateAll(
-		`els => els.map(el => ({ text: el.textContent.trim(), value: el.value, sid: el.getAttribute("sid"), year: el.getAttribute("year") }))`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get groups options: %w", err)
-	}
-
-	var groups []model.Group
-	for _, opt := range options.([]any) {
-		opt := opt.(map[string]any)
-		if !(validateOptionValue(opt["value"]) &&
-			validateOptionValue(opt["text"]) &&
-			validateOptionValue(opt["sid"]) &&
-			validateOptionValue(opt["year"])) {
-			log.Trace().Msg("Option is invalid")
-
-			continue
-		}
-
-		year, err := strconv.ParseInt(opt["year"].(string), 10, 64)
-		if err != nil {
-			continue
-		}
-
-		groups = append(groups, model.Group{
-			GroupID:        model.GroupID(opt["value"].(string)),
-			DepartmentID:   model.DepartmentID(opt["sid"].(string)),
-			GroupName:      model.GroupName(opt["text"].(string)),
-			Year:           model.Year(year),
-			DepartmentName: department.Name,
-		})
-	}
-	return groups, nil
-}
-
-func parseSchedule(sourceHTML string, conf model.ScheduleConfig) (schedule *model.RawSchedule, err error) {
+func parseSchedule(sourceHTML string, conf model.ScheduleConfig) (schedule *model.ScheduleData, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error().Msg("Parser panicked!")
@@ -106,7 +59,10 @@ func parseSchedule(sourceHTML string, conf model.ScheduleConfig) (schedule *mode
 	table.Find("tr.para_num:not(:first-child)").Each(func(i int, s *goquery.Selection) {
 		rows = append(rows, parseScheduleRow(&conf, headers, s))
 	})
-	return &model.RawSchedule{Config: conf, Rows: rows}, nil
+
+	raw := model.RawSchedule{Config: conf, Rows: rows}
+	schedule = new(raw.Transform())
+	return schedule, nil
 }
 
 func parseScheduleRow(config *model.ScheduleConfig, headers []map[string]string, rowSelection *goquery.Selection) model.RawScheduleRow {
@@ -120,7 +76,7 @@ func parseScheduleRow(config *model.ScheduleConfig, headers []map[string]string,
 
 	row := model.RawScheduleRow{
 		Number:    number,
-		TimeRange: model.TimeRange(time_range.First().Text()),
+		TimeRange: time_range.First().Text(),
 		Days:      []model.RawScheduleDay{},
 	}
 	rowSelection.Find("td:nth-child(n+3)").Each(func(i int, daySelection *goquery.Selection) {
@@ -136,9 +92,9 @@ func parseScheduleDay(
 	daySelection *goquery.Selection,
 ) model.RawScheduleDay {
 	day := model.RawScheduleDay{
-		Date:     model.Date(header["date"]),
-		WeekDay:  model.Weekday(header["weekday"]),
-		WeekKind: model.WeekKind(header["week_kind"]),
+		Date:     header["date"],
+		WeekDay:  header["weekday"],
+		WeekKind: header["week_kind"],
 		Pair:     model.Pair{},
 	}
 
@@ -162,7 +118,7 @@ func parseScheduleDay(
 func parseDisciplinePair(config *model.ScheduleConfig, daySelection *goquery.Selection, pair *model.Pair) {
 	// log.Trace().Str("text", daySelection.Text()).Msg("teacher found")
 	teacher := daySelection.Find(".prep").Text()
-	pair.Teacher = &teacher
+	pair.Teacher = teacher
 	classroom := daySelection.Find(".cabs").Text()
 	pair.Classroom = classroom
 	subgroupSelection := daySelection.Find(".podgrupp")
@@ -193,7 +149,7 @@ func parseDisciplinePair(config *model.ScheduleConfig, daySelection *goquery.Sel
 		}
 
 		pair.Discipline = parts[0]
-		pair.Group = &parts[1]
+		pair.Group = parts[1]
 	}
 }
 
@@ -201,7 +157,7 @@ func parseExamConsultationPair(daySelection *goquery.Selection, pair *model.Pair
 	pair.Title = daySelection.Find(".head_ekz").Text()
 	pair.Discipline = daySelection.Find(".disc").Text()
 	teacher := daySelection.Find(".prep").Text()
-	pair.Teacher = &teacher
+	pair.Teacher = teacher
 	pair.Classroom = daySelection.Find(".cabs").Text()
 }
 

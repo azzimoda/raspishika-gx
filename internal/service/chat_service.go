@@ -7,6 +7,7 @@ import (
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
+	"github.com/rs/zerolog/log"
 )
 
 func NewChatService(repo repository.ChatRepository) *ChatService { return &ChatService{repo: repo} }
@@ -61,12 +62,17 @@ func (s *ChatService) GetChatsWithDarkMode(ctx context.Context) ([]*model.Chat, 
 	return s.repo.GetChatsWithDarkMode(ctx)
 }
 
+func (s *ChatService) GetRecentTeachers(ctx context.Context, chatID int64) ([]*model.RecentTeacher, error) {
+	return s.repo.GetRecentTeachers(ctx, chatID)
+}
+
 func (s *ChatService) DeleteChat(ctx context.Context, id int64) error {
+	log.Debug().Int64("id", id).Msg("Deleting chat...")
 	return s.repo.DeleteChat(ctx, id)
 }
 
-func (s *ChatService) AddChatRecentTeacher(ctx context.Context, chatID int64, teacherID int64) error {
-	return s.repo.AddRecentTeacher(ctx, chatID, teacherID)
+func (s *ChatService) AddChatRecentTeacher(ctx context.Context, recentTeacher *model.RecentTeacher) error {
+	return s.repo.AddRecentTeacher(ctx, recentTeacher)
 }
 
 func (s *ChatService) HealthCheck() error {

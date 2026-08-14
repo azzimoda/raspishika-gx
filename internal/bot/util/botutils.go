@@ -83,6 +83,11 @@ func ParseCallbackData(data string) CallbackCommand {
 	return CallbackCommand{Command: command, Args: args}
 }
 
+// TODO: Use it for building callback data.
+func NewCallbackCommand(command string, args ...string) CallbackCommand {
+	return CallbackCommand{Command: command, Args: args}
+}
+
 // CallbackCommand represents a parsed callback command with a command and arguments.
 type CallbackCommand struct {
 	Command string
@@ -95,6 +100,15 @@ func (c CallbackCommand) Arg(i int) string {
 		return c.Args[i]
 	}
 	return ""
+}
+
+func (c CallbackCommand) String() string {
+	b := new(strings.Builder)
+	fmt.Fprint(b, c.Command)
+	for _, s := range c.Args {
+		fmt.Fprintf(b, "\n%s", s)
+	}
+	return b.String()
 }
 
 func DeleteMessage(ctx context.Context, b *bot.Bot, message *models.Message) (bool, error) {
@@ -138,7 +152,9 @@ func SendWeekScheduleMessages(
 	conf model.ScheduleConfig,
 	imageFilename string,
 	imageData []byte,
+	isOld bool,
 ) error {
+	log.Debug().Msg("Sending week schedule message...")
 	var errs []error
 
 	if _, err := b.SendMessage(ctx, &bot.SendMessageParams{
@@ -160,7 +176,7 @@ func SendWeekScheduleMessages(
 	}
 
 	replyMarkup := WeekScheduleMarkup(conf)
-	if err := sendSchedulePhoto(ctx, b, chat, messageThreadID, imageFilename, imageData, replyMarkup); err != nil {
+	if err := sendSchedulePhoto(ctx, b, chat, messageThreadID, imageFilename, imageData, replyMarkup, isOld); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -190,14 +206,20 @@ func sendSchedulePhoto(
 	imageFilename string,
 	imageData []byte,
 	replyMarkup models.ReplyMarkup,
+	isOld bool,
 ) error {
 	log.Trace().Any("tgChatID", chat.TgChatID).Str("filename", imageFilename).Msg("Sending schedule photo...")
-	_, err := b.SendPhoto(ctx, &bot.SendPhotoParams{
+	photoParams := &bot.SendPhotoParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: messageThreadID,
 		Photo:           &models.InputFileUpload{Filename: imageFilename, Data: bytes.NewReader(imageData)},
 		ReplyMarkup:     replyMarkup,
-	})
+	}
+	if isOld {
+		photoParams.Caption = "<i>Не удалось обновить расписание, информация может быть не актуальной!</i>"
+		photoParams.ParseMode = models.ParseModeHTML
+	}
+	_, err := b.SendPhoto(ctx, photoParams)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to send schedule photo")
 		err2 := SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -213,7 +235,7 @@ func WeekScheduleMarkup(conf model.ScheduleConfig) models.ReplyMarkup {
 	if conf.Group != nil {
 		return UpdateScheduleMarkup("group", string(conf.Group.GroupName))
 	} else if conf.Teacher != nil {
-		return UpdateScheduleMarkup("teacher", conf.Teacher.TeacherID.String())
+		return UpdateScheduleMarkup("teacher", conf.Teacher.TeacherID)
 	} else {
 		return nil
 	}
@@ -224,6 +246,7 @@ func UpdateScheduleMarkup(kind, value string) models.InlineKeyboardMarkup {
 	}
 }
 func UpdateInlineButton(kind, value string) models.InlineKeyboardButton {
+	_ = CallbackCommand{Command: "update_" + kind, Args: []string{value, time.Now().Format("20060102150405")}}
 	return models.InlineKeyboardButton{
 		Text: "Обновить",
 		CallbackData: fmt.Sprintf("update_%s\n%s\n%s",
@@ -234,39 +257,28 @@ func UpdateInlineButton(kind, value string) models.InlineKeyboardButton {
 	}
 }
 
-func TeacherMenuMarkup(teachers []*model.Teacher) models.InlineKeyboardMarkup {
-	keyboard := make([][]models.InlineKeyboardButton, 0)
-	for _, teacher := range teachers {
-		keyboard = append(keyboard, []models.InlineKeyboardButton{{
-			Text:         teacher.Name.String(),
-			CallbackData: fmt.Sprintf("%s\n%s", CallbackCommandSelectTeacher, teacher.TeacherID),
-		}})
+func IsVacation(t time.Time) bool {
+	if t.Month() == time.August {
+		return true
 	}
-	keyboard = append(keyboard, []models.InlineKeyboardButton{{Text: "Отмена", CallbackData: CallbackCommandDelete}})
-	return models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
+	if t.Month() != time.July {
+		return false
+	}
+
+	// Find first sunday of July
+	firstSun := firstSunday(time.July, t.Year())
+
+	// Vacation starts from the furst Sunday of July
+	return t.Equal(firstSun) || t.After(firstSun)
 }
 
-func AccessMenuMarkup(accessLevel model.ChatAccessLevel) models.InlineKeyboardMarkup {
-	keyboard := [][]models.InlineKeyboardButton{
-		{},
-		{{Text: "Закрыть", CallbackData: CallbackCommandDeleteConfig}},
+func firstSunday(m time.Month, y int) time.Time {
+	date := time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
+	weekday := date.Weekday()
+	daysToAdd := (time.Sunday - weekday + 7) % 7
+	if daysToAdd == 0 && weekday != time.Sunday {
+		daysToAdd = 7
 	}
-	for i := range 3 {
-		text := fmt.Sprint(i)
-		if i == int(accessLevel) {
-			text = fmt.Sprintf("[%d]", i)
-		}
-		keyboard[0] = append(keyboard[0], models.InlineKeyboardButton{
-			Text:         text,
-			CallbackData: fmt.Sprintf("%s\n%d", CallbackCommandSetAccess, i),
-		})
-	}
-	return models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
-}
 
-func ShortenText(text string, maxLength int) string {
-	if len(text) > maxLength {
-		return text[:maxLength-2] + "…"
-	}
-	return text
+	return date.AddDate(0, 0, int(daysToAdd))
 }
