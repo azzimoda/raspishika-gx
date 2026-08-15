@@ -82,7 +82,7 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		} else {
 			return false
 		}
-	}, h.handleTextQuickGroup, h.checkRegularAccess)
+	}, h.handleTextQuickGroup, h.checkRegularAccess, h.makePrehandlerVacation("week"))
 
 	// Callback queries
 	{
@@ -94,7 +94,7 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		}
 
 		registerRegularCallbackHandler(botutil.CallbackCommandDelete, h.handleCQDelete)
-		registerRegularCallbackHandler(botutil.CallbackCommandSelectTeacher, h.handleCQTeacher)
+		registerRegularCallbackHandler(botutil.CallbackCommandSelectTeacher, h.handleCQTeacher, h.makePrehandlerVacation("week"))
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateGroup, h.makePrehandlerVacation("week"))
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher, h.makePrehandlerVacation("week"))
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow, h.makePrehandlerVacation("tomorrow"))
