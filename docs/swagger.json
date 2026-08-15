@@ -1,8 +1,8 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "API для доступа к расписанию МПК ТИУ (демо-версия)",
-        "title": "Raspishika API Demo",
+        "description": "API для доступа к расписанию МПК ТИУ",
+        "title": "Raspishika API",
         "contact": {},
         "version": "1.0"
     },

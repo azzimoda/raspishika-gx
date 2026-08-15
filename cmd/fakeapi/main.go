@@ -1,11 +1,3 @@
-//go:generate swag init -d ../.. -g cmd/fakeapi/main.go -o ../../docs --parseDependency
-
-// @title           Raspishika API Demo
-// @version         1.0
-// @description     API для доступа к расписанию МПК ТИУ (демо-версия)
-// @host            localhost:8080
-// @BasePath        /api/v1
-
 package main
 
 import (

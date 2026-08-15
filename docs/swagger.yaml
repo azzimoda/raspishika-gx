@@ -140,8 +140,8 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: API для доступа к расписанию МПК ТИУ (демо-версия)
-  title: Raspishika API Demo
+  description: API для доступа к расписанию МПК ТИУ
+  title: Raspishika API
   version: "1.0"
 paths:
   /departments:
