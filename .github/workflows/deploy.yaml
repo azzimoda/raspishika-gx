@@ -58,6 +58,7 @@ jobs:
           script: |
             cd ~/raspishika-gx
             git pull
+            docker image prune -f
             docker compose pull
             docker compose down
             docker compose up -d
