@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
 
   bot:
-    image: azzimoda/raspishika:latest
+    image: azzimoda/raspishika-bot:latest
     container_name: raspishika-bot
     shm_size: 2g
     environment:
