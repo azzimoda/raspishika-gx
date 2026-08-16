@@ -53,9 +53,6 @@ func (s *Services) HealthCheck() error {
 	if err := s.Chat.HealthCheck(); err != nil {
 		return fmt.Errorf("chat: %w", err)
 	}
-	if err := s.Schedule.HealthCheck(); err != nil {
-		return fmt.Errorf("schedule: %w", err)
-	}
 	if err := s.Stats.HealthCheck(); err != nil {
 		return fmt.Errorf("stats: %w", err)
 	}
