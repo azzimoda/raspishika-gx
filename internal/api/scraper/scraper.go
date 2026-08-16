@@ -313,14 +313,17 @@ func httpGetRequestRetryingWithRandomHeaders(url string, attempts int) (*http.Re
 			e.Msg("HTTP GET request failed")
 			return errReq
 		}
-		if resp.StatusCode != http.StatusOK {
-			errReq = fmt.Errorf("unexpected status %s", resp.Status)
-			log.Error().Err(errReq).Str("url", url).Any("headers", headers).
-				Str("status", resp.Status).Msg("HTTP GET request failed")
-			return errReq
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil
+		case http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests:
+			errReq = retry.Unrecoverable(errReq)
+		default:
 		}
 
-		return nil
+		log.Error().Err(errReq).Str("url", url).Any("headers", headers).Str("status", resp.Status).
+			Msg("HTTP GET request failed")
+		return errReq
 	})
 	return resp, err
 }
