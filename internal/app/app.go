@@ -24,9 +24,7 @@ import (
 )
 
 func New() (*App, error) {
-	if err := config.Init(); err != nil {
-		return nil, fmt.Errorf("failed to initialize config: %w", err)
-	}
+	config.Init()
 
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
 

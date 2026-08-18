@@ -46,9 +46,7 @@ func TestChat_GetState(t *testing.T) {
 	if err := testutil.MoveToProjectRoot(); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Init(); err != nil {
-		t.Fatal(err)
-	}
+	config.Init()
 
 	tests := []struct {
 		name        string // description of this test case

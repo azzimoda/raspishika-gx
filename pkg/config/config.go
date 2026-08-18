@@ -58,7 +58,7 @@ const (
 	KeyScheduleTemplateDarkFile = "schedule_template_dark_file"
 )
 
-func Init() error {
+func Init() {
 	// Defaults
 	viper.SetDefault(KeyLogLevel, "trace")
 	viper.SetDefault(KeyLogDir, "storage/logs")
@@ -104,6 +104,4 @@ func Init() error {
 		log.Warn().Err(err).Msg(".env file not found")
 	}
 	viper.AutomaticEnv()
-
-	return nil
 }

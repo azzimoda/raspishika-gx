@@ -100,9 +100,7 @@ func (f fakeScraperAPI) GetSchedule(ctx context.Context, params *apiclient.GetSc
 func main() {
 	// INITIALIZE
 
-	if err := config.Init(); err != nil {
-		log.Fatal().Err(err).Msg("Config initialization failed")
-	}
+	config.Init()
 
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
 
