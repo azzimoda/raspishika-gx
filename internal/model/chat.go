@@ -40,19 +40,19 @@ const (
 )
 
 type Chat struct {
-	ID               int64           `db:"id"`
-	TgChatID         ChatID          `db:"tg_chat_id"`
-	UserName         *UserName       `db:"username"`
-	State            ChatState       `db:"state"`
-	DepartmentName   *string         `db:"department"`
-	GroupName        *GroupName      `db:"group"`
-	DailySendingTime *string         `db:"daily_sending_time"`
-	PairSending      bool            `db:"pair_sending"`
-	ChangeAlert      bool            `db:"update_notification"`
-	Access           ChatAccessLevel `db:"access"`
-	DarkMode         bool            `db:"dark_mode"`
-	CreatedAt        time.Time       `db:"created_at"`
-	UpdatedAt        time.Time       `db:"updated_at"`
+	ID               int64           `gorm:"primaryKey;column:id"`
+	TgChatID         ChatID          `gorm:"column:tg_chat_id"`
+	UserName         *UserName       `gorm:"column:username"`
+	State            ChatState       `gorm:"column:state"`
+	DepartmentName   *string         `gorm:"column:department"`
+	GroupName        *GroupName      `gorm:"column:group"`
+	DailySendingTime *string         `gorm:"column:daily_sending_time"`
+	PairSending      bool            `gorm:"column:pair_sending"`
+	ChangeAlert      bool            `gorm:"column:update_notification"`
+	Access           ChatAccessLevel `gorm:"column:access"`
+	DarkMode         bool            `gorm:"column:dark_mode"`
+	CreatedAt        time.Time       `gorm:"column:created_at"`
+	UpdatedAt        time.Time       `gorm:"column:updated_at"`
 }
 
 func (c *Chat) IsPrivate() bool { return c.TgChatID.IsPrivate() }

@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"github.com/go-telegram/bot"
-	"github.com/jmoiron/sqlx"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
+	"gorm.io/gorm"
 
 	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
@@ -78,7 +77,7 @@ func New() (*App, error) {
 type App struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
-	db        *sqlx.DB
+	db        *gorm.DB
 	services  *service.Services
 	broadcast *service.BroadcastService
 	mainBot   *service.BotService
@@ -150,7 +149,11 @@ func (a *App) startAdminBot(ctx context.Context) bool {
 func (a *App) Stop() error {
 	a.broadcast.Stop()
 	errServices := a.services.Stop()
-	errDB := a.db.Close()
+	sqlDB, err := a.db.DB()
+	if err != nil {
+		return errors.Join(fmt.Errorf("failed to get database handle: %w", err), errServices)
+	}
+	errDB := sqlDB.Close()
 	return errors.Join(errDB, errServices)
 }
 

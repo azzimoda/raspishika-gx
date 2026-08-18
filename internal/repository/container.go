@@ -1,8 +1,8 @@
 package repository
 
-import "github.com/jmoiron/sqlx"
+import "gorm.io/gorm"
 
-func NewContainer(db *sqlx.DB) *Container {
+func NewContainer(db *gorm.DB) *Container {
 	return &Container{
 		Proxy:    NewProxyRepository(),
 		Chat:     NewChatRepository(db),

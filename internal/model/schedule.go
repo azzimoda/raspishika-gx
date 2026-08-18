@@ -15,11 +15,11 @@ func NewSchedule(cacheKey string, rawSchedule ScheduleData) (*Schedule, error) {
 }
 
 type Schedule struct {
-	ID        int64     `db:"id"`
-	CacheKey  string    `db:"cache_key"`
-	Data      string    `db:"data"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID        int64     `gorm:"primaryKey;column:id"`
+	CacheKey  string    `gorm:"column:cache_key"`
+	Data      string    `gorm:"column:data"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
 }
 
 func (s *Schedule) IsActual(ttl time.Duration) bool { return s.UpdatedAt.Add(ttl).After(time.Now()) }

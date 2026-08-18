@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/singleflight"
+	"gorm.io/gorm"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
@@ -99,7 +99,7 @@ func (s *ScheduleService) GetScheduleCache(key string) (rawSchedule *model.Sched
 		}
 		log.Trace().Msg("Cache expired for schedule key")
 		return schedule, false
-	} else if errors.Is(err, sql.ErrNoRows) {
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Trace().Err(err).Msg("No cache found for schedule key")
 	} else {
 		log.Warn().Err(err).Msg("Failed to check schedule cache from DB")

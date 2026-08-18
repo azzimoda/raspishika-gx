@@ -49,7 +49,8 @@
     - `swaggo/swag` (Swagger-документация)
   - Бот:
     - `go-telegram/bot`
-    - `mattn/go-sqlite3`
+    - `gorm.io/gorm` + `gorm.io/driver/sqlite` (SQLite)
+    - `pressly/goose/v3` (миграции БД)
     - `chromedp/chromedp`
 - Redis (кэш API)
 - Node.js — Playwright v1.61.1
@@ -59,7 +60,7 @@
 
 Проект состоит из двух сервисов:
 
-- `cmd/bot` — Telegram-бот. Хранит данные в SQLite, рендерит скриншоты расписания через собственный браузер Chromium (`chromedp`), расписания получает по HTTP от API.
+- `cmd/bot` — Telegram-бот. Хранит данные в SQLite (доступ через GORM, миграции применяются автоматически при запуске через goose), рендерит скриншоты расписания через собственный браузер Chromium (`chromedp`), расписания получает по HTTP от API.
 - `cmd/api` — HTTP-сервис скрейпинга. Собирает расписание с `coworking.tyuiu.ru` с помощью Playwright, кэширует результаты в Redis и отдаёт по `/api/v1/*` (Swagger-документация доступна по адресам `/swagger/index.html` (UI) и `/swagger/doc.json`). Бот обращается к нему через `internal/apiclient` по `SCRAPER_HOST`/`SCRAPER_PORT`.
 
 Для локальной разработки с демо-данными (без реального скрейпинга) есть `cmd/fakeapi` и `cmd/fakebot`.

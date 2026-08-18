@@ -5,16 +5,17 @@ go 1.26.2
 require (
 	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
 	github.com/go-telegram/bot v1.23.0
-	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
-	github.com/mattn/go-sqlite3 v1.14.49
 	github.com/mxschmitt/playwright-go v0.6100.0
+	github.com/pressly/goose/v3 v3.27.3
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/viper v1.21.0
 	github.com/swaggo/swag v1.16.6
 	golang.org/x/net v0.57.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	gorm.io/driver/sqlite v1.6.0
+	gorm.io/gorm v1.31.2
 )
 
 require (
@@ -52,15 +53,20 @@ require (
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/leodido/go-urn v1.5.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.49 // indirect
+	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.61.0 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
+	github.com/sethvargo/go-retry v0.4.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.2 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
@@ -68,6 +74,7 @@ require (
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.8.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.30.0 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/mod v0.38.0 // indirect

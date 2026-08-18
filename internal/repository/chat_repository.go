@@ -2,13 +2,12 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
@@ -58,23 +57,18 @@ type ChatRepository interface {
 	GetRecentTeachers(ctx context.Context, chatID int64) ([]*model.RecentTeacher, error)
 }
 
-func NewChatRepository(db *sqlx.DB) ChatRepository { return &chatRepository{db: db} }
+func NewChatRepository(db *gorm.DB) ChatRepository { return &chatRepository{db: db} }
 
-type chatRepository struct{ db *sqlx.DB }
+type chatRepository struct{ db *gorm.DB }
 
 func (r *chatRepository) CreateChat(ctx context.Context, chat *model.Chat) error {
-	res, err := r.db.ExecContext(ctx, `INSERT INTO chats (tg_chat_id, username) VALUES (?,?)`, chat.TgChatID, chat.UserName)
-	if err != nil {
-		return err
-	}
-	chat.ID, err = res.LastInsertId()
-	return nil
+	return r.db.WithContext(ctx).Create(chat).Error
 }
 func (r *chatRepository) CreateOrUpdateChat(ctx context.Context, chat *model.Chat) (created bool, err error) {
 	var existingChat model.Chat
-	err = r.db.GetContext(ctx, &existingChat, `SELECT * FROM chats WHERE tg_chat_id = ?`, chat.TgChatID)
+	err = r.db.WithContext(ctx).Where("tg_chat_id = ?", chat.TgChatID).First(&existingChat).Error
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// Create new chat
 		log.Debug().Any("tgChatID", chat.TgChatID).Msg("Chat does not exist, creating...")
 		if err := r.CreateChat(ctx, chat); err != nil {
@@ -105,108 +99,107 @@ func (r *chatRepository) CreateOrUpdateChat(ctx context.Context, chat *model.Cha
 }
 
 func (r *chatRepository) UpdateChat(ctx context.Context, chat *model.Chat) error {
-	_, err := r.db.NamedExecContext(ctx, `
-			UPDATE chats
-			SET username = :username,
-				state = :state,
-				department = :department,
-				"group" = :group,
-				daily_sending_time = :daily_sending_time,
-				pair_sending = :pair_sending,
-				update_notification = :update_notification,
-				access = :access,
-				dark_mode = :dark_mode,
-				updated_at = CURRENT_TIMESTAMP
-			WHERE id = :id
-		`, chat)
-	return err
+	return r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where("id = ?", chat.ID).
+		Updates(map[string]any{
+			"username":           chat.UserName,
+			"state":              chat.State,
+			"department":         chat.DepartmentName,
+			"group":              chat.GroupName,
+			"daily_sending_time": chat.DailySendingTime,
+			"pair_sending":       chat.PairSending,
+			"update_notification": chat.ChangeAlert,
+			"access":             chat.Access,
+			"dark_mode":          chat.DarkMode,
+			"updated_at":         time.Now(),
+		}).Error
 }
 
 func (r *chatRepository) GetChat(ctx context.Context, id int64) (*model.Chat, error) {
 	var chat model.Chat
-	err := r.db.GetContext(ctx, &chat, `SELECT * FROM chats WHERE id = ?`, id)
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&chat).Error
 	return &chat, err
 }
 func (r *chatRepository) GetChatByChatID(ctx context.Context, chatID model.ChatID) (*model.Chat, error) {
 	chat := model.Chat{}
-	err := r.db.GetContext(ctx, &chat, `SELECT * FROM chats WHERE tg_chat_id = ?`, chatID)
+	err := r.db.WithContext(ctx).Where("tg_chat_id = ?", chatID).First(&chat).Error
 	return &chat, err
 }
 
 func (r *chatRepository) GetAllChats(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.db.SelectContext(ctx, &chats, `SELECT * FROM chats`)
+	err := r.db.WithContext(ctx).Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetPrivateChats(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.db.SelectContext(ctx, &chats, `SELECT * FROM chats WHERE tg_chat_id > 0`)
+	err := r.db.WithContext(ctx).Where("tg_chat_id > 0").Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetNewChats(ctx context.Context, dur time.Duration) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	if err := r.db.SelectContext(
-		ctx,
-		&chats,
-		`SELECT * FROM chats WHERE created_at > datetime('now', ?)`,
-		sqlPeriod(dur),
-	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
+	if err := r.db.WithContext(ctx).
+		Where("created_at > datetime('now', ?)", sqlPeriod(dur)).
+		Find(&chats).Error; err != nil {
 		return nil, err
 	}
 	return chats, nil
 }
 func (r *chatRepository) GetChatsByGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.db.SelectContext(ctx, &chats, `SELECT * FROM chats WHERE "group" = ?`, group)
+	err := r.db.WithContext(ctx).Where("group = ?", group).Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsByWatchedGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.db.SelectContext(ctx, &chats, `SELECT * FROM chats WHERE "group" = ? AND update_notification = 1`, group)
+	err := r.db.WithContext(ctx).
+		Where("group = ? AND update_notification = 1", group).
+		Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithDailyTime(ctx context.Context, time string) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.db.SelectContext(ctx, &chats, `SELECT * FROM chats WHERE "group" IS NOT NULL AND daily_sending_time = ?`, time)
+	err := r.db.WithContext(ctx).
+		Where(`"group" IS NOT NULL AND daily_sending_time = ?`, time).
+		Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithPairNotification(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.db.SelectContext(ctx, &chats, `SELECT * FROM chats WHERE "group" IS NOT NULL AND "group" != '' AND pair_sending = 1`)
+	err := r.db.WithContext(ctx).
+		Where(`"group" IS NOT NULL AND "group" != '' AND pair_sending = 1`).
+		Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithChangeAlert(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.db.SelectContext(ctx, &chats, `SELECT * FROM chats WHERE update_notification = 1`)
+	err := r.db.WithContext(ctx).Where("update_notification = 1").Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithDarkMode(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.db.SelectContext(ctx, &chats, `SELECT * FROM chats WHERE dark_mode = 1`)
+	err := r.db.WithContext(ctx).Where("dark_mode = 1").Find(&chats).Error
 	return chats, err
 }
 
 func (r *chatRepository) CountAllChats(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats`)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.Chat{}).Count(&count).Error
+	return int(count), err
 }
 func (r *chatRepository) CountPricateChats(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE tg_chat_id > 0`)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.Chat{}).Where("tg_chat_id > 0").Count(&count).Error
+	return int(count), err
 }
 func (r *chatRepository) CountNewChats(ctx context.Context, dur time.Duration) (int, error) {
-	var count int
-	period := sqlPeriod(dur)
-	err := r.db.GetContext(ctx, &count, `
-		SELECT count(*) FROM chats
-		WHERE created_at > datetime('now', ?)
-	`, period)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where("created_at > datetime('now', ?)", sqlPeriod(dur)).
+		Count(&count).Error
+	return int(count), err
 }
 func (r *chatRepository) GetNewChatCountByYear(ctx context.Context, dur time.Duration) (map[int]int, error) {
 	result := make([]struct {
@@ -214,11 +207,11 @@ func (r *chatRepository) GetNewChatCountByYear(ctx context.Context, dur time.Dur
 		Count int     `db:"count"`
 	}, 0)
 	period := sqlPeriod(dur)
-	err := r.db.SelectContext(ctx, &result, `
+	err := r.db.WithContext(ctx).Raw(`
 		SELECT "group", count(*) AS count FROM chats
 		WHERE created_at > datetime('now', ?)
 		GROUP BY "group"
-	`, period)
+	`, period).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +235,7 @@ func (r *chatRepository) GetNewChatCountByYear(ctx context.Context, dur time.Dur
 func (r *chatRepository) CountActiveChats(ctx context.Context, dur time.Duration) (int, error) {
 	var count int
 	period := sqlPeriod(dur)
-	err := r.db.GetContext(ctx, &count, `
+	err := r.db.WithContext(ctx).Raw(`
 			SELECT count(*) FROM (
 				SELECT c.id, c.tg_chat_id, c.username, c."group", c.daily_sending_time, c.pair_sending, c.updated_at,
 					count(ul.id) as count FROM chats c
@@ -252,7 +245,7 @@ func (r *chatRepository) CountActiveChats(ctx context.Context, dur time.Duration
 				GROUP BY c.id
 				HAVING count > 0
 			);
-		`, period, period)
+		`, period).Scan(&count).Error
 	return count, err
 }
 
@@ -261,7 +254,7 @@ func (r *chatRepository) CountActiveChats(ctx context.Context, dur time.Duration
 func (r *chatRepository) CountSemiactiveChats(ctx context.Context, dur time.Duration) (int, error) {
 	var count int
 	period := sqlPeriod(dur)
-	err := r.db.GetContext(ctx, &count, `
+	err := r.db.WithContext(ctx).Raw(`
 			SELECT count(*) FROM (
 				SELECT c.id, c.tg_chat_id, c.username, c."group", c.daily_sending_time, c.pair_sending, c.updated_at,
 					count(ul.id) as count FROM chats c
@@ -271,7 +264,7 @@ func (r *chatRepository) CountSemiactiveChats(ctx context.Context, dur time.Dura
 				GROUP BY c.id
 				HAVING count = 0 AND ("group" IS NOT NULL AND "group" != '' AND (daily_sending_time IS NOT NULL OR pair_sending = 1 OR update_notification = 1))
 			);
-		`, period, period)
+		`, period).Scan(&count).Error
 	return count, err
 }
 
@@ -280,7 +273,7 @@ func (r *chatRepository) CountSemiactiveChats(ctx context.Context, dur time.Dura
 func (r *chatRepository) CountInactiveChats(ctx context.Context, dur time.Duration) (int, error) {
 	var count int
 	period := sqlPeriod(dur)
-	err := r.db.GetContext(ctx, &count, `
+	err := r.db.WithContext(ctx).Raw(`
 			SELECT count(*) FROM (
 				SELECT c.id, c.tg_chat_id, c.username, c."group", c.daily_sending_time, c.pair_sending, c.updated_at,
 					count(ul.id) as count FROM chats c
@@ -290,62 +283,81 @@ func (r *chatRepository) CountInactiveChats(ctx context.Context, dur time.Durati
 				GROUP BY c.id
 				HAVING count = 0 AND ("group" IS NULL OR "group" = '' OR daily_sending_time IS NULL AND pair_sending = 0 AND update_notification = 0)
 			);
-		`, period, period)
+		`, period).Scan(&count).Error
 	return count, err
 }
 
 func (r *chatRepository) CountChatsWithConfiguredGroup(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE "group" IS NOT NULL AND "group" != ''`)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where(`"group" IS NOT NULL AND "group" != ''`).
+		Count(&count).Error
+	return int(count), err
 }
 func (r *chatRepository) CountUniqueConfiguredGroups(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.GetContext(ctx, &count, `SELECT count(DISTINCT "group") FROM chats WHERE "group" IS NOT NULL AND "group" != ''`)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where(`"group" IS NOT NULL AND "group" != ''`).
+		Distinct("group").
+		Count(&count).Error
+	return int(count), err
 }
 func (r *chatRepository) CountDailyEnabled(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE daily_sending_time IS NOT NULL AND daily_sending_time != ''`)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where("daily_sending_time IS NOT NULL AND daily_sending_time != ''").
+		Count(&count).Error
+	return int(count), err
 }
 func (r *chatRepository) CountPairEnabled(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE pair_sending = 1`)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where("pair_sending = 1").
+		Count(&count).Error
+	return int(count), err
 }
 func (r *chatRepository) CountChangeEnabled(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE update_notification = 1`)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where("update_notification = 1").
+		Count(&count).Error
+	return int(count), err
 }
 func (r *chatRepository) CountDarkEnabled(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.GetContext(ctx, &count, `SELECT count(*) FROM chats WHERE dark_mode = 1`)
-	return count, err
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where("dark_mode = 1").
+		Count(&count).Error
+	return int(count), err
 }
 
 // GetAvgChatPerGroup returns the average number of chats per group.
 func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error) {
-	var avg *float64
-	err := r.db.GetContext(ctx, &avg, `
+	var avg float64
+	err := r.db.WithContext(ctx).Raw(`
 		SELECT AVG(chats) FROM (
 			SELECT COUNT(*) AS chats FROM chats
 			WHERE "group" != '' AND "group" IS NOT NULL
 			GROUP BY "group"
 		)
-	`)
-	return refutil.DerefOrTypeDefault(avg), err
+	`).Scan(&avg).Error
+	return avg, err
 }
 
 func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) ([]TimeCount, error) {
 	var result []TimeCount
-	err := r.db.SelectContext(ctx, &result, `
+	err := r.db.WithContext(ctx).Raw(`
 		SELECT daily_sending_time AS time, count(*) AS count FROM chats
 		WHERE "group" != '' AND "group" IS NOT NULL AND daily_sending_time IS NOT NULL AND daily_sending_time != ''
 		GROUP BY daily_sending_time
 		ORDER BY daily_sending_time
-	`)
+	`).Scan(&result).Error
 	return result, err
 }
 
@@ -355,77 +367,69 @@ type TimeCount struct {
 }
 
 func (r *chatRepository) DeleteChat(ctx context.Context, id int64) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM chats WHERE id = ?`, id)
-	return err
+	return r.db.WithContext(ctx).Delete(&model.Chat{}, id).Error
 }
 
 func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, error) {
 	var count int
-	err := r.db.GetContext(ctx, &count, `
+	err := r.db.WithContext(ctx).Raw(`
 		SELECT count(*) FROM (
 			SELECT DISTINCT "group" FROM chats
 			WHERE "group" != '' AND "group" IS NOT NULL
 		)
-	`)
+	`).Scan(&count).Error
 	return count, err
 }
 
 // TODO: Use in config stats
 func (r *chatRepository) GetWatchedGroupNames(ctx context.Context) ([]string, error) {
 	var groupNames []string
-	err := r.db.SelectContext(ctx, &groupNames, `
+	err := r.db.WithContext(ctx).Raw(`
 		SELECT DISTINCT "group" FROM chats
 		WHERE "group" IS NOT NULL AND "group" != '' AND update_notification = 1
-	`)
+	`).Scan(&groupNames).Error
 	return groupNames, err
 }
 
 func (r *chatRepository) AddRecentTeacher(ctx context.Context, recentTeacher *model.RecentTeacher) error {
-	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to create transaction: %w", err)
-	}
-
-	// Delete existing row with same teacher
-	if _, err := tx.NamedExecContext(
-		ctx,
-		`DELETE FROM recent_teachers WHERE chat_id = :chat_id AND teacher_id = :teacher_id`,
-		recentTeacher,
-	); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("failed to delete same recent teacher: %w", err)
-	}
-
-	// Get recent teachers.
-	rt, err := r.GetRecentTeachers(ctx, recentTeacher.ChatID)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("failed to get recent teachers: %w", err)
-	}
-
-	if len(rt) >= 4 {
-		// Delete oldest recent teacher.
-		if _, err := tx.NamedExecContext(ctx, `
-			DELETE FROM recent_teachers WHERE chat_id = :chat_id AND teacher_id = :teacher_id
-		`, rt[0]); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("failed to delete oldest recent teacher: %w", err)
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Delete existing row with same teacher
+		if err := tx.
+			Where("chat_id = ? AND teacher_id = ?", recentTeacher.ChatID, recentTeacher.TeacherID).
+			Delete(&model.RecentTeacher{}).Error; err != nil {
+			return fmt.Errorf("failed to delete same recent teacher: %w", err)
 		}
-	}
 
-	// Add new recent teacher.
-	if _, err := tx.NamedExecContext(ctx, `
-		INSERT INTO recent_teachers (chat_id, teacher_id, teacher_name)
-		VALUES (:chat_id, :teacher_id, :teacher_name)
-	`, recentTeacher); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("failed to insert recent teacher: %w", err)
-	}
+		// Get recent teachers.
+		var rt []*model.RecentTeacher
+		if err := tx.Where("chat_id = ?", recentTeacher.ChatID).
+			Order("created_at ASC").
+			Find(&rt).Error; err != nil {
+			return fmt.Errorf("failed to get recent teachers: %w", err)
+		}
 
-	return tx.Commit()
+		if len(rt) >= 4 {
+			// Delete oldest recent teacher.
+			if err := tx.
+				Where("chat_id = ? AND teacher_id = ?", rt[0].ChatID, rt[0].TeacherID).
+				Delete(&model.RecentTeacher{}).Error; err != nil {
+				return fmt.Errorf("failed to delete oldest recent teacher: %w", err)
+			}
+		}
+
+		// Add new recent teacher.
+		if err := tx.Create(recentTeacher).Error; err != nil {
+			return fmt.Errorf("failed to insert recent teacher: %w", err)
+		}
+
+		return nil
+	})
 }
 func (r *chatRepository) GetRecentTeachers(ctx context.Context, chatID int64) ([]*model.RecentTeacher, error) {
 	var rt []*model.RecentTeacher
-	err := r.db.SelectContext(ctx, &rt, `SELECT * FROM recent_teachers WHERE chat_id = ? ORDER BY created_at ASC`, chatID)
+	err := r.db.WithContext(ctx).
+		Where("chat_id = ?", chatID).
+		Order("created_at ASC").
+		Find(&rt).Error
 	return rt, err
 }

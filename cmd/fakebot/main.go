@@ -110,7 +110,11 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to open DB")
 	}
-	defer db.Close()
+	defer func() {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.Close()
+		}
+	}()
 
 	container := repository.NewContainer(db)
 
