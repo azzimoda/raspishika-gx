@@ -103,16 +103,16 @@ func (r *chatRepository) UpdateChat(ctx context.Context, chat *model.Chat) error
 		Model(&model.Chat{}).
 		Where("id = ?", chat.ID).
 		Updates(map[string]any{
-			"username":           chat.UserName,
-			"state":              chat.State,
-			"department":         chat.DepartmentName,
-			"group":              chat.GroupName,
-			"daily_sending_time": chat.DailySendingTime,
-			"pair_sending":       chat.PairSending,
+			"username":            chat.UserName,
+			"state":               chat.State,
+			"department":          chat.DepartmentName,
+			"group":               chat.GroupName,
+			"daily_sending_time":  chat.DailySendingTime,
+			"pair_sending":        chat.PairSending,
 			"update_notification": chat.ChangeAlert,
-			"access":             chat.Access,
-			"dark_mode":          chat.DarkMode,
-			"updated_at":         time.Now(),
+			"access":              chat.Access,
+			"dark_mode":           chat.DarkMode,
+			"updated_at":          time.Now(),
 		}).Error
 }
 
@@ -339,7 +339,7 @@ func (r *chatRepository) CountDarkEnabled(ctx context.Context) (int, error) {
 
 // GetAvgChatPerGroup returns the average number of chats per group.
 func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error) {
-	var avg float64
+	var avg *float64
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT AVG(chats) FROM (
 			SELECT COUNT(*) AS chats FROM chats
@@ -347,7 +347,7 @@ func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error
 			GROUP BY "group"
 		)
 	`).Scan(&avg).Error
-	return avg, err
+	return refutil.DerefOrTypeDefault(avg), err
 }
 
 func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) ([]TimeCount, error) {
