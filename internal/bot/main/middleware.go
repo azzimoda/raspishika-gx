@@ -308,30 +308,69 @@ func (h *handler) makePrehandlerVacation(kind string) bot.Middleware {
 			}
 			log.Info().Msg("Today is vacation, handling...")
 
-			dur := time.Until(time.Date(now.Year(), time.September, 1, 0, 0, 0, 0, now.Location()))
-			days := int(dur.Hours()) / 24
-			text := fmt.Sprintf("До конца каникул осталось %d дней", days)
-			if m := update.Message; m != nil {
-				err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
-					ChatID:          m.Chat.ID,
-					MessageThreadID: m.MessageThreadID,
-					Text:            text,
-				})
-				addHandlerCtxErr(ctx, err)
-
-				_, err = b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID})
-				addHandlerCtxErr(ctx, err)
-			} else if cq := update.CallbackQuery; cq != nil {
-				_, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-					CallbackQueryID: cq.ID,
-					Text:            text,
-					CacheTime:       3600, // 1 hour
-				})
-				addHandlerCtxErr(ctx, err)
-			}
+			sendVacationAnswer(ctx, b, update, now, kind == "config")
 
 			// Do not call next handler during vacation.
 		}
+	}
+}
+
+func sendVacationAnswer(
+	ctx context.Context, b *bot.Bot, update *models.Update, t time.Time, isConfig bool,
+) {
+	dur := time.Until(time.Date(t.Year(), time.September, 1, 0, 0, 0, 0, t.Location()))
+	days := int(dur.Hours()) / 24
+	text := fmt.Sprintf("До конца каникул осталось %d день/дня/дней", days)
+	if m := update.Message; m != nil {
+		if isConfig {
+			err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+				ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID,
+				Text: "Не могу настроить группу во вермя каникул, подождите до начала семестра",
+			})
+			addHandlerCtxErr(ctx, err)
+		}
+
+		err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+			ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID, Text: text,
+		})
+		addHandlerCtxErr(ctx, err)
+
+		_, err = b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID})
+		addHandlerCtxErr(ctx, err)
+	} else if cq := update.CallbackQuery; cq != nil {
+		if isConfig && cq.Message.Message != nil {
+			m := cq.Message.Message
+			err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+				ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID,
+				Text: "Не могу настроить группу во вермя каникул, подождите до начала семестра",
+			})
+			addHandlerCtxErr(ctx, err)
+		}
+
+		_, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: cq.ID, Text: text, CacheTime: 3600, // 1 hour
+		})
+		addHandlerCtxErr(ctx, err)
+	}
+}
+
+func (h *handler) ensureGroupConfigured(next bot.HandlerFunc) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		chat, ok := getCtxChat(ctx)
+		if !ok {
+			log.Error().Msg("Failed to get chat from context")
+			next(ctx, b, update)
+			return
+		}
+
+		if chat.GroupName == nil {
+			log.Warn().Int64("chatID", chat.TgChatID.Int64()).Msg("Group name is not set")
+			// Offer to set group
+			h.sendDepartmentSelectionMenu(ctx, b, chat, update)
+			return
+		}
+
+		next(ctx, b, update)
 	}
 }
 

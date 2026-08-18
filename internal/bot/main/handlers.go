@@ -36,9 +36,9 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerCommandHandler(b, "start", h.handleCmdStart, h.checkRegularAccess)
 		registerCommandHandler(b, "help", h.handleCmdHelp, h.checkRegularAccess)
 		registerCommandHandler(b, "stop", h.handleCmdStop, h.checkConfigAccess)
-		registerCommandHandler(b, "week", h.handleCmdWeek, h.checkRegularAccess, h.makePrehandlerVacation("week"))
-		registerCommandHandler(b, "tomorrow", h.handleCmdTomorrow, h.checkRegularAccess, h.makePrehandlerVacation("tomorrow"))
-		registerCommandHandler(b, "today", h.handleCmdToday, h.checkRegularAccess, h.makePrehandlerVacation("today"))
+		registerCommandHandler(b, "week", h.handleCmdWeek, h.checkRegularAccess, h.makePrehandlerVacation("week"), h.ensureGroupConfigured)
+		registerCommandHandler(b, "tomorrow", h.handleCmdTomorrow, h.checkRegularAccess, h.makePrehandlerVacation("tomorrow"), h.ensureGroupConfigured)
+		registerCommandHandler(b, "today", h.handleCmdToday, h.checkRegularAccess, h.makePrehandlerVacation("today"), h.ensureGroupConfigured)
 		registerCommandHandler(b, "teacher", h.handleCmdTeacher, h.checkRegularAccess, h.makePrehandlerVacation("week"))
 		registerCommandHandler(b, "settings", h.handleCmdSettings, h.checkConfigAccess)
 		registerCommandHandler(b, "access", h.handleCmdAccess, h.checkConfigAccess)
@@ -46,9 +46,9 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 
 	// Text commands
 	{
-		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess, h.makePrehandlerVacation("week"))
-		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess, h.makePrehandlerVacation("tomorrow"))
-		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess, h.makePrehandlerVacation("today"))
+		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess, h.makePrehandlerVacation("week"), h.ensureGroupConfigured)
+		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess, h.makePrehandlerVacation("tomorrow"), h.ensureGroupConfigured)
+		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess, h.makePrehandlerVacation("today"), h.ensureGroupConfigured)
 		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess, h.makePrehandlerVacation("week"))
 		registerTextHandler(b, "отмена", h.handleCmdCancel, h.checkRegularAccess)
 	}

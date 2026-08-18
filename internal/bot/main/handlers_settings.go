@@ -6,13 +6,14 @@ import (
 	"strconv"
 	"time"
 
+	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
+	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
+	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
-
-	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
-	"github.com/azzimoda/raspishika-gx/internal/model"
-	"github.com/azzimoda/raspishika-gx/pkg/refutil"
+	"github.com/spf13/viper"
 )
 
 func (h *handler) handleCmdSettings(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -66,7 +67,7 @@ func (h *handler) handleCQConfigGroup(ctx context.Context, b *bot.Bot, update *m
 	_, err := botutil.DeleteMessage(ctx, b, message)
 	addHandlerCtxErr(ctx, err)
 
-	err = h.sendDepartmentSelectionMenu(ctx, b, chat, message.MessageThreadID)
+	err = h.sendDepartmentSelectionMenu(ctx, b, chat, update)
 	addHandlerCtxErr(ctx, err)
 
 	log.Info().Msg("Handled CQ config group")
@@ -527,6 +528,9 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 }
 
 func (h *handler) handleCmdAccess(ctx context.Context, b *bot.Bot, update *models.Update) {
+	_, err := botutil.DeleteMessage(ctx, b, update.Message)
+	addHandlerCtxErr(ctx, err)
+
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
 		addHandlerCtxErr(ctx, ErrNoChatContext)
@@ -620,11 +624,25 @@ func accessMenuText(chat *model.Chat) string {
 }
 
 func (h *handler) sendDepartmentSelectionMenu(
-	ctx context.Context,
-	b *bot.Bot,
-	chat *model.Chat,
-	messageThreadID int,
+	ctx context.Context, b *bot.Bot, chat *model.Chat, update *models.Update,
 ) error {
+	messageThreadID := 0
+	if m := update.Message; m != nil {
+		messageThreadID = m.MessageThreadID
+	} else if cq := update.CallbackQuery; cq != nil {
+		if m := cq.Message.Message; m != nil {
+			messageThreadID = m.MessageThreadID
+		}
+	}
+
+	if viper.GetBool(config.KeyHandleVacation) {
+		t := time.Now()
+		if botutil.IsVacation(t) {
+			sendVacationAnswer(ctx, b, update, t, true)
+			return nil
+		}
+	}
+
 	departments, err := h.Schedule.GetDepartments(ctx)
 	if err != nil {
 		return err

@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-	"github.com/rs/zerolog/log"
-
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -70,7 +69,7 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 	log.Info().Msg("Handled start")
 }
 func (h *handler) offerToSetGroupOnStart(ctx context.Context, b *bot.Bot, chat *model.Chat, update *models.Update) {
-	err := h.sendDepartmentSelectionMenu(ctx, b, chat, update.Message.MessageThreadID)
+	err := h.sendDepartmentSelectionMenu(ctx, b, chat, update)
 	addHandlerCtxErr(ctx, err)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to send department selection menu")

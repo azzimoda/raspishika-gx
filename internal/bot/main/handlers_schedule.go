@@ -4,12 +4,11 @@ import (
 	"context"
 	"time"
 
+	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
+	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
-
-	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
-	"github.com/azzimoda/raspishika-gx/internal/model"
 )
 
 func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -20,7 +19,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
 	defer stop()
 
-	chat, ok := ctx.Value(keyChat).(*model.Chat)
+	chat, ok := getCtxChat(ctx)
 	if !ok {
 		addHandlerCtxErr(ctx, ErrNoChatContext)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -28,13 +27,6 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
 		})
-		return
-	}
-
-	if chat.GroupName == nil {
-		// Offer to set group
-		log.Warn().Int64("chatID", chat.TgChatID.Int64()).Msg("Group name is not set")
-		h.sendDepartmentSelectionMenu(ctx, b, chat, threadID)
 		return
 	}
 
@@ -86,6 +78,11 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	log.Info().Msg("Handled command week")
 }
 
+func getCtxChat(ctx context.Context) (*model.Chat, bool) {
+	chat, ok := ctx.Value(keyChat).(*model.Chat)
+	return chat, ok
+}
+
 func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
 	log.Debug().Msg("Handling command tomorrow...")
 
@@ -102,13 +99,6 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
 		})
-		return
-	}
-
-	if chat.GroupName == nil {
-		// Offer to set group
-		log.Warn().Int64("chatID", chat.TgChatID.Int64()).Msg("Group name is not set")
-		h.sendDepartmentSelectionMenu(ctx, b, chat, threadID)
 		return
 	}
 
@@ -170,13 +160,6 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
 		})
-		return
-	}
-
-	if chat.GroupName == nil {
-		// Offer to set group
-		log.Debug().Int64("chatID", chat.TgChatID.Int64()).Msg("Group name is not set")
-		addHandlerCtxErr(ctx, h.sendDepartmentSelectionMenu(ctx, b, chat, threadID))
 		return
 	}
 
