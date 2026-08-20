@@ -103,19 +103,6 @@ func buildGeneralReportText(stats *service.GeneralStatsData, dur time.Duration, 
 	chat := stats.ChatStatsData
 	logs := stats.LogStatsData
 
-	var newChatsGroupedHTML strings.Builder
-
-	if len(chat.ChatsNewGrouped) > 0 {
-		newChatsGroupedHTML.WriteString("<table bordered><caption>New chats grouped by year</caption><tr><th>Year</th><th>Count</th></tr>\n")
-		for year, count := range chat.ChatsNewGrouped {
-			yearStr := "none"
-			if year != 0 {
-				yearStr = strconv.Itoa(year)
-			}
-			fmt.Fprintf(&newChatsGroupedHTML, "<tr><td>%s</td><td>%d</td></tr>\n", yearStr, count)
-		}
-	}
-
 	var html strings.Builder
 
 	html.WriteString("<h3>General Statistics</h3>\n")
@@ -128,9 +115,18 @@ func buildGeneralReportText(stats *service.GeneralStatsData, dur time.Duration, 
 		chat.ChatsActive, chat.ChatsSemiactive, chat.ChatsInactive,
 		chat.ChatsNew)
 
-	html.WriteString("<p>")
-	html.WriteString(newChatsGroupedHTML.String())
-	html.WriteString("</p>")
+	if len(chat.ChatsNewGrouped) > 0 {
+		html.WriteString("<details><summary>New chats grouped by year</summary>\n")
+		html.WriteString("<table bordered><tr><th>Year</th><th>Count</th></tr>\n")
+		for year, count := range chat.ChatsNewGrouped {
+			yearStr := "none"
+			if year != 0 {
+				yearStr = strconv.Itoa(year)
+			}
+			fmt.Fprintf(&html, "<tr><td>%s</td><td>%d</td></tr>\n", yearStr, count)
+		}
+		html.WriteString("</table></details>\n")
+	}
 
 	html.WriteString("<h4>Groups</h4>\n")
 	fmt.Fprintf(&html, "<p>Groups: %d<br>CpG: %.2f</p>\n", chat.GroupsTotal, chat.ChatsPerGroup)
@@ -176,11 +172,12 @@ func buildConfigReportTextHTML(stats *service.ConfigStatsData) string {
 		stats.DarkEnabled, (float64(stats.DarkEnabled)+0.1)/float64(stats.ChatsTotal)*100)
 
 	if len(stats.ChatCountByTime) > 0 {
-		fmt.Fprintf(&html, "<table bordered><caption>Chat Count by Time</caption>\n")
+		fmt.Fprintf(&html, "<details><summary>Chat Count by Time</summary>\n")
+		html.WriteString("<table bordered><tr><th>Time</th><th>Count</th></tr>\n")
 		for _, c := range stats.ChatCountByTime {
 			fmt.Fprintf(&html, "<tr><td><code>%s</code></td><td><code>%d</code></td></tr>\n", c.Time, c.Count)
 		}
-		fmt.Fprintf(&html, "</table>\n")
+		fmt.Fprintf(&html, "</table></details>\n")
 	}
 
 	return html.String()
