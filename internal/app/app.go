@@ -279,7 +279,7 @@ func (a *App) formatReport(msg string, debugValues map[string]any, err error) *b
 	}
 
 	// Message text
-	fmt.Fprintf(&html, "<blockquote>%s</blockquote>", msg)
+	fmt.Fprintf(&html, "%s", msg)
 
 	params := bot.SendRichMessageParams{RichMessage: models.InputRichMessage{HTML: html.String()}}
 	if len(buttons) > 0 {
@@ -289,19 +289,15 @@ func (a *App) formatReport(msg string, debugValues map[string]any, err error) *b
 }
 
 func extract[T any](key string, values map[string]any) T {
-	log.Trace().Str("key", key).Any("values", values).Msgf("Extracting debug value (%#v)...", values)
 	var zero T
 	anyValue, ok := values[key]
 	if !ok {
-		log.Trace().Str("key", key).Msg("Key not found")
 		return zero
 	}
 	value, ok := anyValue.(T)
 	if !ok {
-		log.Trace().Str("key", key).Any("value", anyValue).Msgf("Type assertion failed: %#v", anyValue)
 		return zero
 	}
-	log.Trace().Str("key", key).Any("value", value).Msg("Extracted value")
 	return value
 }
 

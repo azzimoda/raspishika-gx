@@ -99,58 +99,55 @@ func (h *handler) handleCmdStats(ctx context.Context, b *bot.Bot, update *models
 	}
 }
 func buildGeneralReportText(stats *service.GeneralStatsData, dur time.Duration, periodStr string) string {
+
 	chat := stats.ChatStatsData
 	logs := stats.LogStatsData
-	var newChatsGroupedStr strings.Builder
-	if chat.ChatsNewGrouped != nil {
+
+	var newChatsGroupedHTML strings.Builder
+
+	if len(chat.ChatsNewGrouped) > 0 {
+		newChatsGroupedHTML.WriteString("<table bordered><caption>New chats grouped by year</caption><tr><th>Year</th><th>Count</th></tr>\n")
 		for year, count := range chat.ChatsNewGrouped {
 			yearStr := "none"
 			if year != 0 {
 				yearStr = strconv.Itoa(year)
 			}
-			fmt.Fprintf(&newChatsGroupedStr, "%s => %d\n", yearStr, count)
+			fmt.Fprintf(&newChatsGroupedHTML, "<tr><td>%s</td><td>%d</td></tr>\n", yearStr, count)
 		}
 	}
 
-	return fmt.Sprintf(`STATISTICS FOR LAST %s (%s)
+	var html strings.Builder
 
-Total: %d
-Private/Group: %d / %d
-Active/Semiactive/Inactive: %d / %d / %d
-New reigstered: %d
+	html.WriteString("<h3>General Statistics</h3>\n")
+	fmt.Fprintf(&html, "<p>for last %s (%s)</p>\n", periodStr, dur)
 
-%s
-
-Groups: %d
-CpG: %.2f
-
-Updates: %d
-Success: %d (%.1f%%)
-
-Broadcast Tasks/Sends: %d / %d
-Success: %d (%.1f%%)
-Daily/Pair/Change: %d / %d / %d
-
-Actual/Potential requests: %d / %d
-`,
-		periodStr, dur,
+	html.WriteString("<h4>Chats</h4>\n")
+	fmt.Fprintf(&html, "<p>Total: %d<br>Private/Group: %d / %d<br>Active/Semiactive/Inactive: %d / %d / %d<br>New reigstered: %d</p>\n",
 		chat.ChatsTotal,
 		chat.ChatsPrivate, chat.ChatsTotal-chat.ChatsPrivate,
 		chat.ChatsActive, chat.ChatsSemiactive, chat.ChatsInactive,
-		chat.ChatsNew,
-		newChatsGroupedStr.String(),
+		chat.ChatsNew)
 
-		chat.GroupsTotal, chat.ChatsPerGroup,
+	html.WriteString("<p>")
+	html.WriteString(newChatsGroupedHTML.String())
+	html.WriteString("</p>")
 
-		logs.UpdatesTotal,
-		logs.UpdatesSuccess, (float64(logs.UpdatesSuccess) / (float64(logs.UpdatesTotal) + 0.001) * 100),
+	html.WriteString("<h4>Groups</h4>\n")
+	fmt.Fprintf(&html, "<p>Groups: %d<br>CpG: %.2f</p>\n", chat.GroupsTotal, chat.ChatsPerGroup)
 
+	html.WriteString("<h4>Updates</h4>\n")
+	fmt.Fprintf(&html, "<p>Updates: %d<br>Success: %d (%.1f%%)</p>\n",
+		logs.UpdatesTotal, logs.UpdatesSuccess, (float64(logs.UpdatesSuccess) / (float64(logs.UpdatesTotal) + 0.001) * 100))
+
+	html.WriteString("<h4>Broadcast</h4>\n")
+	fmt.Fprintf(&html, "<p>Broadcast Tasks/Sends: %d / %d<br>Success: %d (%.1f%%)</p>\n",
 		logs.BroadcastTasks, logs.BroadcastLogs,
-		logs.BroadcastSuccess, (float64(logs.BroadcastSuccess) / (float64(logs.BroadcastLogs) + 0.001) * 100),
-		logs.BroadcastDaily, logs.BroadcastPair, logs.BroadcastChange,
+		logs.BroadcastSuccess, (float64(logs.BroadcastSuccess) / (float64(logs.BroadcastLogs) + 0.001) * 100))
 
-		logs.RequestsActual, logs.RequestsPotential,
-	)
+	html.WriteString("<h4>Requests</h4>\n")
+	fmt.Fprintf(&html, "<p>Actual/Potential requests: %d / %d</p>\n", logs.RequestsActual, logs.RequestsPotential)
+
+	return html.String()
 }
 
 func (h *handler) handleCmdConfig(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -165,27 +162,35 @@ func (h *handler) handleCmdConfig(ctx context.Context, b *bot.Bot, update *model
 	}
 }
 func buildConfigReportTextHTML(stats *service.ConfigStatsData) string {
-	var sb strings.Builder
-	sb.WriteString("Config Report:\n\n")
-	fmt.Fprintf(&sb, "Total Chats: %d\n", stats.ChatsTotal)
-	fmt.Fprintf(&sb, "Total Configured: %d (%.1f%%)\n",
+
+	var html strings.Builder
+
+	html.WriteString("<h3>Config Report</h3>\n")
+
+	fmt.Fprintf(&html, "<p>Total Chats: %d</p>\n", stats.ChatsTotal)
+	fmt.Fprintf(&html, "<p>Total Configured: %d (%.1f%%)</p>\n",
 		stats.ConfiguredGroupsTotal, (float64(stats.ConfiguredGroupsTotal)+0.1)/float64(stats.ChatsTotal)*100)
-	fmt.Fprintf(&sb, "Unique Group: %d\n", stats.ConfiguredGroupsUnique)
-	fmt.Fprintf(&sb, "Daily/Pair/Change: %d / %d / %d\n", stats.DailyEnabled, stats.PairEnabled, stats.ChangeEnabled)
-	fmt.Fprintf(&sb, "Dark theme: %d (%.1f%%)\n",
+	fmt.Fprintf(&html, "<p>Unique Group: %d</p>\n", stats.ConfiguredGroupsUnique)
+	fmt.Fprintf(&html, "<p>Daily/Pair/Change: %d / %d / %d</p>\n", stats.DailyEnabled, stats.PairEnabled, stats.ChangeEnabled)
+	fmt.Fprintf(&html, "<p>Dark theme: %d (%.1f%%)</p>\n",
 		stats.DarkEnabled, (float64(stats.DarkEnabled)+0.1)/float64(stats.ChatsTotal)*100)
-	fmt.Fprintf(&sb, "\nConfigured daily times:\n<pre>\n")
-	for _, c := range stats.ChatCountByTime {
-		fmt.Fprintf(&sb, "%s => %d\n", c.Time, c.Count)
+
+	if len(stats.ChatCountByTime) > 0 {
+		fmt.Fprintf(&html, "<table bordered><caption>Chat Count by Time</caption>\n")
+		for _, c := range stats.ChatCountByTime {
+			fmt.Fprintf(&html, "<tr><td><code>%s</code></td><td><code>%d</code></td></tr>\n", c.Time, c.Count)
+		}
+		fmt.Fprintf(&html, "</table>\n")
 	}
-	fmt.Fprintf(&sb, "</pre>\n")
-	return sb.String()
+
+	return html.String()
 }
 
 var me *models.User
 var meOnce sync.Once
 
 func GetMe(b *bot.Bot) *models.User {
+
 	meOnce.Do(func() {
 		if err := retry.New(retry.Attempts(5), retry.Delay(100*time.Millisecond)).Do(func() (err error) {
 			me, err = b.GetMe(context.Background())
