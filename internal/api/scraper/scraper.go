@@ -317,8 +317,9 @@ func httpGetRequestRetryingWithRandomHeaders(url string, attempts int) (*http.Re
 		case http.StatusOK:
 			return nil
 		case http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests:
-			errReq = retry.Unrecoverable(errReq)
+			errReq = retry.Unrecoverable(fmt.Errorf("unexpected status: %s", resp.Status))
 		default:
+			errReq = fmt.Errorf("unexpected status: %s", resp.Status)
 		}
 
 		log.Error().Err(errReq).Str("url", url).Any("headers", headers).Str("status", resp.Status).

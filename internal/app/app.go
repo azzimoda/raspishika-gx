@@ -10,8 +10,17 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
+	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
+
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
@@ -22,14 +31,17 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/database"
 	"github.com/azzimoda/raspishika-gx/pkg/logger"
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
-	"gorm.io/gorm"
 )
 
+// New creates the app with the default API client from configuration.
 func New() (*App, error) {
+
+	return NewWithScraper(nil)
+}
+
+// NewWithScraper creates the app using the given scraper API client.
+// If scraperAPI is nil, the default API client from configuration is used.
+func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 
 	config.Init()
 
@@ -45,7 +57,13 @@ func New() (*App, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	services, err := service.NewServices(ctx, container)
+	if scraperAPI == nil {
+		scraperAddr := fmt.Sprintf("%s:%s",
+			viper.GetString(config.KeyScraperHost), viper.GetString(config.KeyScraperPort))
+		scraperAPI = apiclient.New(scraperAddr)
+	}
+
+	services, err := service.NewServices(ctx, container, scraperAPI)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to create services: %w", err)
@@ -91,73 +109,111 @@ type App struct {
 	*AppReporter
 }
 
+// shutdownTimeout bounds the whole graceful shutdown of the app.
+const shutdownTimeout = 30 * time.Second
+
 func (a *App) Run() error {
 
 	defer a.Cancel()
 
 	log.Info().Msg("Starting app...")
-	ctx, cancel := signal.NotifyContext(a.Ctx, os.Interrupt)
+	ctx, cancel := signal.NotifyContext(a.Ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Services
+	var runErr error
+
 	if err := a.Services.HealthCheck(); err != nil {
-		return fmt.Errorf("health check failed: %w", err)
+		runErr = fmt.Errorf("health check failed: %w", err)
+	} else {
+		a.Broadcast.Run(ctx, service.BroadcastConfig{
+			Daily:            viper.GetBool("daily_broadcast"),
+			PairNotification: viper.GetBool("pair_notification"),
+			ChangeAlert:      viper.GetBool("change_alert"),
+		})
+
+		if err := a.MainBot.HealthCheck(); err != nil {
+			runErr = fmt.Errorf("main bot health check failed: %w", err)
+		} else {
+			runErr = a.runBots(ctx, cancel)
+		}
 	}
-	a.Broadcast.Run(ctx, service.BroadcastConfig{
-		Daily:            viper.GetBool("daily_broadcast"),
-		PairNotification: viper.GetBool("pair_notification"),
-		ChangeAlert:      viper.GetBool("change_alert"),
+
+	return errors.Join(runErr, a.Stop())
+}
+
+// runBots starts the bots, waits for the shutdown signal and joins the bot
+// goroutines. It returns nil unless a bot goroutine fails.
+func (a *App) runBots(ctx context.Context, cancel context.CancelFunc) error {
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		a.MainBot.Start(gctx)
+		return nil
 	})
 
-	// Bots
-	if err := a.MainBot.HealthCheck(); err != nil {
-		return fmt.Errorf("main bot health check failed: %w", err)
-	}
-	go a.MainBot.Start(ctx)
-
-	if viper.GetInt("admin_id") != 0 {
+	adminEnabled := viper.GetInt("admin_id") != 0
+	if adminEnabled {
 		if err := a.AdminBot.HealthCheck(); err != nil {
 			log.Error().Err(err).Msg("Admin bot health check failed")
+			adminEnabled = false
 		} else {
-			shouldReturn := a.StartAdminBot(ctx)
-			if shouldReturn {
-				return a.Stop()
-			}
+			g.Go(func() error {
+				a.AdminBot.Start(gctx)
+				return nil
+			})
 		}
 	} else {
 		log.Debug().Msg("Admin bot is disabled")
 	}
 
-	<-ctx.Done()
+	if adminEnabled {
+		if !a.waitForBotsReady(gctx) {
+			cancel()
+		} else {
+			a.AppReporter.Reporter = reporter.NewReporter(a.AdminBot.Bot, viper.GetInt64(config.KeyAdminID))
+			a.Report().Msg("Started on bot @" + mainbot.GetMe(a.MainBot.Bot).Username)
+			<-gctx.Done()
+			cancel()
+		}
+	} else {
+		<-gctx.Done()
+		cancel()
+	}
 
-	return a.Stop()
+	return g.Wait()
 }
 
-func (a *App) StartAdminBot(ctx context.Context) bool {
-
-	go a.AdminBot.Start(ctx)
+// waitForBotsReady blocks until both bots are built. Returns false if the
+// context is cancelled while waiting.
+func (a *App) waitForBotsReady(ctx context.Context) bool {
 
 	for a.AdminBot.Bot == nil || a.MainBot.Bot == nil {
 		select {
 		case <-ctx.Done():
 			log.Warn().Msg("Context cancelled!")
-			return true
+			return false
 		default:
 		}
-		log.Debug().Msg("Wating for bots...")
+		log.Debug().Msg("Waiting for bots...")
 		time.Sleep(5 * time.Second)
 	}
 	time.Sleep(1 * time.Second)
 	log.Info().Msg("All bots started")
-
-	a.AppReporter.Reporter = reporter.NewReporter(a.AdminBot.Bot, viper.GetInt64(config.KeyAdminID))
-	a.Report().Msg("Started on bot @" + mainbot.GetMe(a.MainBot.Bot).Username)
-	return false
+	return true
 }
 
 func (a *App) Stop() error {
 
-	a.Broadcast.Stop()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	a.Broadcast.Stop(shutdownCtx)
+
+	a.MainBot.Stop()
+	if a.AdminBot != nil {
+		a.AdminBot.Stop()
+	}
+
 	errServices := a.Services.Stop()
 	sqlDB, err := a.DB.DB()
 	if err != nil {

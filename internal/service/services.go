@@ -4,22 +4,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
-	"github.com/azzimoda/raspishika-gx/pkg/config"
-	"github.com/spf13/viper"
 )
 
-func NewServices(ctx context.Context, container *repository.Container) (*Services, error) {
+func NewServices(ctx context.Context, container *repository.Container, scraperAPI APIClient) (*Services, error) {
+
 	browser, err := browser.New(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("browser: %w", err)
 	}
-
-	scraperAddr := fmt.Sprintf("%s:%s",
-		viper.GetString(config.KeyScraperHost), viper.GetString(config.KeyScraperPort))
-	scraperAPI := apiclient.New(scraperAddr)
 
 	return &Services{
 		Browser:  browser,
@@ -39,8 +33,8 @@ type Services struct {
 }
 
 func (s *Services) Stop() error {
-	s.Browser.Close()
-	return nil
+
+	return s.Browser.Close()
 }
 
 func (s *Services) HealthCheck() error {

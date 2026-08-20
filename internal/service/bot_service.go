@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -27,6 +28,9 @@ type BotService struct {
 	botCtxCancel context.CancelFunc
 	restartChan  chan struct{}
 	onRestart    func(context.Context)
+	stopOnce     sync.Once
+	stopMu       sync.Mutex
+	stopped      bool
 }
 
 func (s *BotService) Log() *zerolog.Logger {
@@ -36,31 +40,53 @@ func (s *BotService) Log() *zerolog.Logger {
 func (s *BotService) Username() string { return s.username }
 
 func (s *BotService) HealthCheck() error {
-	if s.Bot == nil {
+
+	s.stopMu.Lock()
+	bot := s.Bot
+	botCtx := s.botCtx
+	s.stopMu.Unlock()
+
+	if bot == nil {
 		return nil
 	}
-	if _, err := s.Bot.GetMe(s.botCtx); err != nil {
+	if _, err := bot.GetMe(botCtx); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (s *BotService) Start(ctx context.Context) {
-	s.superCtx = ctx
-	s.botCtx, s.botCtxCancel = context.WithCancel(ctx)
 
-	go s.startBot(ctx)
+	s.superCtx = ctx
+
+	s.stopMu.Lock()
+	s.botCtx, s.botCtxCancel = context.WithCancel(ctx)
+	botCtx := s.botCtx
+	s.stopMu.Unlock()
+
+	go s.startBot(ctx, botCtx)
 
 	for {
-		_, ok := <-s.restartChan
-		if !ok {
-			s.Log().Error().Msg("Restart channel closed, stopping bot...")
+		select {
+		case <-ctx.Done():
+			s.Log().Debug().Msg("Context cancelled, stopping bot")
 			return
+		case _, ok := <-s.restartChan:
+			if !ok {
+				s.Log().Error().Msg("Restart channel closed, stopping bot...")
+				return
+			}
+			s.Log().Trace().Msg("Restarting bot...")
+			s.stopMu.Lock()
+			cancel := s.botCtxCancel
+			s.botCtx, s.botCtxCancel = context.WithCancel(ctx)
+			botCtx = s.botCtx
+			s.Bot = nil
+			s.stopMu.Unlock()
+
+			cancel()
+			s.startBot(ctx, botCtx)
 		}
-		s.Log().Trace().Msg("Restarting bot...")
-		s.botCtxCancel()
-		s.Bot = nil
-		s.startBot(ctx)
 	}
 }
 
@@ -69,24 +95,45 @@ var restartSF = singleflight.Group{}
 func (s *BotService) Restart() {
 	restartSF.Do("restart", func() (any, error) {
 		s.Log().Trace().Msg("Sending restart signal...")
-		s.restartChan <- struct{}{}
-		if s.onRestart != nil {
-			s.onRestart(s.superCtx)
+		s.stopMu.Lock()
+		if s.stopped {
+			s.stopMu.Unlock()
+			s.Log().Debug().Msg("Bot is stopped, skipping restart")
+			return nil, nil
+		}
+		select {
+		case s.restartChan <- struct{}{}:
+			s.stopMu.Unlock()
+			if s.onRestart != nil {
+				s.onRestart(s.superCtx)
+			}
+		default:
+			s.stopMu.Unlock()
+			s.Log().Debug().Msg("Bot is not ready for restart, skipping")
 		}
 		return nil, nil
 	})
 }
 
 func (s *BotService) Stop() {
-	s.Log().Trace().Msg("Stopping bot...")
-	s.botCtxCancel()
-	close(s.restartChan)
+
+	s.stopOnce.Do(func() {
+		s.Log().Trace().Msg("Stopping bot...")
+		s.stopMu.Lock()
+		cancel := s.botCtxCancel
+		s.stopped = true
+		close(s.restartChan)
+		s.stopMu.Unlock()
+
+		if cancel != nil {
+			cancel()
+		}
+	})
 }
 
 func (s *BotService) OnRestart(f func(context.Context)) { s.onRestart = f }
 
-func (s *BotService) startBot(ctx context.Context) {
-	s.botCtx, s.botCtxCancel = context.WithCancel(ctx)
+func (s *BotService) startBot(ctx context.Context, botCtx context.Context) {
 
 	for {
 		select {
@@ -131,12 +178,15 @@ func (s *BotService) startBot(ctx context.Context) {
 		bot.WithErrorsHandler(func(err error) { go s.handleAPIError(err) })(b)
 		s.Log().Trace().Msg("Bot initialized")
 
+		s.stopMu.Lock()
 		s.Bot = b
+		bot := s.Bot
+		s.stopMu.Unlock()
 
-		break
+		bot.Start(botCtx)
+
+		return
 	}
-
-	s.Bot.Start(s.botCtx)
 }
 
 func (s *BotService) handleAPIError(err error) {

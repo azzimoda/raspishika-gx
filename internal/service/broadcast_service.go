@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -30,6 +31,62 @@ type BroadcastService struct {
 	cron   *cron.Cron
 	ctx    context.Context
 	cancel context.CancelFunc
+	jobs   jobGroup
+}
+
+// jobGroup tracks in-flight goroutines so shutdown can wait for them
+// without the WaitGroup Add/Wait reuse restrictions.
+type jobGroup struct {
+	mu     sync.Mutex
+	n      int
+	waitCh chan struct{}
+}
+
+func (g *jobGroup) add() {
+
+	g.mu.Lock()
+	g.n++
+	g.mu.Unlock()
+}
+
+func (g *jobGroup) done() {
+
+	g.mu.Lock()
+	g.n--
+	if g.n == 0 && g.waitCh != nil {
+		close(g.waitCh)
+		g.waitCh = nil
+	}
+	g.mu.Unlock()
+}
+
+// wait blocks until all jobs started so far finish, or until ctx is done.
+func (g *jobGroup) wait(ctx context.Context) {
+
+	g.mu.Lock()
+	if g.n == 0 {
+		g.mu.Unlock()
+		return
+	}
+	ch := make(chan struct{})
+	g.waitCh = ch
+	g.mu.Unlock()
+
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		log.Warn().Err(ctx.Err()).Msg("Timed out waiting for broadcast jobs")
+	}
+}
+
+// runJob spawns f as a tracked goroutine.
+func (s *BroadcastService) runJob(f func()) {
+
+	s.jobs.add()
+	go func() {
+		defer s.jobs.done()
+		f()
+	}()
 }
 
 type BroadcastConfig struct {
@@ -60,7 +117,7 @@ func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) erro
 		log.Info().Msg("Pair notification disabled")
 	}
 	if config.ChangeAlert {
-		go s.runChangeNotifier(s.ctx)
+		s.runJob(func() { s.runChangeNotifier(s.ctx) })
 		log.Info().Msg("Change alert scheduled")
 	} else {
 		log.Info().Msg("Change alert disabled")
@@ -73,10 +130,14 @@ func (s *BroadcastService) Run(ctx context.Context, config BroadcastConfig) erro
 
 // Every minute
 func (s *BroadcastService) scheduleDaily(ctx context.Context) error {
-	_, err := s.cron.AddFunc("0 * * * * *", func() { go s.handleDailyBroadcast(ctx, time.Now()) })
+
+	_, err := s.cron.AddFunc("0 * * * * *", func() {
+		s.runJob(func() { s.handleDailyBroadcast(ctx, time.Now()) })
+	})
 	return err
 }
 func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time) {
+
 	if s.Bot == nil {
 		log.Warn().Msg("Bot is not initialized")
 		return
@@ -212,7 +273,7 @@ func (s *BroadcastService) schedulePairNotification(ctx context.Context) error {
 	}
 	for _, t := range times {
 		if _, err := s.cron.AddFunc(fmt.Sprintf("0 %d %d * * 1-6", t[1], t[0]), func() {
-			go s.handlePairNotification(ctx, time.Now())
+			s.runJob(func() { s.handlePairNotification(ctx, time.Now()) })
 		}); err != nil {
 			return err
 		}
@@ -327,48 +388,71 @@ func (s *BroadcastService) sendPairNotificatins(
 
 	log.Info().Int("successCount", successCount).Msg("Pair notifications sent")
 
-	go func(msgs []*models.Message) {
-		time.Sleep(viper.GetDuration(config.KeyPairNotificationTTL))
-		for _, m := range msgs {
+	s.runJob(func() {
+		select {
+		case <-time.After(viper.GetDuration(config.KeyPairNotificationTTL)):
+		case <-ctx.Done():
+			return
+		}
+		for _, m := range messagesToDelete {
 			if _, err := s.Bot.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID}); err != nil {
 				log.Error().Err(err).Any("message", m).Msg("Failed to delete pair notification message")
 			}
 		}
-	}(messagesToDelete)
+	})
 
 	return errors.Join(errs...)
 }
 
 func (s *BroadcastService) runChangeNotifier(ctx context.Context) {
+
 	halfInterval := viper.GetDuration(config.KeyUpdateMonitorInterval) / 2
 	log.Info().Dur("halfInterval", halfInterval).Msg("Change alert notifier will start in half of the interval")
-	time.Sleep(halfInterval)
+	if !sleepContext(ctx, halfInterval) {
+		log.Info().Msg("Change alert notifier stopped")
+		return
+	}
 
 	log.Info().Msg("Change alert notifier started")
 	for {
 		if s.Bot == nil {
 			log.Warn().Msg("Bot is not initialized")
-			time.Sleep(5 * time.Second)
+			if !sleepContext(ctx, 5*time.Second) {
+				break
+			}
 			continue
 		}
 
 		if viper.GetBool(config.KeyHandleVacation) && botutil.IsVacation(time.Now()) {
 			log.Debug().Msg("Change alert is skipped because of vacation")
-			time.Sleep(viper.GetDuration(config.KeyUpdateMonitorInterval))
+			if !sleepContext(ctx, viper.GetDuration(config.KeyUpdateMonitorInterval)) {
+				break
+			}
 			continue
 		}
 
-		select {
-		case <-ctx.Done():
-			log.Info().Msg("Change alert notifier stopped")
-			return
-		default:
-			s.handleChangeAlert(ctx)
-			time.Sleep(viper.GetDuration(config.KeyUpdateMonitorInterval))
+		s.handleChangeAlert(ctx)
+		if !sleepContext(ctx, viper.GetDuration(config.KeyUpdateMonitorInterval)) {
+			break
 		}
+	}
+	log.Info().Msg("Change alert notifier stopped")
+}
+
+// sleepContext sleeps for d unless ctx is cancelled, in which case it returns false.
+func sleepContext(ctx context.Context, d time.Duration) bool {
+
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
+
 	if s.Bot == nil {
 		log.Warn().Msg("Bot is not initialized")
 		return
@@ -578,12 +662,17 @@ func groupChats(chats []*model.Chat) map[model.GroupName][]*model.Chat {
 	return grouped
 }
 
-func (s *BroadcastService) Stop() {
-	s.cancel()
-	s.cron.Stop()
+func (s *BroadcastService) Stop(ctx context.Context) {
+
+	if s.cancel != nil {
+		s.cancel()
+	}
+	_ = s.cron.Stop()
+	s.jobs.wait(ctx)
 }
 
 func (s *BroadcastService) handleForbidden(ctx context.Context, err error, chat *model.Chat) {
+
 	s.Report().Err(err).Debug("chatID", chat.TgChatID).Msg("Bot was kicked from the chat")
 	if err := s.Chat.DeleteChat(ctx, chat.ID); err != nil {
 		s.Report().Err(err).Debug("chatID", chat.TgChatID).Msg("Failed to delete chat")

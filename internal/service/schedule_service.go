@@ -91,8 +91,9 @@ func (s *ScheduleService) GetSchedules(
 // When cache exists and is expired, returns raw schedule and false.
 //
 // When cache does not exist, returns nil and false.
-func (s *ScheduleService) GetScheduleCache(key string) (rawSchedule *model.ScheduleData, ok bool) {
-	if scheduleCache, err := s.schedule.GetByKey(context.Background(), key); err == nil {
+func (s *ScheduleService) GetScheduleCache(ctx context.Context, key string) (rawSchedule *model.ScheduleData, ok bool) {
+
+	if scheduleCache, err := s.schedule.GetByKey(ctx, key); err == nil {
 		schedule, errUnmarshal := scheduleCache.Unmarshal()
 		if scheduleCache.IsActual(viper.GetDuration(config.KeyCacheScheduleTTL)) {
 			return schedule, errUnmarshal == nil
@@ -128,7 +129,7 @@ func (s *ScheduleService) UpdateScheduleCache(
 		return rawSchedule, fmt.Errorf("cache not updated: %w", err)
 	}
 
-	if err := s.schedule.CreateOrUpdate(context.Background(), scheduleCache); err != nil {
+	if err := s.schedule.CreateOrUpdate(ctx, scheduleCache); err != nil {
 		return rawSchedule, fmt.Errorf("cache not updated: %w", err)
 	}
 	return rawSchedule, nil
@@ -150,7 +151,7 @@ func (s *ScheduleService) GetChanges(
 
 		conf := model.GroupScheduleConfig(group, false)
 
-		oldRawSchedule, ok := s.GetScheduleCache(conf.ScheduleKey())
+		oldRawSchedule, ok := s.GetScheduleCache(ctx, conf.ScheduleKey())
 		if !ok || oldRawSchedule == nil {
 			log.Warn().Err(err).Str("key", conf.ScheduleKey()).Msg("No change for the schedule config")
 			if _, err := s.UpdateScheduleCache(ctx, conf); err != nil {

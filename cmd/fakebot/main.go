@@ -4,24 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/app"
-	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
-	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
-	"github.com/azzimoda/raspishika-gx/internal/browser"
 	"github.com/azzimoda/raspishika-gx/internal/fakescraper"
 	"github.com/azzimoda/raspishika-gx/internal/model"
-	"github.com/azzimoda/raspishika-gx/internal/repository"
-	"github.com/azzimoda/raspishika-gx/internal/service"
-	"github.com/azzimoda/raspishika-gx/pkg/config"
-	"github.com/azzimoda/raspishika-gx/pkg/database"
-	"github.com/azzimoda/raspishika-gx/pkg/logger"
-	"github.com/go-telegram/bot"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 var fakeScraper = fakescraper.FakeScraper{}
@@ -97,110 +85,12 @@ func (f fakeScraperAPI) GetSchedule(ctx context.Context, params *apiclient.GetSc
 }
 
 func main() {
-	// INITIALIZE
 
-	config.Init()
-
-	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
-
-	db, err := database.Open(viper.GetString(config.KeyDBFile), viper.GetString(config.KeyDBMigrationDir))
+	botApp, err := app.NewWithScraper(fakeScraperAPI{})
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to open DB")
+		log.Fatal().Err(err).Msg("Failed to create app")
 	}
-	defer func() {
-		if sqlDB, err := db.DB(); err == nil {
-			sqlDB.Close()
-		}
-	}()
-
-	container := repository.NewContainer(db)
-
-	appReporter := new(app.AppReporter)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	browser, err := browser.New(ctx)
-	if err != nil {
-		cancel()
-		log.Fatal().Err(err).Msg("Failed to initialize browser")
+	if err := botApp.Run(); err != nil {
+		log.Fatal().Err(err).Msg("App exited with error")
 	}
-	defer browser.Close()
-
-	scraperAPI := fakeScraperAPI{}
-	services := &service.Services{
-		Browser:  browser,
-		Proxy:    service.NewProxyService(container.Proxy),
-		Chat:     service.NewChatService(container.Chat),
-		Schedule: service.NewScheduleService(scraperAPI, browser, container.Schedule),
-		Stats:    service.NewStatsService(container.Log, container.Chat),
-	}
-
-	mainBot := service.NewBotService(
-		func(p string) (*bot.Bot, error) { return mainbot.New(services, p, appReporter) },
-		services.Proxy,
-	)
-	defer mainBot.Stop()
-	adminBot := service.NewBotService(
-		func(p string) (*bot.Bot, error) { return adminbot.New(services, p, appReporter) },
-		services.Proxy,
-	)
-	defer adminBot.Stop()
-
-	broadcast := service.NewBroadcastService(mainBot, services, appReporter)
-	defer broadcast.Stop()
-
-	app := app.App{
-		Ctx:         ctx,
-		Cancel:      func() {},
-		DB:          db,
-		Services:    services,
-		Broadcast:   broadcast,
-		MainBot:     mainBot,
-		AdminBot:    adminBot,
-		AppReporter: appReporter,
-	}
-	appReporter.App = &app
-
-	mainBot.OnRestart(app.OnMainBotRestart)
-	adminBot.OnRestart(app.OnAdminBotRestart)
-
-	// RUN
-
-	log.Info().Msg("Starting app...")
-	ctx, cancel = signal.NotifyContext(ctx, os.Interrupt)
-	defer cancel()
-
-	// Services
-
-	if err := services.HealthCheck(); err != nil {
-		log.Fatal().Err(err).Msg("Healthcheck failed")
-	}
-	broadcast.Run(ctx, service.BroadcastConfig{
-		Daily:            viper.GetBool("daily_broadcast"),
-		PairNotification: viper.GetBool("pair_notification"),
-		ChangeAlert:      viper.GetBool("change_alert"),
-	})
-
-	// Bots
-
-	if err := mainBot.HealthCheck(); err != nil {
-		log.Fatal().Err(err).Msg("Main bot healthcheck failed")
-	}
-	go mainBot.Start(ctx)
-
-	if viper.GetInt("admin_id") != 0 {
-		if err := adminBot.HealthCheck(); err != nil {
-			log.Error().Err(err).Msg("Admin bot health check failed")
-		} else {
-			shouldReturn := app.StartAdminBot(ctx)
-			if shouldReturn {
-				return
-			}
-		}
-	} else {
-		log.Debug().Msg("Admin bot is disabled")
-	}
-
-	<-ctx.Done()
 }

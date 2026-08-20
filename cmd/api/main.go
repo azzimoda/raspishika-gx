@@ -10,12 +10,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 
 	"github.com/azzimoda/raspishika-gx/internal/api/browser"
 	"github.com/azzimoda/raspishika-gx/internal/api/handler"
@@ -25,19 +29,24 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/logger"
 	"github.com/azzimoda/raspishika-gx/pkg/redisdb"
-	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 func main() {
+
+	if err := run(); err != nil {
+		log.Fatal().Err(err).Msg("Server exited with error")
+	}
+}
+
+func run() error {
+
 	config.Init()
 
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
 
 	browser, err := browser.New()
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create browser")
+		return fmt.Errorf("failed to create browser: %w", err)
 	}
 	defer func() {
 		if err := browser.Close(); err != nil {
@@ -60,7 +69,7 @@ func main() {
 		PoolTimeout:  4 * time.Second,
 	})
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create redis client")
+		return fmt.Errorf("failed to create redis client: %w", err)
 	}
 	defer func() {
 		if err := redisClient.Close(); err != nil {
@@ -74,25 +83,37 @@ func main() {
 	serverAddr := ":" + viper.GetString("scraper_port")
 	log.Info().Str("addr", serverAddr).Msg("Starting server...")
 	srv := &http.Server{Addr: serverAddr, Handler: engine}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	serverErr := make(chan error, 1)
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal().Err(err).Send()
+		err := srv.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+			return
 		}
-		log.Info().Msg("Server stopped")
+		serverErr <- nil
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	log.Info().Msg("Sutting down...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal().Err(err).Msg("Server forced to shutdown")
+	select {
+	case err := <-serverErr:
+		return err
+	case <-ctx.Done():
 	}
 
+	log.Info().Msg("Shutting down...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("server forced to shutdown: %w", err)
+	}
+
+	<-serverErr
+
 	log.Info().Msg("Done")
+	return nil
 }
