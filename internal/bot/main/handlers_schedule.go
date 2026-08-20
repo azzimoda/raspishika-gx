@@ -132,7 +132,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	tomorrow := schedule.Tomorrow(time.Now())
 
 	text := tomorrow.HTML()
-	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
@@ -177,7 +177,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 
 	// If today is Sunday, send a special message
 	if time.Now().Weekday() == time.Sunday {
-		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		_, err := botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            "Сегодня воскресенье, отдыхайте!",
@@ -205,7 +205,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 
 	today := schedule.Today()
 	text := today.DynamicFormatHTML(time.Now())
-	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,

@@ -10,7 +10,7 @@ import (
 )
 
 type ProxyRepository interface {
-	UpdateFromJSON(data []byte)
+	UpdateFromJSON(data []byte) error
 
 	// All returns all proxies in the list
 	All() []string
@@ -39,12 +39,16 @@ func (r *proxyRepository) Next() (int, string) {
 	muNext.Lock()
 	defer muNext.Unlock()
 
-	idx := r.current
-	proxy := r.proxies[idx]
+	if len(r.proxies) == 0 {
+		return 0, ""
+	}
 
 	if r.current >= len(r.proxies) {
 		r.current = 0
 	}
+
+	idx := r.current
+	proxy := r.proxies[idx]
 	r.current++
 
 	return idx, proxy
@@ -52,7 +56,10 @@ func (r *proxyRepository) Next() (int, string) {
 
 var muUpdate sync.Mutex
 
-func (r *proxyRepository) UpdateFromJSON(data []byte) {
+// UpdateFromJSON parses and stores the proxy list. On failure (malformed data
+// or no usable proxies) the previous list is kept and an error is returned, so
+// the caller can retry instead of caching an empty list.
+func (r *proxyRepository) UpdateFromJSON(data []byte) error {
 	muUpdate.Lock()
 	defer muUpdate.Unlock()
 
@@ -64,19 +71,26 @@ func (r *proxyRepository) UpdateFromJSON(data []byte) {
 			Country string `json:"country"`
 		} `json:"geolocation"`
 	}
-	json.Unmarshal(data, &proxies)
+	if err := json.Unmarshal(data, &proxies); err != nil {
+		return fmt.Errorf("failed to parse proxy list: %w", err)
+	}
 
 	// Filter SOCKS and not Russian proxies
 	var filteredProxies []string
 	for _, proxy := range proxies {
-		if proxy.Protocol == "socks5" && proxy.Geolocation.Country != "RU" {
+		if proxy.Protocol == "socks5" && proxy.IP != "" && proxy.Port > 0 && proxy.Geolocation.Country != "RU" {
 			filteredProxies = append(filteredProxies, fmt.Sprintf("%s:%d", proxy.IP, proxy.Port))
 		}
+	}
+	if len(filteredProxies) == 0 {
+		return fmt.Errorf("no usable proxies in list")
 	}
 	log.Debug().Any("proxies", len(filteredProxies)).Msg("Loaded proxies")
 
 	r.proxies = filteredProxies
+	r.current = 0
 	r.updatedAt = time.Now()
+	return nil
 }
 
 func (r *proxyRepository) UpdatedAt() time.Time { return r.updatedAt }

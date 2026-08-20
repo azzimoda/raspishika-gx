@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
@@ -19,7 +20,7 @@ import (
 //go:embed commands.yaml
 var myCommandsBytes []byte
 
-func New(s *service.Services, proxy string, reporter reporter.Reporter) (*bot.Bot, error) {
+func New(s *service.Services, proxy string, reporter reporter.Reporter, onActivity func()) (*bot.Bot, error) {
 	h := newHandler(s, reporter)
 
 	httpClient, err := proxyutil.NewHTTPProxyClient(proxy)
@@ -27,10 +28,20 @@ func New(s *service.Services, proxy string, reporter reporter.Reporter) (*bot.Bo
 		return nil, err
 	}
 
+	touchActivity := func(next bot.HandlerFunc) bot.HandlerFunc {
+		return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+			if onActivity != nil {
+				onActivity()
+			}
+			next(ctx, b, update)
+		}
+	}
+
 	opts := []bot.Option{
 		bot.WithHTTPClient(10*time.Second, httpClient),
 		bot.WithCheckInitTimeout(10 * time.Second),
 		bot.WithMiddlewares(
+			touchActivity,
 			h.ignoreOldMessage,
 			h.ignoreInaccessibleMessageCQ,
 			h.syncCQSingleFlight,

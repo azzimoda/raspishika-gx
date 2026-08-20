@@ -32,9 +32,54 @@ func SendErrorMessage(ctx context.Context, b *bot.Bot, params *bot.SendMessagePa
 	return err
 }
 
+const sendRetryAttempts = 3
+
+// IsNetworkError reports whether err is a transport-level error (proxy/network),
+// as opposed to a Telegram business error that should not be retried.
+func IsNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch {
+	case errors.Is(err, bot.ErrorNotFound),
+		errors.Is(err, bot.ErrorConflict),
+		errors.Is(err, bot.ErrorForbidden),
+		errors.Is(err, bot.ErrorBadRequest),
+		errors.Is(err, bot.ErrorUnauthorized),
+		bot.IsTooManyRequestsError(err),
+		bot.IsMigrateError(err):
+		return false
+	default:
+		return true
+	}
+}
+
+// SendWithRetry sends a message, retrying on network errors so replies are not
+// lost when a proxy dies mid-flight.
+func SendWithRetry(ctx context.Context, b *bot.Bot, params *bot.SendMessageParams) (*models.Message, error) {
+	var lastErr error
+	for attempt := 0; attempt < sendRetryAttempts; attempt++ {
+		msg, err := b.SendMessage(ctx, params)
+		if err == nil {
+			return msg, nil
+		}
+		lastErr = err
+		if !IsNetworkError(err) {
+			return nil, err
+		}
+		log.Warn().Err(err).Int("attempt", attempt+1).Msg("Network error sending message, retrying...")
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(attempt+1) * time.Second):
+		}
+	}
+	return nil, lastErr
+}
+
 // SendTempMessage sends a temporary message that will be automatically deleted after the specified duration.
 func SendTempMessage(ctx context.Context, b *bot.Bot, dur time.Duration, params *bot.SendMessageParams) error {
-	msg, err := b.SendMessage(ctx, params)
+	msg, err := SendWithRetry(ctx, b, params)
 	if err != nil {
 		log.Error().Err(err).Msg("Error sending temporary message")
 		return fmt.Errorf("error sending temporary message: %w", err)
@@ -157,7 +202,7 @@ func SendWeekScheduleMessages(
 	log.Debug().Msg("Sending week schedule message...")
 	var errs []error
 
-	if _, err := b.SendMessage(ctx, &bot.SendMessageParams{
+	if _, err := SendWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: messageThreadID,
 		Text:            conf.FormatHTML() + ":",

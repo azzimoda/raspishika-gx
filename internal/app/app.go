@@ -70,11 +70,15 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 	}
 
 	mainBot := service.NewBotService(
-		func(p string) (*bot.Bot, error) { return mainbot.New(services, p, appReporter) },
+		func(p string, onActivity func()) (*bot.Bot, error) {
+			return mainbot.New(services, p, appReporter, onActivity)
+		},
 		services.Proxy,
 	)
 	adminBot := service.NewBotService(
-		func(p string) (*bot.Bot, error) { return adminbot.New(services, p, appReporter) },
+		func(p string, onActivity func()) (*bot.Bot, error) {
+			return adminbot.New(services, p, appReporter, onActivity)
+		},
 		services.Proxy,
 	)
 

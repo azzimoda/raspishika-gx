@@ -33,7 +33,7 @@ type Services struct {
 }
 
 func (s *Services) Stop() error {
-
+	s.Proxy.Stop()
 	return s.Browser.Close()
 }
 

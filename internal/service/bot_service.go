@@ -2,8 +2,9 @@ package service
 
 import (
 	"context"
-	"strings"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -12,11 +13,16 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-type BotBuilderFunc = func(proxy string) (*bot.Bot, error)
+type BotBuilderFunc = func(proxy string, onActivity func()) (*bot.Bot, error)
 
 func NewBotService(builder BotBuilderFunc, proxyService *ProxyService) *BotService {
 	return &BotService{builder: builder, proxy: proxyService, restartChan: make(chan struct{})}
 }
+
+const (
+	proxyWatchdogPeriod = 30 * time.Second
+	proxyStallTimeout   = 3 * time.Minute
+)
 
 type BotService struct {
 	superCtx context.Context
@@ -31,6 +37,7 @@ type BotService struct {
 	stopOnce     sync.Once
 	stopMu       sync.Mutex
 	stopped      bool
+	activity     atomic.Int64
 }
 
 func (s *BotService) Log() *zerolog.Logger {
@@ -38,6 +45,16 @@ func (s *BotService) Log() *zerolog.Logger {
 }
 
 func (s *BotService) Username() string { return s.username }
+
+// Touch records recent bot activity (an incoming update).
+func (s *BotService) Touch() {
+	s.activity.Store(time.Now().UnixNano())
+}
+
+// stalled reports whether no activity was seen for longer than proxyStallTimeout.
+func (s *BotService) stalled(now time.Time) bool {
+	return now.Sub(time.Unix(0, s.activity.Load())) > proxyStallTimeout
+}
 
 func (s *BotService) HealthCheck() error {
 
@@ -142,7 +159,7 @@ func (s *BotService) startBot(ctx context.Context, botCtx context.Context) {
 		default:
 		}
 
-		proxy, err := s.proxy.FirstAvailable()
+		proxy, err := s.proxy.FirstAvailable(ctx)
 		if err != nil {
 			s.Log().Error().Err(err).Msg("No available proxy, retrying in 10s...")
 			time.Sleep(10 * time.Second)
@@ -158,7 +175,7 @@ func (s *BotService) startBot(ctx context.Context, botCtx context.Context) {
 		s.Log().Debug().Str("proxy", proxy)
 
 		s.Log().Trace().Msg("Building bot...")
-		b, err := s.builder(proxy)
+		b, err := s.builder(proxy, s.Touch)
 		if err != nil {
 			s.Log().Error().Err(err).Msg("Failed to build bot, retrying in 5 second...")
 			time.Sleep(5 * time.Second)
@@ -178,10 +195,13 @@ func (s *BotService) startBot(ctx context.Context, botCtx context.Context) {
 		bot.WithErrorsHandler(func(err error) { go s.handleAPIError(err) })(b)
 		s.Log().Trace().Msg("Bot initialized")
 
+		s.Touch()
 		s.stopMu.Lock()
 		s.Bot = b
 		bot := s.Bot
 		s.stopMu.Unlock()
+
+		go s.runWatchdog(botCtx, bot)
 
 		bot.Start(botCtx)
 
@@ -189,11 +209,50 @@ func (s *BotService) startBot(ctx context.Context, botCtx context.Context) {
 	}
 }
 
-func (s *BotService) handleAPIError(err error) {
-	if strings.Contains(err.Error(), "socks connect") || strings.Contains(err.Error(), "connection refused") {
-		s.Log().Error().Err(err).Msg("Proxy connection refused, restarting...")
-		s.Restart()
-	} else {
-		s.Log().Error().Err(err).Msg("Telegram API error")
+// runWatchdog periodically probes Telegram and restarts the bot with a new
+// proxy if the current one stopped delivering updates or became unreachable.
+func (s *BotService) runWatchdog(botCtx context.Context, b *bot.Bot) {
+	ticker := time.NewTicker(proxyWatchdogPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-botCtx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		ctx, cancel := context.WithTimeout(botCtx, proxyFinderTimeout)
+		_, err := b.GetMe(ctx)
+		cancel()
+		if err != nil {
+			s.Log().Error().Err(err).Msg("Watchdog: GetMe failed, restarting with a new proxy...")
+			s.Restart()
+			return
+		}
+
+		if s.stalled(time.Now()) {
+			s.Log().Error().Msg("Watchdog: no updates for a long time, restarting with a new proxy...")
+			s.Restart()
+			return
+		}
 	}
+}
+
+func (s *BotService) handleAPIError(err error) {
+	if isTelegramError(err) {
+		s.Log().Warn().Err(err).Msg("Telegram API error, no restart needed")
+		return
+	}
+	s.Log().Error().Err(err).Msg("Network error, restarting with a new proxy...")
+	s.Restart()
+}
+
+func isTelegramError(err error) bool {
+	return errors.Is(err, bot.ErrorNotFound) ||
+		errors.Is(err, bot.ErrorConflict) ||
+		errors.Is(err, bot.ErrorForbidden) ||
+		errors.Is(err, bot.ErrorBadRequest) ||
+		errors.Is(err, bot.ErrorUnauthorized) ||
+		bot.IsTooManyRequestsError(err) ||
+		bot.IsMigrateError(err)
 }
