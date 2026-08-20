@@ -33,6 +33,9 @@ func (s *ChatService) GetChat(ctx context.Context, id int64) (*model.Chat, error
 func (s *ChatService) GetChatByChatID(ctx context.Context, chatID model.ChatID) (*model.Chat, error) {
 	return s.repo.GetChatByChatID(ctx, chatID)
 }
+func (s *ChatService) GetChatByUsernameOrChatID(ctx context.Context, usernameOrChatID string) (*model.Chat, error) {
+	return s.repo.GetChatByUsernameOrChatID(ctx, usernameOrChatID)
+}
 
 func (s *ChatService) GetAllChats(ctx context.Context) ([]*model.Chat, error) {
 	return s.repo.GetAllChats(ctx)
@@ -64,6 +67,10 @@ func (s *ChatService) GetChatsWithDarkMode(ctx context.Context) ([]*model.Chat, 
 
 func (s *ChatService) GetRecentTeachers(ctx context.Context, chatID int64) ([]*model.RecentTeacher, error) {
 	return s.repo.GetRecentTeachers(ctx, chatID)
+}
+
+func (s *ChatService) CountAllChats(ctx context.Context) (int, error) {
+	return s.repo.CountAllChats(ctx)
 }
 
 func (s *ChatService) DeleteChat(ctx context.Context, id int64) error {

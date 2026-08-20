@@ -64,10 +64,11 @@ func sendChatActionTyping(ctx context.Context, b *bot.Bot, chatID any, messageTh
 }
 
 func (h *handler) ReportChat(chat *model.Chat) reporter.ReportBuilder {
+
 	r := h.Report()
 	if chat == nil {
 		return r
 	}
-	return r.Debug("chatID", chat.TgChatID).Debug("username", chat.UserName).
+	return r.Debug("chatID", chat.TgChatID).Debug("username", refutil.DerefOrTypeDefault(chat.UserName)).
 		Debug("group", refutil.DerefOrTypeDefault(chat.GroupName))
 }

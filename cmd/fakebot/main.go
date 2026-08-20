@@ -6,15 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
+	"github.com/azzimoda/raspishika-gx/internal/app"
 	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
 	"github.com/azzimoda/raspishika-gx/internal/fakescraper"
 	"github.com/azzimoda/raspishika-gx/internal/model"
-	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
 	"github.com/azzimoda/raspishika-gx/internal/service"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
@@ -116,7 +115,7 @@ func main() {
 
 	container := repository.NewContainer(db)
 
-	appReporter := new(appReporter)
+	appReporter := new(app.AppReporter)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -151,41 +150,20 @@ func main() {
 	broadcast := service.NewBroadcastService(mainBot, services, appReporter)
 	defer broadcast.Stop()
 
-	mainBot.OnRestart(func(ctx context.Context) {
-		appReporter.Report().Msg("Main bot is restarting...")
+	app := app.App{
+		Ctx:         ctx,
+		Cancel:      func() {},
+		DB:          db,
+		Services:    services,
+		Broadcast:   broadcast,
+		MainBot:     mainBot,
+		AdminBot:    adminBot,
+		AppReporter: appReporter,
+	}
+	appReporter.App = &app
 
-		for mainBot.Bot == nil {
-			select {
-			case <-ctx.Done():
-				log.Warn().Msg("Context cancelled!")
-				return
-			default:
-			}
-			log.Debug().Msg("Wating for main bot...")
-			time.Sleep(5 * time.Second)
-		}
-
-		appReporter.Report().Msg("Main bot has just restarted")
-	})
-	adminBot.OnRestart(func(ctx context.Context) {
-		if adminBot.Bot != nil {
-			appReporter.Report().Msg("Admin bot is restarting...")
-			time.Sleep(3 * time.Second)
-		}
-
-		for adminBot.Bot == nil {
-			select {
-			case <-ctx.Done():
-				log.Warn().Msg("Context cancelled!")
-				return
-			default:
-			}
-			log.Debug().Msg("Wating for admin bot...")
-			time.Sleep(5 * time.Second)
-		}
-
-		appReporter.Report().Msg("Admin bot has just restarted")
-	})
+	mainBot.OnRestart(app.OnMainBotRestart)
+	adminBot.OnRestart(app.OnAdminBotRestart)
 
 	// RUN
 
@@ -215,7 +193,7 @@ func main() {
 		if err := adminBot.HealthCheck(); err != nil {
 			log.Error().Err(err).Msg("Admin bot health check failed")
 		} else {
-			shouldReturn := startAdminBot(ctx, mainBot, adminBot, appReporter)
+			shouldReturn := app.StartAdminBot(ctx)
 			if shouldReturn {
 				return
 			}
@@ -225,33 +203,4 @@ func main() {
 	}
 
 	<-ctx.Done()
-}
-
-func startAdminBot(ctx context.Context, mainBot, adminBot *service.BotService, appReporter *appReporter) bool {
-	go adminBot.Start(ctx)
-	for adminBot.Bot == nil || mainBot.Bot == nil {
-		select {
-		case <-ctx.Done():
-			log.Warn().Msg("Context cancelled!")
-			return true
-		default:
-		}
-		log.Debug().Msg("Wating for bots...")
-		time.Sleep(5 * time.Second)
-	}
-	time.Sleep(1 * time.Second)
-	log.Info().Msg("All bots started")
-
-	appReporter.Reporter = reporter.NewReporter(adminBot.Bot, viper.GetInt64(config.KeyAdminID))
-	appReporter.Report().Msg("Started on bot @" + mainbot.GetMe(mainBot.Bot).Username)
-	return false
-}
-
-type appReporter struct{ reporter.Reporter }
-
-func (r appReporter) Report() reporter.ReportBuilder {
-	if r.Reporter == nil {
-		return reporter.EmptyReportBuilder()
-	}
-	return r.Reporter.Report()
 }

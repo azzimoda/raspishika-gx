@@ -4,6 +4,10 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
+	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 )
 
 func parsePeriod(str string) (time.Duration, bool) {
@@ -30,4 +34,14 @@ func parsePeriod(str string) (time.Duration, bool) {
 		return 0, false
 	}
 	return time.Duration(multiplier * time.Duration(num)), true
+}
+
+func (h *handler) reportChat(chat *model.Chat) reporter.ReportBuilder {
+
+	r := h.Report()
+	if chat == nil {
+		return r
+	}
+	return r.Debug("chatID", chat.TgChatID).Debug("username", refutil.DerefOrTypeDefault(chat.UserName)).
+		Debug("group", refutil.DerefOrTypeDefault(chat.GroupName))
 }

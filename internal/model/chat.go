@@ -10,13 +10,8 @@ import (
 
 type ChatID int64
 
-func (i ChatID) Int64() int64 { return int64(i) }
-
+func (i ChatID) Int64() int64    { return int64(i) }
 func (i ChatID) IsPrivate() bool { return i > 0 }
-
-type UserName string
-
-func (n UserName) String() string { return string(n) }
 
 type ChatState string
 
@@ -42,7 +37,7 @@ const (
 type Chat struct {
 	ID               int64           `gorm:"primaryKey;column:id"`
 	TgChatID         ChatID          `gorm:"column:tg_chat_id"`
-	UserName         *UserName       `gorm:"column:username"`
+	UserName         *string         `gorm:"column:username"`
 	State            ChatState       `gorm:"column:state"`
 	DepartmentName   *string         `gorm:"column:department"`
 	GroupName        *GroupName      `gorm:"column:group"`

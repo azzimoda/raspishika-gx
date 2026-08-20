@@ -14,6 +14,7 @@ import (
 
 // NewReportBuilder returns a new report builder with the given bot and recipient chat ID.
 func NewReportBuilder(bot *bot.Bot, recipientChatID int64) ReportBuilder {
+
 	b := EmptyReportBuilder()
 	b.bot = bot
 	b.recipientChatID = recipientChatID
@@ -22,6 +23,7 @@ func NewReportBuilder(bot *bot.Bot, recipientChatID int64) ReportBuilder {
 
 // EmptyReportBuilder returns a new report builder with the default format function.
 func EmptyReportBuilder() ReportBuilder {
+
 	return ReportBuilder{debugValues: make(map[string]any), formatFunc: defaultFormatFunc}
 }
 
@@ -42,18 +44,21 @@ type ReportBuilder struct {
 
 // WithFormatFunc sets the format function for the report builder.
 func (rc ReportBuilder) WithFormatFunc(f FormatFunc) ReportBuilder {
+
 	rc.formatFunc = f
 	return rc
 }
 
 // Err adds error to report message.
 func (r ReportBuilder) Err(err error) ReportBuilder {
+
 	r.error = err
 	return r
 }
 
 // Debug sets a debug object with the given name and value.
 func (r ReportBuilder) Debug(name string, value any) ReportBuilder {
+
 	r.debugValues[name] = value
 	return r
 }
@@ -63,11 +68,13 @@ func (rc ReportBuilder) Send() (*Report, error) { return rc.Msg("") }
 
 // Msgf sends a report message with the given format string and arguments.
 func (rc ReportBuilder) Msgf(format string, a ...any) (*Report, error) {
+
 	return rc.Msg(fmt.Sprintf(format, a...))
 }
 
 // Msg sends a report message with the given string.
 func (rc ReportBuilder) Msg(msg string) (*Report, error) {
+
 	log.Trace().Msg("Sending report...")
 
 	{
@@ -116,6 +123,7 @@ type Report struct {
 
 // RemoveMessage removes the report message from the chat.
 func (r *Report) RemoveMessage() (isDeleted bool, err error) {
+
 	isDeleted, err = r.bot.DeleteMessage(context.Background(), &bot.DeleteMessageParams{
 		ChatID:    r.recipientChatID,
 		MessageID: r.Message.ID,
@@ -125,6 +133,7 @@ func (r *Report) RemoveMessage() (isDeleted bool, err error) {
 }
 
 func defaultFormatFunc(msg string, debugValues map[string]any, err error) *bot.SendRichMessageParams {
+
 	var html strings.Builder
 
 	// Error
@@ -134,14 +143,14 @@ func defaultFormatFunc(msg string, debugValues map[string]any, err error) *bot.S
 
 	// Debug objects
 	if len(debugValues) > 0 {
+
 		keys := make([]string, 0, len(debugValues))
 		for k := range debugValues {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 
-		html.WriteString(`<table bordered striped>
-			<caption>Striped</caption>`)
+		html.WriteString(`<table bordered striped>`)
 		for _, name := range keys {
 			fmt.Fprintf(&html, `<tr><td>%s</td><td><code>%+v</code></td></tr>`, name, debugValues[name])
 		}
@@ -151,7 +160,5 @@ func defaultFormatFunc(msg string, debugValues map[string]any, err error) *bot.S
 	// Message text
 	fmt.Fprintf(&html, "<blockquote>%s</blockquote>", msg)
 
-	return &bot.SendRichMessageParams{
-		RichMessage: models.InputRichMessage{HTML: html.String()},
-	}
+	return &bot.SendRichMessageParams{RichMessage: models.InputRichMessage{HTML: html.String()}}
 }

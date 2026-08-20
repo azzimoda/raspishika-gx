@@ -96,10 +96,10 @@ type CallbackCommand struct {
 
 // Arg returns the argument at the specified index, or an empty string if out of bounds.
 func (c CallbackCommand) Arg(i int) string {
-	if i < len(c.Args) {
-		return c.Args[i]
+	if i < 0 || i >= len(c.Args) {
+		return ""
 	}
-	return ""
+	return c.Args[i]
 }
 
 func (c CallbackCommand) String() string {

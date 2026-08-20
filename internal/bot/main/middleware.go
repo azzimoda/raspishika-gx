@@ -37,18 +37,18 @@ func (h *handler) ensureChat(next bot.HandlerFunc) bot.HandlerFunc {
 }
 func (h *handler) createOrUpdateChat(b *bot.Bot, update *models.Update) (*model.Chat, error) {
 	var chatID model.ChatID
-	var username model.UserName
+	var username string
 	if update.Message != nil {
 		chatID = model.ChatID(update.Message.Chat.ID)
-		username = model.UserName(update.Message.Chat.Username)
+		username = update.Message.Chat.Username
 	} else if update.CallbackQuery != nil {
 		chatID = model.ChatID(update.CallbackQuery.Message.Message.Chat.ID)
-		username = model.UserName(update.CallbackQuery.Message.Message.Chat.Username)
+		username = update.CallbackQuery.Message.Message.Chat.Username
 	} else {
 		return nil, ErrUnknownUpdateType
 	}
 
-	chat := new(model.Chat{TgChatID: chatID, UserName: new(model.UserName(username))})
+	chat := new(model.Chat{TgChatID: chatID, UserName: new(username)})
 	created, err := h.Chat.CreateOrUpdateChat(context.Background(), chat)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create or update chat: %w", err)
@@ -63,14 +63,19 @@ func (h *handler) createOrUpdateChat(b *bot.Bot, update *models.Update) (*model.
 // sendNewChatReport middlware sends a report to the admin chat when a new user chat is registered.
 // It also sends a message to the admin chat if the user chat has a group configured.
 func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
-	report, sentErr := h.ReportChat(chat).Msg("New chat registered")
-	if sentErr != nil {
-		log.Warn().Err(sentErr).Msg("Failed to send new chat report")
+	count, err := h.Chat.CountAllChats(context.Background())
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to count all chats")
+		count = 0
+	}
+
+	report, err := h.ReportChat(chat).Msgf("New chat registered (×%d)", count)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to send new chat report")
 		return
 	}
 
 	msg := report.Message
-	var err error
 	for range 5 {
 		time.Sleep(20 * time.Second)
 
@@ -318,6 +323,8 @@ func (h *handler) makePrehandlerVacation(kind string) bot.Middleware {
 func sendVacationAnswer(
 	ctx context.Context, b *bot.Bot, update *models.Update, t time.Time, isConfig bool,
 ) {
+	const vacationText = "Не могу настроить группу во время каникул, подождите до начала семестра"
+
 	dur := time.Until(time.Date(t.Year(), time.September, 1, 0, 0, 0, 0, t.Location()))
 	days := int(dur.Hours()) / 24
 	text := fmt.Sprintf("До конца каникул осталось %d день/дня/дней", days)
@@ -325,7 +332,7 @@ func sendVacationAnswer(
 		if isConfig {
 			err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
 				ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID,
-				Text: "Не могу настроить группу во вермя каникул, подождите до начала семестра",
+				Text: vacationText,
 			})
 			addHandlerCtxErr(ctx, err)
 		}
@@ -342,7 +349,7 @@ func sendVacationAnswer(
 			m := cq.Message.Message
 			err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
 				ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID,
-				Text: "Не могу настроить группу во вермя каникул, подождите до начала семестра",
+				Text: vacationText,
 			})
 			addHandlerCtxErr(ctx, err)
 		}

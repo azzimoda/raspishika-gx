@@ -95,13 +95,16 @@ func (h *handler) handleCmdHelp(ctx context.Context, b *bot.Bot, update *models.
 func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.Update) {
 	log.Debug().Msg("Handling command stop...")
 
+	message := update.Message
+	chatID := message.Chat.ID
+	messageThreadID := message.MessageThreadID
+
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
 		addHandlerCtxErr(ctx, fmt.Errorf("failed to get chat from handler context"))
 		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:          update.Message.Chat.ID,
-			MessageThreadID: update.Message.MessageThreadID,
-			Text:            "Не удалось удалить данные чата, попробуйте позже",
+			ChatID: chatID, MessageThreadID: messageThreadID,
+			Text: "Не удалось удалить данные чата, попробуйте позже",
 		})
 		return
 	}
@@ -109,20 +112,23 @@ func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.
 	if err := h.Chat.DeleteChat(ctx, chat.ID); err != nil {
 		addHandlerCtxErr(ctx, fmt.Errorf("failed to get chat from handler context"))
 		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID:          update.Message.Chat.ID,
-			MessageThreadID: update.Message.MessageThreadID,
-			Text:            "Не удалось удалить данные чата, попробуйте позже",
+			ChatID: chatID, MessageThreadID: messageThreadID,
+			Text: "Не удалось удалить данные чата, попробуйте позже",
 		})
 		return
 	}
 	log.Trace().Int64("tgChatID", int64(chat.TgChatID)).Msg("Chat deleted from DB")
 
-	h.ReportChat(chat).Msg("User stopped the bot :(")
-	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:          update.Message.Chat.ID,
-		MessageThreadID: update.Message.MessageThreadID,
-		Text:            "Ваши данные удалены и рассылки остановлены. Спасибо, что пользовались ботом!",
-		ReplyMarkup:     models.ReplyKeyboardRemove{RemoveKeyboard: true},
+	count, err := h.Chat.CountAllChats(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to count all chats")
+	}
+
+	h.ReportChat(chat).Msgf("User stopped the bot ☹ (×%d rests)", count)
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatID, MessageThreadID: messageThreadID,
+		Text:        "Ваши данные удалены и рассылки остановлены. Спасибо, что пользовались ботом!",
+		ReplyMarkup: models.ReplyKeyboardRemove{RemoveKeyboard: true},
 	})
 	addHandlerCtxErr(ctx, err)
 	log.Info().Msg("Handled command stop")
@@ -168,7 +174,7 @@ func (h *handler) handleCmdCancel(ctx context.Context, b *bot.Bot, update *model
 func (h *handler) handleCQDelete(ctx context.Context, b *bot.Bot, update *models.Update) {
 	msg := update.CallbackQuery.Message.Message
 	if msg == nil {
-		log.Debug().Any("update", update).Msg("Message is inaccessible")
+		log.Debug().Any("update", update).Msg("Message is inaccessible, cannot delete")
 		return
 	}
 
@@ -176,7 +182,7 @@ func (h *handler) handleCQDelete(ctx context.Context, b *bot.Bot, update *models
 		log.Warn().Err(err).Any("update", update).Msg("Failed to delete message")
 		addHandlerCtxErr(ctx, err)
 	} else if !deleted {
-		log.Debug().Any("update", update).Msg("Message is not deleted")
+		log.Warn().Any("update", update).Msg("Message is not deleted")
 	}
 
 	log.Info().Msg("Handled CQ delete")

@@ -2,6 +2,7 @@ package adminbot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,14 +10,14 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v5"
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-	"github.com/rs/zerolog/log"
-
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 )
 
 func newHandler(s *service.Services, reporter reporter.Reporter) *handler {
@@ -32,28 +33,47 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommandStartOnly, h.handleCmdStart)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "stats", bot.MatchTypeCommandStartOnly, h.handleCmdStats)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "config", bot.MatchTypeCommandStartOnly, h.handleCmdConfig)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "chat", bot.MatchTypeCommandStartOnly, h.handleCmdChat)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "group", bot.MatchTypeCommandStartOnly, h.handleCmdGroup)
-
-	b.RegisterHandlerMatchFunc(func(update *models.Update) bool {
-		return update.Message != nil && strings.HasPrefix(update.Message.Text, "@") // message with username
-	}, h.handleTextChat)
-	b.RegisterHandlerMatchFunc(func(update *models.Update) bool {
-		if update.Message == nil {
-			return false
-		}
-
-		_, err := h.Schedule.ValidateGroupName(context.Background(), model.GroupName(update.Message.Text))
-		return err == nil // group name is valid
-	}, h.handleTextGroup)
 }
 
 func (*handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.Update) {
 	log.Debug().Any("update", update).Msg("Unhandled update")
 }
 
-func (*handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models.Update) {
-	b.SendMessage(ctx, &bot.SendMessageParams{ChatID: update.Message.Chat.ID, Text: "Welcome back, Master!"})
+func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models.Update) {
+	_, argsStr := botutil.ParseCommand(update.Message.Text)
+	if argsStr == "" {
+		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: update.Message.Chat.ID, Text: "Welcome back, Master!"})
+		return
+	}
+
+	args := botutil.ParseStartCommand(argsStr)
+	switch args.Arg(0) {
+	case "chat":
+		usernameOrChatID := args.Arg(1)
+
+		chat, err := h.Chat.GetChatByUsernameOrChatID(ctx, usernameOrChatID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				h.Report().Msg("Chat not found")
+			} else {
+				h.Report().Err(err).Msg("Error getting chat")
+			}
+			return
+		}
+		h.reportChat(chat).Msg("Chat found")
+	case "group":
+		groupName := args.Arg(1)
+
+		group, err := h.Schedule.GetGroupByName(ctx, model.GroupName(groupName))
+		if err != nil {
+			h.Report().Err(err).Msg("Error getting group")
+			return
+		}
+
+		h.Report().Debug("name", group.GroupName).Debug("department", group.DepartmentName).
+			Debug("gr", group.GroupID).Debug("sid", group.DepartmentID).
+			Msg("Group found") // TODO: Add data about chats with this group.
+	}
 }
 
 func (h *handler) handleCmdStats(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -160,20 +180,6 @@ func buildConfigReportTextHTML(stats *service.ConfigStatsData) string {
 	}
 	fmt.Fprintf(&sb, "</pre>\n")
 	return sb.String()
-}
-
-func (*handler) handleCmdChat(ctx context.Context, b *bot.Bot, update *models.Update) {
-	log.Warn().Msg("Unimplemented handler")
-}
-func (*handler) handleTextChat(ctx context.Context, b *bot.Bot, update *models.Update) {
-	log.Warn().Any("update", update).Msg("Unimplemented handler")
-}
-
-func (*handler) handleCmdGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
-	log.Warn().Msg("Unimplemented handler")
-}
-func (*handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
-	log.Warn().Any("update", update).Msg("Unimplemented handler")
 }
 
 var me *models.User

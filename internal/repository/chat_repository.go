@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -21,6 +23,7 @@ type ChatRepository interface {
 
 	GetChat(ctx context.Context, id int64) (*model.Chat, error)
 	GetChatByChatID(context.Context, model.ChatID) (*model.Chat, error)
+	GetChatByUsernameOrChatID(context.Context, string) (*model.Chat, error)
 
 	GetAllChats(context.Context) ([]*model.Chat, error)
 	GetPrivateChats(context.Context) ([]*model.Chat, error)
@@ -85,7 +88,7 @@ func (r *chatRepository) CreateOrUpdateChat(ctx context.Context, chat *model.Cha
 		// Update username
 		existingChat.UserName = chat.UserName
 		if err := r.UpdateChat(ctx, &existingChat); err != nil {
-			return false, fmt.Errorf("failed to update chat's username (%v -> %s): %w",
+			return false, fmt.Errorf("failed to update chat's username (%v -> %v): %w",
 				existingChat.UserName, chat.UserName, err)
 		}
 		*chat = existingChat
@@ -124,6 +127,17 @@ func (r *chatRepository) GetChat(ctx context.Context, id int64) (*model.Chat, er
 func (r *chatRepository) GetChatByChatID(ctx context.Context, chatID model.ChatID) (*model.Chat, error) {
 	chat := model.Chat{}
 	err := r.db.WithContext(ctx).Where("tg_chat_id = ?", chatID).First(&chat).Error
+	return &chat, err
+}
+func (r *chatRepository) GetChatByUsernameOrChatID(ctx context.Context, usernameOrChatID string) (*model.Chat, error) {
+	chat := model.Chat{}
+	username := strings.TrimPrefix(usernameOrChatID, "@")
+	var err error
+	if chatID, parseErr := strconv.ParseInt(username, 10, 64); parseErr == nil {
+		err = r.db.WithContext(ctx).Where("tg_chat_id = ?", chatID).First(&chat).Error
+	} else {
+		err = r.db.WithContext(ctx).Where("username = ?", username).First(&chat).Error
+	}
 	return &chat, err
 }
 

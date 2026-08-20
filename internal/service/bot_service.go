@@ -33,6 +33,8 @@ func (s *BotService) Log() *zerolog.Logger {
 	return new(log.Logger.With().Str("bot", s.username).Logger())
 }
 
+func (s *BotService) Username() string { return s.username }
+
 func (s *BotService) HealthCheck() error {
 	if s.Bot == nil {
 		return nil
