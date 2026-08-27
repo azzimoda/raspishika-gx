@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/azzimoda/raspishika-gx/internal/api/scraper"
 	"github.com/azzimoda/raspishika-gx/internal/api/service"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/gin-gonic/gin"
@@ -150,6 +151,18 @@ func TestGetDepartments(t *testing.T) {
 			t.Fatalf("status = %d, want 500", rec.Code)
 		}
 	})
+
+	t.Run("service unavailable", func(t *testing.T) {
+		mock := &mockService{getDepartments: func(context.Context) ([]model.Department, error) {
+			return nil, scraper.ErrServiceUnavailable
+		}}
+		h := NewHandler(mock)
+		rec := doRequest(t, setupRouter(h), "/api/v1/departments")
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503; body: %s", rec.Code, rec.Body.String())
+		}
+	})
 }
 
 func TestGetGroups(t *testing.T) {
@@ -235,6 +248,18 @@ func TestGetTeachers(t *testing.T) {
 
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want 500", rec.Code)
+		}
+	})
+
+	t.Run("service unavailable", func(t *testing.T) {
+		mock := &mockService{getTeachers: func(context.Context) ([]model.Teacher, error) {
+			return nil, scraper.ErrServiceUnavailable
+		}}
+		h := NewHandler(mock)
+		rec := doRequest(t, setupRouter(h), "/api/v1/teachers")
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503; body: %s", rec.Code, rec.Body.String())
 		}
 	})
 }
@@ -352,6 +377,47 @@ func TestGetSchedule(t *testing.T) {
 
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want 500; body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("group lookup unavailable", func(t *testing.T) {
+		mock := &mockService{getGroupByName: func(context.Context, model.GroupName) (*model.Group, error) {
+			return nil, scraper.ErrServiceUnavailable
+		}}
+		h := NewHandler(mock)
+		rec := doRequest(t, setupRouter(h), "/api/v1/schedule?group=ИСПт-22-(9)-2")
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503; body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("teacher lookup unavailable", func(t *testing.T) {
+		mock := &mockService{getTeacherByNameOrID: func(context.Context, string) (*model.Teacher, error) {
+			return nil, scraper.ErrServiceUnavailable
+		}}
+		h := NewHandler(mock)
+		rec := doRequest(t, setupRouter(h), "/api/v1/schedule?teacher=Иванов")
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503; body: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("schedule fetch unavailable", func(t *testing.T) {
+		mock := &mockService{
+			getGroupByName: func(context.Context, model.GroupName) (*model.Group, error) {
+				return group, nil
+			},
+			getSchedule: func(context.Context, model.ScheduleConfig) (*model.ScheduleData, error) {
+				return nil, scraper.ErrServiceUnavailable
+			},
+		}
+		h := NewHandler(mock)
+		rec := doRequest(t, setupRouter(h), "/api/v1/schedule?group=ИСПт-22-(9)-2")
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503; body: %s", rec.Code, rec.Body.String())
 		}
 	})
 }

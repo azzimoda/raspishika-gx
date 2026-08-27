@@ -9,10 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
-
 	"github.com/azzimoda/raspishika-gx/internal/api/browser"
 	"github.com/azzimoda/raspishika-gx/internal/api/handler"
 	"github.com/azzimoda/raspishika-gx/internal/api/router"
@@ -21,6 +17,9 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/logger"
 	"github.com/azzimoda/raspishika-gx/pkg/redisdb"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 )
 
 func main() {

@@ -2,12 +2,14 @@ package mainbot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
 
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 )
@@ -21,6 +23,13 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 
 	_, err := botutil.DeleteMessage(ctx, b, update.Message)
 	addHandlerCtxErr(ctx, err)
+
+	if status, err := h.Schedule.IsVacation(ctx); err != nil {
+		log.Warn().Err(err).Msg("Failed to check vacation status; trying to process anyway...")
+	} else if status {
+		sendVacationAnswer(ctx, b, update, false)
+		return
+	}
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
@@ -121,6 +130,7 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 }
 
 func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	log.Debug().Msg("Handling CQ teacher...")
 
 	message := update.CallbackQuery.Message.Message
@@ -144,10 +154,15 @@ func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *model
 
 	teacher, err := h.Schedule.GetTeacherByNameOrID(ctx, command.Arg(0))
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
-			ChatID:          update.Message.Chat.ID,
-			MessageThreadID: update.Message.MessageThreadID,
+			ChatID:          message.Chat.ID,
+			MessageThreadID: message.MessageThreadID,
 			Text:            botutil.ErrMsgTryLater,
 		})
 		return

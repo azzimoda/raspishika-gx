@@ -54,11 +54,11 @@ func IsNetworkError(err error) bool {
 	}
 }
 
-// SendWithRetry sends a message, retrying on network errors so replies are not
+// SendMessageWithRetry sends a message, retrying on network errors so replies are not
 // lost when a proxy dies mid-flight.
-func SendWithRetry(ctx context.Context, b *bot.Bot, params *bot.SendMessageParams) (*models.Message, error) {
+func SendMessageWithRetry(ctx context.Context, b *bot.Bot, params *bot.SendMessageParams) (*models.Message, error) {
 	var lastErr error
-	for attempt := 0; attempt < sendRetryAttempts; attempt++ {
+	for attempt := range sendRetryAttempts {
 		msg, err := b.SendMessage(ctx, params)
 		if err == nil {
 			return msg, nil
@@ -79,7 +79,7 @@ func SendWithRetry(ctx context.Context, b *bot.Bot, params *bot.SendMessageParam
 
 // SendTempMessage sends a temporary message that will be automatically deleted after the specified duration.
 func SendTempMessage(ctx context.Context, b *bot.Bot, dur time.Duration, params *bot.SendMessageParams) error {
-	msg, err := SendWithRetry(ctx, b, params)
+	msg, err := SendMessageWithRetry(ctx, b, params)
 	if err != nil {
 		log.Error().Err(err).Msg("Error sending temporary message")
 		return fmt.Errorf("error sending temporary message: %w", err)
@@ -202,7 +202,7 @@ func SendWeekScheduleMessages(
 	log.Debug().Msg("Sending week schedule message...")
 	var errs []error
 
-	if _, err := SendWithRetry(ctx, b, &bot.SendMessageParams{
+	if _, err := SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: messageThreadID,
 		Text:            conf.FormatHTML() + ":",
@@ -302,6 +302,7 @@ func UpdateInlineButton(kind, value string) models.InlineKeyboardButton {
 	}
 }
 
+// Deprecated: use ScheduleService.IsVacation instead.
 func IsVacation(t time.Time) bool {
 	if t.Month() == time.August {
 		return true

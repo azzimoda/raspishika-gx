@@ -29,6 +29,9 @@ type mockScraper struct {
 	schedule       *model.ScheduleData
 	scheduleErr    error
 
+	vacation    bool
+	vacationErr error
+
 	departmentsCalls int
 	groupsCalls      int
 	teachersCalls    int
@@ -58,6 +61,10 @@ func (m *mockScraper) ScrapeSchedule(url string, conf model.ScheduleConfig) (*mo
 	m.scheduleCalls++
 	m.scheduleURL = url
 	return m.schedule, m.scheduleErr
+}
+
+func (m *mockScraper) CheckVacation() (bool, error) {
+	return m.vacation, m.vacationErr
 }
 
 func newTestService(t *testing.T, sc Scraper) (*ScheduleService, *miniredis.Miniredis) {

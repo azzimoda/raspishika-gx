@@ -10,6 +10,7 @@ import (
 	_ "github.com/azzimoda/raspishika-gx/docs"
 	"github.com/rs/zerolog/log"
 
+	"github.com/azzimoda/raspishika-gx/internal/api/scraper"
 	"github.com/azzimoda/raspishika-gx/internal/api/service"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/gin-gonic/gin"
@@ -40,12 +41,19 @@ type Handler struct{ service Service }
 // @Tags        schedule,departments
 // @Produce     json
 // @Success     200  {object}  []model.Department
+// @Failure     503  {object}  model.ErrorResponse
 // @Router      /departments [get]
 func (h *Handler) GetDepartments(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	departments, err := h.service.GetDepartments(ctx)
 	if err != nil {
+		if errors.Is(err, scraper.ErrServiceUnavailable) {
+			log.Error().Err(err).Msg("Failed to get departments")
+			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get departments")
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: err.Error()})
 		return
@@ -63,6 +71,7 @@ func (h *Handler) GetDepartments(c *gin.Context) {
 // @Param       department  query  string  false  "Department name"
 // @Success     200  {object}  []model.Group
 // @Success     404  {object}  model.ErrorResponse
+// @Failure     503  {object}  model.ErrorResponse
 // @Router      /groups [get]
 func (h *Handler) GetGroups(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -77,6 +86,12 @@ func (h *Handler) GetGroups(c *gin.Context) {
 		groups, err = h.service.GetGroupsByDepartment(ctx, department)
 	}
 	if err != nil {
+		if errors.Is(err, scraper.ErrServiceUnavailable) {
+			log.Error().Err(err).Msg("Failed to get departments")
+			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+			return
+		}
+
 		if errors.Is(err, service.ErrNoDepartment) && department != "" {
 			log.Warn().Str("department", department).Msg("Department not found")
 			c.JSON(http.StatusNotFound, model.ErrorResponse{
@@ -103,6 +118,7 @@ func (h *Handler) GetGroups(c *gin.Context) {
 // @Param       name  path  string  true  "Group name"
 // @Success     200  {object}  model.Group
 // @Success     404  {object}  model.ErrorResponse
+// @Failure     503  {object}  model.ErrorResponse
 // @Router      /groups/{name} [get]
 func (h *Handler) GetGroup(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -117,6 +133,12 @@ func (h *Handler) GetGroup(c *gin.Context) {
 
 	group, err := h.service.GetGroupByName(ctx, groupName)
 	if err != nil {
+		if errors.Is(err, scraper.ErrServiceUnavailable) {
+			log.Error().Err(err).Msg("Failed to get departments")
+			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+			return
+		}
+
 		if errors.Is(err, service.ErrNoGroup) {
 			log.Warn().Str("name", groupNameStr).Msg("Group not found")
 			c.JSON(http.StatusNotFound, model.ErrorResponse{
@@ -141,12 +163,19 @@ func (h *Handler) GetGroup(c *gin.Context) {
 // @Tags        schedule,teachers
 // @Produce     json
 // @Success     200  {object}  []model.Teacher
+// @Failure     503  {object}  model.ErrorResponse
 // @Router      /teachers [get]
 func (h *Handler) GetTeachers(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	teachers, err := h.service.GetTeachers(ctx)
 	if err != nil {
+		if errors.Is(err, scraper.ErrServiceUnavailable) {
+			log.Error().Err(err).Msg("Failed to get teachers")
+			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get teachers")
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: err.Error()})
 		return
@@ -165,6 +194,7 @@ func (h *Handler) GetTeachers(c *gin.Context) {
 // @Param       q  query  string  true  "Teacher name part"
 // @Success     200  {object}  []model.Teacher
 // @Success     400  {object}  model.ErrorResponse
+// @Failure     503  {object}  model.ErrorResponse
 // @Router      /teachers/search [get]
 func (h *Handler) SearchTeachers(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -173,6 +203,12 @@ func (h *Handler) SearchTeachers(c *gin.Context) {
 
 	teachers, err := h.service.SearchTeachers(ctx, query)
 	if err != nil {
+		if errors.Is(err, scraper.ErrServiceUnavailable) {
+			log.Error().Err(err).Msg("Failed to search teachers")
+			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to search teachers")
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: err.Error()})
 		return
@@ -191,6 +227,7 @@ func (h *Handler) SearchTeachers(c *gin.Context) {
 // @Param       name_or_id  path  string  true  "Teacher name or college internal ID"
 // @Success     200  {object}  model.Teacher
 // @Success     404  {object}  model.ErrorResponse
+// @Failure     503  {object}  model.ErrorResponse
 // @Router      /teachers/{name_or_id} [get]
 func (h *Handler) GetTeacher(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -199,6 +236,12 @@ func (h *Handler) GetTeacher(c *gin.Context) {
 
 	teacher, err := h.service.GetTeacherByNameOrID(ctx, nameOrID)
 	if err != nil {
+		if errors.Is(err, scraper.ErrServiceUnavailable) {
+			log.Error().Err(err).Msg("Failed to get teacher")
+			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+			return
+		}
+
 		if errors.Is(err, service.ErrNoTeacher) {
 			log.Warn().Str("nameOrID", nameOrID).Msg("Teacher not found")
 			c.JSON(http.StatusNotFound, model.ErrorResponse{
@@ -227,6 +270,7 @@ func (h *Handler) GetTeacher(c *gin.Context) {
 // @Success     200  {object}  model.ScheduleData
 // @Success     400  {object}  model.ErrorResponse
 // @Success     404  {object}  model.ErrorResponse
+// @Failure     503  {object}  model.ErrorResponse
 // @Router      /schedule [get]
 func (h *Handler) GetSchedule(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -245,6 +289,12 @@ func (h *Handler) GetSchedule(c *gin.Context) {
 
 		group, err := h.service.GetGroupByName(ctx, validatedGroupName)
 		if err != nil {
+			if errors.Is(err, scraper.ErrServiceUnavailable) {
+				log.Error().Err(err).Msg("Failed to get group for schedule")
+				c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+				return
+			}
+
 			if errors.Is(err, service.ErrNoGroup) {
 				log.Warn().Str("group", groupName).Msg("Group not found")
 				c.JSON(http.StatusNotFound, model.ErrorResponse{Error: "group not found"})
@@ -260,6 +310,12 @@ func (h *Handler) GetSchedule(c *gin.Context) {
 	} else if teacherNameOrID != "" {
 		teacher, err := h.service.GetTeacherByNameOrID(ctx, teacherNameOrID)
 		if err != nil {
+			if errors.Is(err, scraper.ErrServiceUnavailable) {
+				log.Error().Err(err).Msg("Failed to get teacher for schedule")
+				c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+				return
+			}
+
 			if errors.Is(err, service.ErrNoTeacher) {
 				log.Warn().Str("teacher", teacherNameOrID).Msg("Teacher not found")
 				c.JSON(http.StatusNotFound, model.ErrorResponse{Error: "teacher not found"})
@@ -280,6 +336,12 @@ func (h *Handler) GetSchedule(c *gin.Context) {
 
 	schedule, err := h.service.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, scraper.ErrServiceUnavailable) {
+			log.Error().Err(err).Msg("Failed to get schedule")
+			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
+			return
+		}
+
 		log.Error().Err(err).Any("config", conf).Msg("Failed to get schedule")
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: err.Error()})
 		return

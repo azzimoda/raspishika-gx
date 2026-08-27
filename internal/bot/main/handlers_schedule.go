@@ -2,8 +2,11 @@ package mainbot
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/go-telegram/bot"
@@ -32,6 +35,11 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get group by name")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -46,6 +54,11 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -78,11 +91,6 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	log.Info().Msg("Handled command week")
 }
 
-func getCtxChat(ctx context.Context) (*model.Chat, bool) {
-	chat, ok := ctx.Value(keyChat).(*model.Chat)
-	return chat, ok
-}
-
 func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
 	log.Debug().Msg("Handling command tomorrow...")
 
@@ -104,6 +112,11 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get group by name")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -117,6 +130,11 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -132,7 +150,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	tomorrow := schedule.Tomorrow(time.Now())
 
 	text := tomorrow.HTML()
-	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
@@ -165,6 +183,11 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 
 	group, err := h.Schedule.GetGroupByName(ctx, *chat.GroupName)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get group by name")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -177,7 +200,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 
 	// If today is Sunday, send a special message
 	if time.Now().Weekday() == time.Sunday {
-		_, err := botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+		_, err := botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            "Сегодня воскресенье, отдыхайте!",
@@ -191,6 +214,11 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -205,7 +233,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 
 	today := schedule.Today()
 	text := today.DynamicFormatHTML(time.Now())
-	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
@@ -229,6 +257,11 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 	var err error
 	groupName, err = h.Schedule.ValidateGroupName(ctx, groupName)
 	if err != nil { // This condition should be impossible
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Invalid group name")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -252,6 +285,11 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 
 	group, err := h.Schedule.GetGroupByName(ctx, groupName)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get group by name")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -265,6 +303,11 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -293,4 +336,58 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 	addHandlerCtxErr(ctx, err)
 
 	log.Info().Msg("Handled quick group")
+}
+
+func getCtxChat(ctx context.Context) (*model.Chat, bool) {
+
+	chat, ok := ctx.Value(keyChat).(*model.Chat)
+	return chat, ok
+}
+
+func sendVacationAnswer(ctx context.Context, b *bot.Bot, update *models.Update, isConfig bool) {
+
+	t := time.Now()
+
+	const configVacationText = "Не могу настроить группу во время каникул, подождите до начала семестра"
+
+	dur := time.Until(time.Date(t.Year(), time.September, 1, 0, 0, 0, 0, t.Location()))
+	days := int(dur.Hours()) / 24
+	text := fmt.Sprintf("До конца каникул осталось %d день/дня/дней", days)
+
+	if m := update.Message; m != nil {
+		if isConfig {
+			err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+				ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID, Text: configVacationText,
+			})
+			addHandlerCtxErr(ctx, err)
+		}
+
+		err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+			ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID, Text: text,
+		})
+		addHandlerCtxErr(ctx, err)
+
+		b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: m.Chat.ID, MessageID: m.ID})
+	} else if cq := update.CallbackQuery; cq != nil {
+		_, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: cq.ID, Text: text, CacheTime: 3600, // 1 hour
+		})
+		addHandlerCtxErr(ctx, err)
+
+		if cq.Message.Message != nil {
+			m := cq.Message.Message
+
+			if isConfig {
+				err := botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+					ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID, Text: configVacationText,
+				})
+				addHandlerCtxErr(ctx, err)
+			}
+
+			err = botutil.SendTempMessage(ctx, b, 10*time.Second, &bot.SendMessageParams{
+				ChatID: m.Chat.ID, MessageThreadID: m.MessageThreadID, Text: text,
+			})
+			addHandlerCtxErr(ctx, err)
+		}
+	}
 }

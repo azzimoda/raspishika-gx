@@ -2,6 +2,7 @@
 package scraper
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,13 +21,6 @@ import (
 	"golang.org/x/text/transform"
 )
 
-// DepartmentSelectionPageURL is the page that lists all departments.
-const DepartmentSelectionPageURL = "https://mnokol.tyuiu.ru/site/index.php?option=com_content&view=article&id=1582&Itemid=247"
-
-// BaseDepartmentPageURL is the base URL of the college website,
-// used to build absolute department links.
-const BaseDepartmentPageURL = "https://mnokol.tyuiu.ru"
-
 // BrowserProvider abstracts a Playwright browser that can open pages.
 type BrowserProvider interface {
 	WithPage(func(page playwright.Page) error) error
@@ -38,11 +32,51 @@ func New(b BrowserProvider) *Scraper { return &Scraper{browser: b} }
 // Scraper retrieves data from the college website.
 type Scraper struct{ browser BrowserProvider }
 
+// ErrServiceUnavailable is returned when the college site is unavailable,
+// i.e. it is in vacation mode.
+var ErrServiceUnavailable = errors.New("service unavailable")
+
+// CheckVacation checks if the college site is in vacation mode.
+func (s *Scraper) CheckVacation() (bool, error) {
+
+	log.Debug().Msg("Checking vacation status...")
+
+	const schedulesPageURL = "https://coworking.tyuiu.ru/shs/index.php"
+
+	resp, err := httpGetRequestWithHeaders(schedulesPageURL, generateHeaders())
+	if err != nil {
+		return false, fmt.Errorf("failed to check vacation status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusForbidden: // Means today is vacation
+		log.Debug().Msg("College site is in vacation mode")
+		return true, nil
+	case http.StatusOK:
+		log.Trace().Msg("College site is not in vacation mode")
+		return false, nil
+	default:
+		log.Warn().Int("statusCode", resp.StatusCode).Msg("unexpected status code")
+		return false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+}
+
 // ScrapeDepartments scrapes the list of departments from the website.
 func (s *Scraper) ScrapeDepartments() ([]model.Department, error) {
-	const getDepartmentsRetryAttempts = 5
 
-	resp, err := httpGetRequestRetryingWithRandomHeaders(DepartmentSelectionPageURL, getDepartmentsRetryAttempts)
+	log.Debug().Msg("Scraping departments...")
+
+	if isVacation, err := s.CheckVacation(); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
+
+	const getDepartmentsRetryAttempts = 5
+	const departmentSelectionPageURL = "https://mnokol.tyuiu.ru/site/index.php?option=com_content&view=article&id=1582&Itemid=247"
+
+	resp, err := httpGetRequestRetryingWithRandomHeaders(departmentSelectionPageURL, getDepartmentsRetryAttempts)
 	if err != nil {
 		return nil, fmt.Errorf("failed loading departments page: %w", err)
 	}
@@ -50,8 +84,10 @@ func (s *Scraper) ScrapeDepartments() ([]model.Department, error) {
 
 	return parseDepartments(resp.Body)
 }
-
 func parseDepartments(r io.Reader) ([]model.Department, error) {
+
+	const baseDepartmentPageURL = "https://mnokol.tyuiu.ru"
+
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse departments page: %w", err)
@@ -66,7 +102,7 @@ func parseDepartments(r io.Reader) ([]model.Department, error) {
 
 		departments = append(departments, model.Department{
 			Name: name,
-			URL:  BaseDepartmentPageURL + strings.ReplaceAll(s.AttrOr("href", ""), "&amp;", "&"),
+			URL:  baseDepartmentPageURL + strings.ReplaceAll(s.AttrOr("href", ""), "&amp;", "&"),
 		})
 	})
 	return departments, nil
@@ -74,7 +110,14 @@ func parseDepartments(r io.Reader) ([]model.Department, error) {
 
 // ScrapeDepartmentGroups scrapes the list of groups for a department.
 func (s *Scraper) ScrapeDepartmentGroups(department *model.Department) ([]model.Group, error) {
-	log.Trace().Any("department", department).Msg("Scraping department groups...")
+
+	log.Debug().Any("department", department).Msg("Scraping department groups...")
+
+	if isVacation, err := s.CheckVacation(); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
 
 	groups := make([]model.Group, 0)
 	err := s.browser.WithPage(func(p playwright.Page) error {
@@ -90,8 +133,8 @@ func (s *Scraper) ScrapeDepartmentGroups(department *model.Department) ([]model.
 	}
 	return groups, nil
 }
-
 func parseDepartmentGroups(p playwright.Page, department *model.Department) ([]model.Group, error) {
+
 	log.Trace().Msg("Navigating to department page")
 	if _, err := p.Goto(department.URL); err != nil {
 		return nil, fmt.Errorf("failed to navigate to department page: %w", err)
@@ -138,12 +181,21 @@ func parseDepartmentGroups(p playwright.Page, department *model.Department) ([]m
 	return groups, nil
 }
 
-const TeachersPageURL = "https://mnokol.tyuiu.ru/site/index.php?option=com_content&view=article&id=1247&Itemid=304"
-
 // ScrapeTeachers scrapes the list of all teachers.
 func (s *Scraper) ScrapeTeachers() (teachers []model.Teacher, err error) {
+
+	log.Debug().Msg("Scraping teachers...")
+
+	if isVacation, err := s.CheckVacation(); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
+
+	const teachersPageURL = "https://mnokol.tyuiu.ru/site/index.php?option=com_content&view=article&id=1247&Itemid=304"
+
 	err = s.browser.WithPage(func(p playwright.Page) error {
-		if _, err := p.Goto(TeachersPageURL); err != nil {
+		if _, err := p.Goto(teachersPageURL); err != nil {
 			return fmt.Errorf("failed to goto teachers page: %w", err)
 		}
 
@@ -177,6 +229,15 @@ func (s *Scraper) ScrapeTeachers() (teachers []model.Teacher, err error) {
 
 // ScrapeSchedule fetches the page at url and parses the schedule for conf.
 func (s *Scraper) ScrapeSchedule(url string, conf model.ScheduleConfig) (*model.ScheduleData, error) {
+
+	log.Debug().Msg("Scraping schedule...")
+
+	if isVacation, err := s.CheckVacation(); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
+
 	const attempts = 5
 
 	var html string
@@ -195,7 +256,7 @@ func (s *Scraper) ScrapeSchedule(url string, conf model.ScheduleConfig) (*model.
 			return nil, fmt.Errorf("failed to read response body: %w", err)
 		}
 
-		fixedEncoding, err := windows1251ToUTF8(string(bytes))
+		fixedEncoding, err := encodeWindows1251ToUTF8(string(bytes))
 		if err != nil {
 			return nil, fmt.Errorf("encoding conversion failed: %w", err)
 		}
@@ -365,7 +426,8 @@ func httpGetRequestWithHeaders(url string, headers map[string]string) (*http.Res
 	return resp, nil
 }
 
-func windows1251ToUTF8(s string) (string, error) {
+func encodeWindows1251ToUTF8(s string) (string, error) {
+
 	decoder := charmap.Windows1251.NewDecoder()
 	reader := transform.NewReader(strings.NewReader(s), decoder)
 	result, err := io.ReadAll(reader)

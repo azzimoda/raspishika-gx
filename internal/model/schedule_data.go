@@ -34,7 +34,7 @@ const (
 type ScheduleData struct {
 	Config ScheduleConfig `json:"config"`
 	Days   []ScheduleDay  `json:"days"`
-	IsOld  bool
+	IsOld  bool           `json:"is_old"`
 }
 
 func (s ScheduleData) WithConfig(conf ScheduleConfig) ScheduleData {

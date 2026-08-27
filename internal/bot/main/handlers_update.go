@@ -3,14 +3,15 @@ package mainbot
 import (
 	"bytes"
 	"context"
+	"errors"
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
+	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
+	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
-
-	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
-	"github.com/azzimoda/raspishika-gx/internal/model"
 )
 
 const MsgScheduleUpdated = "Расписание обновлено"
@@ -30,6 +31,11 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 
 	group, err := h.Schedule.GetGroupByName(ctx, groupName)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
@@ -41,6 +47,11 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 	conf := model.GroupScheduleConfig(group, darkMode)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
@@ -106,6 +117,11 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 
 	teacher, err := h.Schedule.GetTeacherByNameOrID(ctx, teacherID)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
@@ -117,6 +133,11 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 	conf := model.TeacherScheduleConfig(teacher, darkMode)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
@@ -174,6 +195,11 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 
 	group, err := h.Schedule.GetGroupByName(ctx, groupName)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
@@ -185,6 +211,11 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 	conf := model.GroupScheduleConfig(group, false)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
@@ -258,6 +289,11 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 
 	group, err := h.Schedule.GetGroupByName(ctx, groupName)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
@@ -269,6 +305,11 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 	conf := model.GroupScheduleConfig(group, false)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,

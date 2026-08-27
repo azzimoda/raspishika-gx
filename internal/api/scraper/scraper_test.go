@@ -60,7 +60,7 @@ func TestWindows1251ToUTF8(t *testing.T) {
 		t.Fatalf("failed to encode fixture: %v", err)
 	}
 
-	got, err := windows1251ToUTF8(encoded)
+	got, err := encodeWindows1251ToUTF8(encoded)
 	if err != nil {
 		t.Fatalf("windows1251ToUTF8() error: %v", err)
 	}
@@ -167,5 +167,35 @@ func TestHTTPGetRequestRetryExhausted(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("calls = %d, want 2", calls)
+	}
+}
+
+func TestScraper_CheckVacation(t *testing.T) {
+	s := New(nil)
+
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for receiver constructor.
+		want    bool
+		wantErr bool
+	}{
+		{name: "vacation", want: true, wantErr: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := s.CheckVacation()
+			if gotErr != nil {
+				if !tt.wantErr {
+					t.Errorf("CheckVacation() failed: %v", gotErr)
+				}
+				return
+			}
+			if tt.wantErr {
+				t.Fatal("CheckVacation() succeeded unexpectedly")
+			}
+			if got != tt.want {
+				t.Errorf("CheckVacation() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

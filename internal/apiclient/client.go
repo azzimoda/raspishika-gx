@@ -157,6 +157,7 @@ var (
 	ErrNotFound            = errors.New("not found")
 	ErrInternalServerError = errors.New("internal server error")
 	ErrBadRequest          = errors.New("bad request")
+	ErrServiceUnavailable  = errors.New("service unavailable")
 )
 
 func (c *Client) request(ctx context.Context, url *url.URL) ([]byte, error) {
@@ -196,6 +197,8 @@ func (c *Client) request(ctx context.Context, url *url.URL) ([]byte, error) {
 			return nil, fmt.Errorf("%w: %s", ErrNotFound, data.Error)
 		case http.StatusInternalServerError:
 			return nil, fmt.Errorf("%w: %s", ErrInternalServerError, data.Error)
+		case http.StatusServiceUnavailable:
+			return nil, fmt.Errorf("%w: %s", ErrServiceUnavailable, data.Error)
 		default:
 			return nil, fmt.Errorf("unknown API error: %s", data.Error)
 		}

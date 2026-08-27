@@ -505,16 +505,24 @@ func NewFakeScraper() *FakeScraper { return new(FakeScraper) }
 // FakeScraper serves static demo data for the fake API.
 type FakeScraper struct{}
 
+// CheckVacation returns a fixed demo vacation status ([false]).
+func (s *FakeScraper) CheckVacation() (bool, error) {
+
+	log.Debug().Msg("CheckVacation")
+	return false, nil
+}
+
 // ScrapeDepartments returns a fixed list of demo departments.
 func (s *FakeScraper) ScrapeDepartments() ([]model.Department, error) {
-	log.Trace().Msg("ScrapeDepartments")
+
+	log.Debug().Msg("ScrapeDepartments")
 	return FakeDepartments, nil
 }
 
 // ScrapeDepartmentGroups returns fixed demo groups for the given department.
 func (s *FakeScraper) ScrapeDepartmentGroups(department *model.Department) ([]model.Group, error) {
-	log.Trace().Str("department", department.Name).Msg("ScrapeDepartmentGroups")
 
+	log.Debug().Str("department", department.Name).Msg("ScrapeDepartmentGroups")
 	for d, gs := range FakeGroups {
 		if strings.EqualFold(department.Name, d) {
 			return gs, nil
@@ -525,14 +533,15 @@ func (s *FakeScraper) ScrapeDepartmentGroups(department *model.Department) ([]mo
 
 // ScrapeTeachers returns a fixed list of demo teachers.
 func (s *FakeScraper) ScrapeTeachers() ([]model.Teacher, error) {
-	log.Trace().Msg("ScrapeTeachers")
+
+	log.Debug().Msg("ScrapeTeachers")
 	return FakeTeachers, nil
 }
 
 // ScrapeSchedule returns a fixed demo schedule for the requested group or teacher.
 func (s *FakeScraper) ScrapeSchedule(url string, conf model.ScheduleConfig) (*model.ScheduleData, error) {
-	log.Debug().Any("conf", conf).Msg("Scraping schedule...")
 
+	log.Debug().Any("conf", conf).Msg("Scraping schedule...")
 	var key string
 	if conf.Group != nil {
 		key = string(conf.Group.GroupName)

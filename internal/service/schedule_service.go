@@ -7,16 +7,15 @@ import (
 	"os"
 	"path"
 
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
-	"golang.org/x/sync/singleflight"
-	"gorm.io/gorm"
-
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
+	"golang.org/x/sync/singleflight"
+	"gorm.io/gorm"
 )
 
 type APIClient interface {
@@ -220,6 +219,16 @@ func (s *ScheduleService) GetTeacherByNameOrID(ctx context.Context, nameOrID str
 
 func (s *ScheduleService) FindTeachersByName(ctx context.Context, name string) ([]model.Teacher, error) {
 	return s.scraper.SearchTeachers(ctx, name)
+}
+
+func (s *ScheduleService) IsVacation(ctx context.Context) (bool, error) {
+	if _, err := s.GetDepartments(ctx); err != nil {
+		if errors.Is(err, apiclient.ErrServiceUnavailable) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to check vacation status: %w", err)
+	}
+	return false, nil
 }
 
 func (s *ScheduleService) screenshot(conf model.ScheduleConfig, html string) (string, []byte, error) {

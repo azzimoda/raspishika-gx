@@ -36,20 +36,20 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerCommandHandler(b, "start", h.handleCmdStart, h.checkRegularAccess)
 		registerCommandHandler(b, "help", h.handleCmdHelp, h.checkRegularAccess)
 		registerCommandHandler(b, "stop", h.handleCmdStop, h.checkConfigAccess)
-		registerCommandHandler(b, "week", h.handleCmdWeek, h.checkRegularAccess, h.makePrehandlerVacation("week"), h.ensureGroupConfigured)
-		registerCommandHandler(b, "tomorrow", h.handleCmdTomorrow, h.checkRegularAccess, h.makePrehandlerVacation("tomorrow"), h.ensureGroupConfigured)
-		registerCommandHandler(b, "today", h.handleCmdToday, h.checkRegularAccess, h.makePrehandlerVacation("today"), h.ensureGroupConfigured)
-		registerCommandHandler(b, "teacher", h.handleCmdTeacher, h.checkRegularAccess, h.makePrehandlerVacation("week"))
+		registerCommandHandler(b, "week", h.handleCmdWeek, h.checkRegularAccess, h.ensureGroupConfigured)
+		registerCommandHandler(b, "tomorrow", h.handleCmdTomorrow, h.checkRegularAccess, h.ensureGroupConfigured)
+		registerCommandHandler(b, "today", h.handleCmdToday, h.checkRegularAccess, h.ensureGroupConfigured)
+		registerCommandHandler(b, "teacher", h.handleCmdTeacher, h.checkRegularAccess)
 		registerCommandHandler(b, "settings", h.handleCmdSettings, h.checkConfigAccess)
 		registerCommandHandler(b, "access", h.handleCmdAccess, h.checkConfigAccess)
 	}
 
 	// Text commands
 	{
-		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess, h.makePrehandlerVacation("week"), h.ensureGroupConfigured)
-		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess, h.makePrehandlerVacation("tomorrow"), h.ensureGroupConfigured)
-		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess, h.makePrehandlerVacation("today"), h.ensureGroupConfigured)
-		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess, h.makePrehandlerVacation("week"))
+		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess, h.ensureGroupConfigured)
+		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess, h.ensureGroupConfigured)
+		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess, h.ensureGroupConfigured)
+		registerTextHandler(b, "преподаватель", h.handleCmdTeacher, h.checkRegularAccess)
 		registerTextHandler(b, "отмена", h.handleCmdCancel, h.checkRegularAccess)
 	}
 
@@ -82,7 +82,7 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		} else {
 			return false
 		}
-	}, h.handleTextQuickGroup, h.checkRegularAccess, h.makePrehandlerVacation("week"))
+	}, h.handleTextQuickGroup, h.checkRegularAccess)
 
 	// Callback queries
 	{
@@ -94,11 +94,11 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		}
 
 		registerRegularCallbackHandler(botutil.CallbackCommandDelete, h.handleCQDelete)
-		registerRegularCallbackHandler(botutil.CallbackCommandSelectTeacher, h.handleCQTeacher, h.makePrehandlerVacation("week"))
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateGroup, h.makePrehandlerVacation("week"))
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher, h.makePrehandlerVacation("week"))
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow, h.makePrehandlerVacation("tomorrow"))
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateToday, h.handleCQUpdateToday, h.makePrehandlerVacation("today"))
+		registerRegularCallbackHandler(botutil.CallbackCommandSelectTeacher, h.handleCQTeacher)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateGroup)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateToday, h.handleCQUpdateToday)
 
 		// Config callbacks
 		registerConfigCallbackHandler := func(callbackCommand string, handler bot.HandlerFunc) {

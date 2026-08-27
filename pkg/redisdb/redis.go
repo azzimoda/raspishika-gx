@@ -29,18 +29,18 @@ func New(opts *redis.Options) (*SmartClient, error) {
 		return nil, fmt.Errorf("redis connection failed: %w", err)
 	}
 
-	return &SmartClient{rdb: client}, nil
+	return &SmartClient{RedisClient: client}, nil
 }
 
 // SmartClient caches entries under two keys: "<key>:fresh" with a short TTL
 // and "<key>:data" with a long TTL.
-type SmartClient struct{ rdb *redis.Client }
+type SmartClient struct{ RedisClient *redis.Client }
 
 // Get returns the cached data along with a fresh flag.
 // fresh reports whether the data was refreshed within the short TTL;
 // exist reports whether any data is present at all.
 func (s *SmartClient) Get(ctx context.Context, key string) (data []byte, fresh bool, exist bool) {
-	if err := s.rdb.Get(ctx, key+":fresh").Err(); err != nil {
+	if err := s.RedisClient.Get(ctx, key+":fresh").Err(); err != nil {
 		if err == redis.Nil {
 			log.Trace().Str("key", key).Msg("Cache is old or does not exist")
 			fresh = false
@@ -53,7 +53,7 @@ func (s *SmartClient) Get(ctx context.Context, key string) (data []byte, fresh b
 		fresh = true
 	}
 
-	data, err := s.rdb.Get(ctx, key+":data").Bytes()
+	data, err := s.RedisClient.Get(ctx, key+":data").Bytes()
 	if err == redis.Nil {
 		log.Debug().Str("key", key).Msg("Cache miss")
 		return nil, false, false
@@ -70,14 +70,14 @@ func (s *SmartClient) Get(ctx context.Context, key string) (data []byte, fresh b
 func (s *SmartClient) Set(
 	ctx context.Context, key string, data any, expirationShort, expirationLong time.Duration,
 ) error {
-	if err := s.rdb.Set(ctx, key+":fresh", "", expirationShort).Err(); err != nil {
+	if err := s.RedisClient.Set(ctx, key+":fresh", "", expirationShort).Err(); err != nil {
 		return err
 	}
-	if err := s.rdb.Set(ctx, key+":data", data, expirationLong).Err(); err != nil {
+	if err := s.RedisClient.Set(ctx, key+":data", data, expirationLong).Err(); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Close closes the underlying Redis connection.
-func (s *SmartClient) Close() error { return s.rdb.Close() }
+func (s *SmartClient) Close() error { return s.RedisClient.Close() }

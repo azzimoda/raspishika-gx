@@ -36,7 +36,7 @@ func (h *handler) handleCmdSettings(ctx context.Context, b *bot.Bot, update *mod
 		return
 	}
 
-	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
@@ -106,7 +106,7 @@ func (h *handler) handleCQConfigDailyTime(ctx context.Context, b *bot.Bot, updat
 		time = "Установленное время: <u>" + *chat.DailySendingTime + "</u>"
 	}
 	text := fmt.Sprintf("%s\n\nПришлите желаемое время рассылки, например <code>19:00</code>", time)
-	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          message.Chat.ID,
 		MessageThreadID: message.MessageThreadID,
 		ParseMode:       models.ParseModeHTML,
@@ -158,7 +158,7 @@ func (h *handler) handleTextTime(ctx context.Context, b *bot.Bot, update *models
 		return
 	}
 
-	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
 		ParseMode:       models.ParseModeHTML,
@@ -458,7 +458,7 @@ func (h *handler) handleCQSelectDepartment(ctx context.Context, b *bot.Bot, upda
 		return
 	}
 
-	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          message.Chat.ID,
 		MessageThreadID: message.MessageThreadID,
 		Text:            "Выберите группы на клавиатуре или введите название в верном формате, например: ИСПт-22-(9)-2",
@@ -516,7 +516,7 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 		return
 	}
 
-	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
 		Text:            fmt.Sprintf("Теперь вы в группе %s", group.GroupName),
@@ -549,7 +549,7 @@ func (h *handler) handleCmdAccess(ctx context.Context, b *bot.Bot, update *model
 		})
 		addHandlerCtxErr(ctx, err)
 	} else {
-		_, err := botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+		_, err := botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,
 			Text:            accessMenuText(chat),
@@ -636,9 +636,10 @@ func (h *handler) sendDepartmentSelectionMenu(
 	}
 
 	if viper.GetBool(config.KeyHandleVacation) {
-		t := time.Now()
-		if botutil.IsVacation(t) {
-			sendVacationAnswer(ctx, b, update, t, true)
+		if status, err := h.Schedule.IsVacation(ctx); err != nil {
+			return err
+		} else if status {
+			sendVacationAnswer(ctx, b, update, true)
 			return nil
 		}
 	}
@@ -663,7 +664,7 @@ func (h *handler) sendDepartmentSelectionMenu(
 		return err
 	}
 
-	_, err = botutil.SendWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: messageThreadID,
 		Text:            fmt.Sprintf("%s\nВведите название группы или выберите отделение", currentGroup),

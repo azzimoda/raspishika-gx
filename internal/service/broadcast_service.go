@@ -143,7 +143,9 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 		return
 	}
 
-	if viper.GetBool(config.KeyHandleVacation) && botutil.IsVacation(t) {
+	if status, err := s.Schedule.IsVacation(ctx); err != nil {
+		log.Warn().Err(err).Msg("Failed to check vacation status; try to process anyway...")
+	} else if status {
 		log.Debug().Msg("Skipped daily broadcast because of vacation")
 		return
 	}
@@ -281,12 +283,15 @@ func (s *BroadcastService) schedulePairNotification(ctx context.Context) error {
 	return nil
 }
 func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Time) {
+
 	if s.Bot == nil {
 		log.Warn().Msg("Bot is not initialized")
 		return
 	}
 
-	if viper.GetBool(config.KeyHandleVacation) && botutil.IsVacation(t) {
+	if status, err := s.Schedule.IsVacation(ctx); err != nil {
+		log.Warn().Err(err).Msg("Failed to check vacation status; try to process anyway...")
+	} else if status {
 		log.Debug().Msg("Skipped pair notification because of vacation")
 		return
 	}
@@ -423,7 +428,9 @@ func (s *BroadcastService) runChangeNotifier(ctx context.Context) {
 			continue
 		}
 
-		if viper.GetBool(config.KeyHandleVacation) && botutil.IsVacation(time.Now()) {
+		if status, err := s.Schedule.IsVacation(ctx); err != nil {
+			log.Warn().Err(err).Msg("Failed to check vacation status; try to process anyway...")
+		} else if status {
 			log.Debug().Msg("Change alert is skipped because of vacation")
 			if !sleepContext(ctx, viper.GetDuration(config.KeyUpdateMonitorInterval)) {
 				break

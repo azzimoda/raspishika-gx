@@ -14,6 +14,7 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/api/scraper"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/pkg/redisdb"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"github.com/schollz/closestmatch"
 )
@@ -29,6 +30,7 @@ var (
 
 // Scraper abstracts the data source used by the service.
 type Scraper interface {
+	CheckVacation() (bool, error)
 	ScrapeDepartments() ([]model.Department, error)
 	ScrapeDepartmentGroups(*model.Department) ([]model.Group, error)
 	ScrapeTeachers() ([]model.Teacher, error)
@@ -48,6 +50,9 @@ type ScheduleService struct {
 }
 
 const (
+	// VacationTTL is how long vacation flag data is kept in the cache.
+	VacationTTL = 6 * time.Hour
+
 	// MetaFreshTTL is how long metadata (departments, groups, teachers) is
 	// considered fresh.
 	MetaFreshTTL = 24 * time.Hour
@@ -59,6 +64,41 @@ const (
 	// ScheduleDataTTL is how long schedule data is kept after it becomes stale.
 	ScheduleDataTTL = 36 * time.Hour
 )
+
+func (s *ScheduleService) CheckVacation(ctx context.Context) (bool, error) {
+	log.Debug().Msg("ScheduleService.CheckVacation")
+
+	// Check cache
+
+	const vacationKey = "vacation"
+
+	isVacation, err := s.rdb.RedisClient.Get(ctx, vacationKey).Bool()
+	if err == redis.Nil {
+		log.Debug().Msg("Vacation cache miss")
+	} else if err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation cache")
+		return false, err
+	} else {
+		log.Debug().Bool("isVacationOld", isVacation).Msg("Vacation cache hit")
+		return isVacation, nil
+	}
+
+	// Fetch
+
+	isVacation, err = s.scraper.CheckVacation()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation")
+		return false, err
+	}
+
+	// Set cache
+
+	if err := s.rdb.RedisClient.Set(ctx, vacationKey, isVacation, VacationTTL).Err(); err != nil {
+		log.Error().Err(err).Msg("Failed to set vacation cache")
+	}
+
+	return isVacation, nil
+}
 
 func (s *ScheduleService) GetDepartmentByName(ctx context.Context, name string) (*model.Department, error) {
 	log.Trace().Str("name", string(name)).Msg("GetDepartmentByName")
