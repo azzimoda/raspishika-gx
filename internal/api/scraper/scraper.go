@@ -2,7 +2,6 @@
 package scraper
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,10 +30,6 @@ func New(b BrowserProvider) *Scraper { return &Scraper{browser: b} }
 
 // Scraper retrieves data from the college website.
 type Scraper struct{ browser BrowserProvider }
-
-// ErrServiceUnavailable is returned when the college site is unavailable,
-// i.e. it is in vacation mode.
-var ErrServiceUnavailable = errors.New("service unavailable")
 
 // CheckVacation checks if the college site is in vacation mode.
 func (s *Scraper) CheckVacation() (bool, error) {
@@ -66,12 +61,6 @@ func (s *Scraper) CheckVacation() (bool, error) {
 func (s *Scraper) ScrapeDepartments() ([]model.Department, error) {
 
 	log.Debug().Msg("Scraping departments...")
-
-	if isVacation, err := s.CheckVacation(); err != nil {
-		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
-	} else if isVacation {
-		return nil, ErrServiceUnavailable
-	}
 
 	const getDepartmentsRetryAttempts = 5
 	const departmentSelectionPageURL = "https://mnokol.tyuiu.ru/site/index.php?option=com_content&view=article&id=1582&Itemid=247"
@@ -112,12 +101,6 @@ func parseDepartments(r io.Reader) ([]model.Department, error) {
 func (s *Scraper) ScrapeDepartmentGroups(department *model.Department) ([]model.Group, error) {
 
 	log.Debug().Any("department", department).Msg("Scraping department groups...")
-
-	if isVacation, err := s.CheckVacation(); err != nil {
-		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
-	} else if isVacation {
-		return nil, ErrServiceUnavailable
-	}
 
 	groups := make([]model.Group, 0)
 	err := s.browser.WithPage(func(p playwright.Page) error {
@@ -186,12 +169,6 @@ func (s *Scraper) ScrapeTeachers() (teachers []model.Teacher, err error) {
 
 	log.Debug().Msg("Scraping teachers...")
 
-	if isVacation, err := s.CheckVacation(); err != nil {
-		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
-	} else if isVacation {
-		return nil, ErrServiceUnavailable
-	}
-
 	const teachersPageURL = "https://mnokol.tyuiu.ru/site/index.php?option=com_content&view=article&id=1247&Itemid=304"
 
 	err = s.browser.WithPage(func(p playwright.Page) error {
@@ -231,12 +208,6 @@ func (s *Scraper) ScrapeTeachers() (teachers []model.Teacher, err error) {
 func (s *Scraper) ScrapeSchedule(url string, conf model.ScheduleConfig) (*model.ScheduleData, error) {
 
 	log.Debug().Msg("Scraping schedule...")
-
-	if isVacation, err := s.CheckVacation(); err != nil {
-		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
-	} else if isVacation {
-		return nil, ErrServiceUnavailable
-	}
 
 	const attempts = 5
 

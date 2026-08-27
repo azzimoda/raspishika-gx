@@ -10,7 +10,6 @@ import (
 	_ "github.com/azzimoda/raspishika-gx/docs"
 	"github.com/rs/zerolog/log"
 
-	"github.com/azzimoda/raspishika-gx/internal/api/scraper"
 	"github.com/azzimoda/raspishika-gx/internal/api/service"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/gin-gonic/gin"
@@ -48,7 +47,7 @@ func (h *Handler) GetDepartments(c *gin.Context) {
 
 	departments, err := h.service.GetDepartments(ctx)
 	if err != nil {
-		if errors.Is(err, scraper.ErrServiceUnavailable) {
+		if errors.Is(err, service.ErrServiceUnavailable) {
 			log.Error().Err(err).Msg("Failed to get departments")
 			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 			return
@@ -86,7 +85,7 @@ func (h *Handler) GetGroups(c *gin.Context) {
 		groups, err = h.service.GetGroupsByDepartment(ctx, department)
 	}
 	if err != nil {
-		if errors.Is(err, scraper.ErrServiceUnavailable) {
+		if errors.Is(err, service.ErrServiceUnavailable) {
 			log.Error().Err(err).Msg("Failed to get departments")
 			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 			return
@@ -133,7 +132,7 @@ func (h *Handler) GetGroup(c *gin.Context) {
 
 	group, err := h.service.GetGroupByName(ctx, groupName)
 	if err != nil {
-		if errors.Is(err, scraper.ErrServiceUnavailable) {
+		if errors.Is(err, service.ErrServiceUnavailable) {
 			log.Error().Err(err).Msg("Failed to get departments")
 			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 			return
@@ -170,7 +169,7 @@ func (h *Handler) GetTeachers(c *gin.Context) {
 
 	teachers, err := h.service.GetTeachers(ctx)
 	if err != nil {
-		if errors.Is(err, scraper.ErrServiceUnavailable) {
+		if errors.Is(err, service.ErrServiceUnavailable) {
 			log.Error().Err(err).Msg("Failed to get teachers")
 			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 			return
@@ -203,7 +202,7 @@ func (h *Handler) SearchTeachers(c *gin.Context) {
 
 	teachers, err := h.service.SearchTeachers(ctx, query)
 	if err != nil {
-		if errors.Is(err, scraper.ErrServiceUnavailable) {
+		if errors.Is(err, service.ErrServiceUnavailable) {
 			log.Error().Err(err).Msg("Failed to search teachers")
 			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 			return
@@ -236,7 +235,7 @@ func (h *Handler) GetTeacher(c *gin.Context) {
 
 	teacher, err := h.service.GetTeacherByNameOrID(ctx, nameOrID)
 	if err != nil {
-		if errors.Is(err, scraper.ErrServiceUnavailable) {
+		if errors.Is(err, service.ErrServiceUnavailable) {
 			log.Error().Err(err).Msg("Failed to get teacher")
 			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 			return
@@ -289,7 +288,7 @@ func (h *Handler) GetSchedule(c *gin.Context) {
 
 		group, err := h.service.GetGroupByName(ctx, validatedGroupName)
 		if err != nil {
-			if errors.Is(err, scraper.ErrServiceUnavailable) {
+			if errors.Is(err, service.ErrServiceUnavailable) {
 				log.Error().Err(err).Msg("Failed to get group for schedule")
 				c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 				return
@@ -310,7 +309,7 @@ func (h *Handler) GetSchedule(c *gin.Context) {
 	} else if teacherNameOrID != "" {
 		teacher, err := h.service.GetTeacherByNameOrID(ctx, teacherNameOrID)
 		if err != nil {
-			if errors.Is(err, scraper.ErrServiceUnavailable) {
+			if errors.Is(err, service.ErrServiceUnavailable) {
 				log.Error().Err(err).Msg("Failed to get teacher for schedule")
 				c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 				return
@@ -336,7 +335,7 @@ func (h *Handler) GetSchedule(c *gin.Context) {
 
 	schedule, err := h.service.GetSchedule(ctx, conf)
 	if err != nil {
-		if errors.Is(err, scraper.ErrServiceUnavailable) {
+		if errors.Is(err, service.ErrServiceUnavailable) {
 			log.Error().Err(err).Msg("Failed to get schedule")
 			c.JSON(http.StatusServiceUnavailable, model.ErrorResponse{Error: err.Error()})
 			return

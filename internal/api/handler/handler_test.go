@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/azzimoda/raspishika-gx/internal/api/scraper"
 	"github.com/azzimoda/raspishika-gx/internal/api/service"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/gin-gonic/gin"
@@ -154,7 +153,7 @@ func TestGetDepartments(t *testing.T) {
 
 	t.Run("service unavailable", func(t *testing.T) {
 		mock := &mockService{getDepartments: func(context.Context) ([]model.Department, error) {
-			return nil, scraper.ErrServiceUnavailable
+			return nil, service.ErrServiceUnavailable
 		}}
 		h := NewHandler(mock)
 		rec := doRequest(t, setupRouter(h), "/api/v1/departments")
@@ -253,7 +252,7 @@ func TestGetTeachers(t *testing.T) {
 
 	t.Run("service unavailable", func(t *testing.T) {
 		mock := &mockService{getTeachers: func(context.Context) ([]model.Teacher, error) {
-			return nil, scraper.ErrServiceUnavailable
+			return nil, service.ErrServiceUnavailable
 		}}
 		h := NewHandler(mock)
 		rec := doRequest(t, setupRouter(h), "/api/v1/teachers")
@@ -382,7 +381,7 @@ func TestGetSchedule(t *testing.T) {
 
 	t.Run("group lookup unavailable", func(t *testing.T) {
 		mock := &mockService{getGroupByName: func(context.Context, model.GroupName) (*model.Group, error) {
-			return nil, scraper.ErrServiceUnavailable
+			return nil, service.ErrServiceUnavailable
 		}}
 		h := NewHandler(mock)
 		rec := doRequest(t, setupRouter(h), "/api/v1/schedule?group=ИСПт-22-(9)-2")
@@ -394,7 +393,7 @@ func TestGetSchedule(t *testing.T) {
 
 	t.Run("teacher lookup unavailable", func(t *testing.T) {
 		mock := &mockService{getTeacherByNameOrID: func(context.Context, string) (*model.Teacher, error) {
-			return nil, scraper.ErrServiceUnavailable
+			return nil, service.ErrServiceUnavailable
 		}}
 		h := NewHandler(mock)
 		rec := doRequest(t, setupRouter(h), "/api/v1/schedule?teacher=Иванов")
@@ -410,7 +409,7 @@ func TestGetSchedule(t *testing.T) {
 				return group, nil
 			},
 			getSchedule: func(context.Context, model.ScheduleConfig) (*model.ScheduleData, error) {
-				return nil, scraper.ErrServiceUnavailable
+				return nil, service.ErrServiceUnavailable
 			},
 		}
 		h := NewHandler(mock)

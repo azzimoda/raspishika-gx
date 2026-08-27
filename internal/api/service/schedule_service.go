@@ -65,7 +65,12 @@ const (
 	ScheduleDataTTL = 36 * time.Hour
 )
 
+// ErrServiceUnavailable is returned when the college site is unavailable,
+// i.e. it is in vacation mode.
+var ErrServiceUnavailable = errors.New("service unavailable")
+
 func (s *ScheduleService) CheckVacation(ctx context.Context) (bool, error) {
+
 	log.Debug().Msg("ScheduleService.CheckVacation")
 
 	// Check cache
@@ -101,7 +106,8 @@ func (s *ScheduleService) CheckVacation(ctx context.Context) (bool, error) {
 }
 
 func (s *ScheduleService) GetDepartmentByName(ctx context.Context, name string) (*model.Department, error) {
-	log.Trace().Str("name", string(name)).Msg("GetDepartmentByName")
+
+	log.Debug().Str("name", string(name)).Msg("GetDepartmentByName")
 
 	name = strings.ToLower(name)
 	key := "department:" + string(name)
@@ -123,6 +129,12 @@ func (s *ScheduleService) GetDepartmentByName(ctx context.Context, name string) 
 	}
 
 	// Fetch
+
+	if isVacation, err := s.CheckVacation(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
 
 	departments, err := s.GetDepartments(ctx)
 	if err != nil {
@@ -163,7 +175,8 @@ func (s *ScheduleService) GetDepartmentByName(ctx context.Context, name string) 
 
 // GetDepartments returns all departments, using the cache when possible.
 func (s *ScheduleService) GetDepartments(ctx context.Context) ([]model.Department, error) {
-	log.Trace().Msg("GetDepartments")
+
+	log.Debug().Msg("GetDepartments")
 
 	// Check cache
 
@@ -183,6 +196,12 @@ func (s *ScheduleService) GetDepartments(ctx context.Context) ([]model.Departmen
 	}
 
 	// Scrape
+
+	if isVacation, err := s.CheckVacation(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
 
 	departmentsNew, err := s.scraper.ScrapeDepartments()
 	if err != nil {
@@ -209,7 +228,8 @@ func (s *ScheduleService) GetDepartments(ctx context.Context) ([]model.Departmen
 
 // GetDepartmentIDs returns the unique department IDs of all groups.
 func (s *ScheduleService) GetDepartmentIDs(ctx context.Context) ([]string, error) {
-	log.Trace().Msg("GetDepartmentIDs")
+
+	log.Debug().Msg("GetDepartmentIDs")
 
 	// Check cache
 
@@ -227,6 +247,12 @@ func (s *ScheduleService) GetDepartmentIDs(ctx context.Context) ([]string, error
 	}
 
 	// Scrape
+
+	if isVacation, err := s.CheckVacation(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
 
 	groups, err := s.GetGroups(ctx)
 	if err != nil {
@@ -262,7 +288,8 @@ func (s *ScheduleService) GetDepartmentIDs(ctx context.Context) ([]string, error
 
 // GetGroupByName returns a group by its name, validating and normalizing it.
 func (s *ScheduleService) GetGroupByName(ctx context.Context, name model.GroupName) (*model.Group, error) {
-	log.Trace().Str("name", string(name)).Msg("GetGroupByName")
+
+	log.Debug().Str("name", string(name)).Msg("GetGroupByName")
 
 	var err error
 	name, err = name.ValidateFormat()
@@ -290,6 +317,12 @@ func (s *ScheduleService) GetGroupByName(ctx context.Context, name model.GroupNa
 	}
 
 	// Fetch
+
+	if isVacation, err := s.CheckVacation(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
 
 	groups, err := s.GetGroups(ctx)
 	if err != nil {
@@ -330,7 +363,8 @@ func (s *ScheduleService) GetGroupByName(ctx context.Context, name model.GroupNa
 
 // GetGroups returns all groups of all departments.
 func (s *ScheduleService) GetGroups(ctx context.Context) ([]model.Group, error) {
-	log.Trace().Msg("GetGroups")
+
+	log.Debug().Msg("GetGroups")
 
 	departments, err := s.GetDepartments(ctx)
 	if err != nil {
@@ -357,7 +391,8 @@ func (s *ScheduleService) GetGroups(ctx context.Context) ([]model.Group, error) 
 // GetGroupsByDepartment returns the groups of a single department.
 // It returns ErrNoDepartment if the department does not exist.
 func (s *ScheduleService) GetGroupsByDepartment(ctx context.Context, departmentName string) ([]model.Group, error) {
-	log.Trace().Msg("GetGroupsByDepartment")
+
+	log.Debug().Msg("GetGroupsByDepartment")
 
 	departmentName = strings.ToLower(departmentName)
 	key := "groups:" + departmentName
@@ -396,6 +431,12 @@ func (s *ScheduleService) GetGroupsByDepartment(ctx context.Context, departmentN
 
 	// Scrape
 
+	if isVacation, err := s.CheckVacation(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
+
 	department, err := s.GetDepartmentByName(ctx, departmentName)
 	if err != nil {
 		if exist {
@@ -428,7 +469,8 @@ func (s *ScheduleService) GetGroupsByDepartment(ctx context.Context, departmentN
 // GetTeacherByName returns a teacher by name or college internal ID.
 // It returns ErrNoTeacher if the teacher does not exist.
 func (s *ScheduleService) GetTeacherByNameOrID(ctx context.Context, nameOrID string) (*model.Teacher, error) {
-	log.Trace().Str("name", nameOrID).Msg("GetTeacherByNameOrID")
+
+	log.Debug().Str("name", nameOrID).Msg("GetTeacherByNameOrID")
 
 	nameOrID = strings.ToLower(nameOrID)
 	key := "teacher:" + nameOrID
@@ -449,6 +491,12 @@ func (s *ScheduleService) GetTeacherByNameOrID(ctx context.Context, nameOrID str
 	}
 
 	// Fetch
+
+	if isVacation, err := s.CheckVacation(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
 
 	teachers, err := s.GetTeachers(ctx)
 	if err != nil {
@@ -533,7 +581,8 @@ func matchStrings(strs []string, target string, n int) []string {
 
 // GetTeachers returns all teachers, using the cache when possible.
 func (s *ScheduleService) GetTeachers(ctx context.Context) ([]model.Teacher, error) {
-	log.Trace().Msg("GetTeachers")
+
+	log.Debug().Msg("GetTeachers")
 
 	// Check cache
 
@@ -551,6 +600,12 @@ func (s *ScheduleService) GetTeachers(ctx context.Context) ([]model.Teacher, err
 	}
 
 	// Scrape
+
+	if isVacation, err := s.CheckVacation(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
 
 	teachersNew, err := s.scraper.ScrapeTeachers()
 	if err != nil {
@@ -579,7 +634,8 @@ func (s *ScheduleService) GetTeachers(ctx context.Context) ([]model.Teacher, err
 func (s *ScheduleService) GetSchedule(
 	ctx context.Context, conf model.ScheduleConfig,
 ) (schedule *model.ScheduleData, err error) {
-	log.Trace().Any("config", conf).Msg("GetSchedule")
+
+	log.Debug().Any("config", conf).Msg("GetSchedule")
 
 	key := "schedule:"
 	if conf.Group != nil {
@@ -606,6 +662,12 @@ func (s *ScheduleService) GetSchedule(
 	}
 
 	// Scrape
+
+	if isVacation, err := s.CheckVacation(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
+	} else if isVacation {
+		return nil, ErrServiceUnavailable
+	}
 
 	departmentIDs, err := s.GetDepartmentIDs(ctx)
 	if err != nil {
