@@ -13,13 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
-	"golang.org/x/sync/errgroup"
-	"gorm.io/gorm"
-
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
@@ -31,6 +24,12 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/database"
 	"github.com/azzimoda/raspishika-gx/pkg/logger"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
+	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
 )
 
 // New creates the app with the default API client from configuration.
@@ -297,7 +296,7 @@ func (a *App) formatReport(msg string, debugValues map[string]any, err error) *b
 	username := extract[string]("username", debugValues)
 	delete(debugValues, "username")
 	if chatID != 0 && a.AdminBot.Username() != "" {
-		fmt.Fprintf(&html, "<b>Chat:</b> %s / @%s / <code>%d</code>\n", fullName, username, chatID)
+		fmt.Fprintf(&html, "<p><b>Chat:</b> %s / @%s / <code>%d</code></p>\n", fullName, username, chatID)
 
 		cmd := botutil.NewStartCommand("chat", strconv.FormatInt(int64(chatID), 10))
 		url := MakeStartURL(a.AdminBot.Username(), cmd)
@@ -314,19 +313,18 @@ func (a *App) formatReport(msg string, debugValues map[string]any, err error) *b
 		if err != nil {
 			log.Warn().Err(err).Msg("failed to get group by name")
 		} else {
-			fmt.Fprintf(&html, "<b>Group:</b> %s — %s\n", group.GroupName, group.DepartmentName)
+			fmt.Fprintf(&html, "<p><b>Group:</b> %s — %s</p>\n", group.GroupName, group.DepartmentName)
 		}
 	}
 
 	// Other debug
 	if len(debugValues) > 0 {
-		fmt.Fprintf(&html, "<b>Other debug:</b>\n")
 		keys := make([]string, 0, len(debugValues))
 		for k := range debugValues {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		html.WriteString("<table border striped>")
+		html.WriteString("<table border striped><caption>Debug</caption>")
 		for _, k := range keys {
 			fmt.Fprintf(&html, "<tr><td><b>%s:</b></td><td><code>%v</code></td></tr>", k, debugValues[k])
 		}
@@ -339,7 +337,7 @@ func (a *App) formatReport(msg string, debugValues map[string]any, err error) *b
 	}
 
 	// Message text
-	fmt.Fprintf(&html, "%s", msg)
+	fmt.Fprintf(&html, "<p>%s</p>", msg)
 
 	params := bot.SendRichMessageParams{RichMessage: models.InputRichMessage{HTML: html.String()}}
 	if len(buttons) > 0 {
