@@ -35,6 +35,12 @@ const docTemplate = `{
                                 "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Department"
                             }
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -73,6 +79,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -105,6 +117,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
@@ -156,6 +174,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -179,6 +203,12 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Teacher"
                             }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
                     }
                 }
@@ -218,6 +248,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -250,6 +286,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
@@ -411,7 +453,7 @@ const docTemplate = `{
                         "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ScheduleDay"
                     }
                 },
-                "isOld": {
+                "is_old": {
                     "type": "boolean"
                 }
             }

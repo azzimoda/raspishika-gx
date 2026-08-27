@@ -29,6 +29,12 @@
                                 "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Department"
                             }
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -67,6 +73,12 @@
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -99,6 +111,12 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
@@ -150,6 +168,12 @@
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -173,6 +197,12 @@
                             "items": {
                                 "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Teacher"
                             }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
                     }
                 }
@@ -212,6 +242,12 @@
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -244,6 +280,12 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse"
                         }
@@ -405,7 +447,7 @@
                         "$ref": "#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ScheduleDay"
                     }
                 },
-                "isOld": {
+                "is_old": {
                     "type": "boolean"
                 }
             }

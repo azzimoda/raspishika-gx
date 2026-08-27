@@ -109,7 +109,7 @@ definitions:
         items:
           $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ScheduleDay'
         type: array
-      isOld:
+      is_old:
         type: boolean
     type: object
   github_com_azzimoda_raspishika-gx_internal_model.ScheduleDay:
@@ -156,6 +156,10 @@ paths:
             items:
               $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Department'
             type: array
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get departments
       tags:
       - schedule
@@ -181,6 +185,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get groups
       tags:
       - schedule
@@ -203,6 +211,10 @@ paths:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Group'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get group
@@ -235,6 +247,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get schedule
       tags:
       - schedule
@@ -252,6 +268,10 @@ paths:
             items:
               $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Teacher'
             type: array
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get teachers
       tags:
       - schedule
@@ -274,6 +294,10 @@ paths:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.Teacher'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get teacher
@@ -299,6 +323,10 @@ paths:
             type: array
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Search teachers
