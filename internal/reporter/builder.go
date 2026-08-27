@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/avast/retry-go/v5"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog"
@@ -102,7 +104,17 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 	params.ChatID = rc.recipientChatID
 
 	// Send the message
-	message, err := rc.bot.SendRichMessage(context.Background(), params)
+	var message *models.Message
+	err := retry.New(
+		retry.Attempts(5), retry.Delay(500*time.Millisecond), retry.DelayType(retry.FullJitterBackoffDelay),
+		retry.OnRetry(func(attempt uint, err error) {
+			log.Error().Err(err).Msgf("Failed to send report; retry attempt %d", attempt)
+		}),
+	).Do(func() error {
+		var err error
+		message, err = rc.bot.SendRichMessage(context.Background(), params)
+		return err
+	})
 	if err != nil {
 		rc.bot.SendMessage(context.Background(), &bot.SendMessageParams{
 			ChatID:    rc.recipientChatID,
