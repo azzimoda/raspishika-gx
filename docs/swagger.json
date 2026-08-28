@@ -298,11 +298,17 @@
         "github_com_azzimoda_raspishika-gx_internal_model.Department": {
             "type": "object",
             "properties": {
-                "name": {
-                    "type": "string"
+                "id": {
+                    "type": "string",
+                    "example": "28728"
                 },
-                "url": {
-                    "type": "string"
+                "name": {
+                    "type": "string",
+                    "example": "АиЭС"
+                },
+                "year": {
+                    "type": "integer",
+                    "example": 2026
                 }
             }
         },

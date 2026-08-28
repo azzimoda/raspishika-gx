@@ -80,8 +80,8 @@ func newTestService(t *testing.T, sc Scraper) (*ScheduleService, *miniredis.Mini
 
 func testData() (*mockScraper, []model.Department, map[string][]model.Group) {
 	departments := []model.Department{
-		{Name: "Отделение СОНХ", URL: "http://example.com/sonh"},
-		{Name: "Отделение ИТ", URL: "http://example.com/it"},
+		{Name: "Отделение СОНХ"},
+		{Name: "Отделение ИТ"},
 	}
 	groupsByDept := map[string][]model.Group{
 		"отделение сонх": {

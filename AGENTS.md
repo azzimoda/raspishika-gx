@@ -5,18 +5,17 @@ Go 1.26 Telegram bot ("Распиши-ка") that shows МПК ТИУ college sc
 ## Architecture
 
 - `cmd/bot` — the Telegram bot (the main binary). Persists to SQLite, renders schedule screenshots via its own chromedp browser (`internal/browser`), talks to the scraper API over HTTP (`internal/apiclient`).
-- `cmd/api` — HTTP scraper API (`internal/api/*`). Scrapes `coworking.tyuiu.ru` with Playwright (`internal/api/browser`), caches in Redis, exposes `/api/v1/*` + Swagger UI (gin).
+- `cmd/api` — HTTP scraper API (`internal/api/*`). Scrapes `coworking.tyuiu.ru` over plain HTTP (`internal/api/scraper`), caches in Redis, exposes `/api/v1/*` + Swagger UI (gin).
 - `cmd/fakeapi` — same API server but with hardcoded fake data (`fake_scraper.go`).
 - Bot connects to Telegram via SOCKS5 proxies fetched at runtime from a public proxifly list (filtered to non-RU socks5, cached 1h in memory). No proxies → `ErrNoAvailableProxy`.
 
 ## Build & run
 
 - Bot needs CGO (sqlite3) and a Chromium binary on PATH (chromedp): `go build ./cmd/bot`
-- API needs Playwright browsers installed, pinned to `go.mod`'s playwright-go version (currently v0.6100.0):
-  `go run github.com/mxschmitt/playwright-go/cmd/playwright@v0.6100.0 install chromium chromium-headless-shell --with-deps`
+- API needs no extra browsers: it scrapes `coworking.tyuiu.ru` over plain HTTP.
 
 - Local dev with demo data: `docker compose up --build` runs redis + fakeapi + bot.
-- Run the real scraper instead: `go run ./cmd/api` (still needs Redis + Chromium).
+- Run the real scraper instead: `go run ./cmd/api` (needs Redis).
 - TZ everywhere is `Asia/Yekaterinburg`.
 
 ## Config

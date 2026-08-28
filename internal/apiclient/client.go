@@ -88,7 +88,7 @@ func (c *Client) GetTeacher(ctx context.Context, nameOrID string) (*model.Teache
 	return &data, nil
 }
 func (c *Client) SearchTeachers(ctx context.Context, query string) ([]model.Teacher, error) {
-	u := c.BaseURL().JoinPath("teachers")
+	u := c.BaseURL().JoinPath("teachers", "search")
 	q := u.Query()
 	q.Set("q", query)
 	u.RawQuery = q.Encode()

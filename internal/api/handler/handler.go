@@ -8,11 +8,10 @@ import (
 	"net/http"
 
 	_ "github.com/azzimoda/raspishika-gx/docs"
-	"github.com/rs/zerolog/log"
-
 	"github.com/azzimoda/raspishika-gx/internal/api/service"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 // Service is the data source used by the handlers.

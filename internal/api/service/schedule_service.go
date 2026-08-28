@@ -226,66 +226,6 @@ func (s *ScheduleService) GetDepartments(ctx context.Context) ([]model.Departmen
 	return departmentsNew, nil
 }
 
-// GetDepartmentIDs returns the unique department IDs of all groups.
-func (s *ScheduleService) GetDepartmentIDs(ctx context.Context) ([]string, error) {
-
-	log.Debug().Msg("GetDepartmentIDs")
-
-	// Check cache
-
-	data, fresh, exist := s.rdb.Get(ctx, "department_ids")
-	var idsOld []string
-	if exist {
-		if err := json.Unmarshal(data, &idsOld); err != nil {
-			log.Error().Err(err).Msg("Failed to unmarshal department IDs cache JSON")
-			fresh, exist = false, false
-		}
-	}
-
-	if fresh && idsOld != nil {
-		return idsOld, nil
-	}
-
-	// Scrape
-
-	if isVacation, err := s.CheckVacation(ctx); err != nil {
-		log.Error().Err(err).Msg("Failed to check vacation status; trying to fetch data anyway...")
-	} else if isVacation {
-		return nil, ErrServiceUnavailable
-	}
-
-	groups, err := s.GetGroups(ctx)
-	if err != nil {
-		if exist {
-			log.Warn().Err(err).Msg("Failed to get groups for department IDs, using old cache")
-			return idsOld, nil
-		}
-		log.Error().Err(err).Msg("Failed to get groups for department IDs, no old cache")
-		return nil, err
-	}
-	departmentIDsMap := make(map[string]struct{})
-	for _, g := range groups {
-		departmentIDsMap[g.DepartmentID] = struct{}{}
-	}
-	idsNew := make([]string, 0, len(departmentIDsMap))
-	for k := range departmentIDsMap {
-		idsNew = append(idsNew, k)
-	}
-	log.Trace().Any("ids", departmentIDsMap).Strs("ids", idsNew).Msg("Collected department IDs")
-
-	// Set cache
-
-	if data, err := json.Marshal(idsNew); err != nil {
-		log.Error().Err(err).Msg("Failed to serialize departments IDs to JSON")
-	} else {
-		if err := s.rdb.Set(ctx, "department_ids", data, MetaFreshTTL, MetaDataTTL); err != nil {
-			log.Error().Err(err).Msg("Failed to set departments IDs redis cache")
-		}
-	}
-
-	return idsNew, nil
-}
-
 // GetGroupByName returns a group by its name, validating and normalizing it.
 func (s *ScheduleService) GetGroupByName(ctx context.Context, name model.GroupName) (*model.Group, error) {
 
@@ -669,7 +609,7 @@ func (s *ScheduleService) GetSchedule(
 		return nil, ErrServiceUnavailable
 	}
 
-	departmentIDs, err := s.GetDepartmentIDs(ctx)
+	departments, err := s.GetDepartments(ctx)
 	if err != nil {
 		if exist {
 			log.Warn().Err(err).Msg("Failed to get departments for schedule URL, using old cache")
@@ -679,7 +619,7 @@ func (s *ScheduleService) GetSchedule(
 		return nil, err
 	}
 
-	scheduleNew, err := s.scraper.ScrapeSchedule(scraper.ScheduleURL(conf, departmentIDs), conf)
+	scheduleNew, err := s.scraper.ScrapeSchedule(scraper.ScheduleURL(conf, departments), conf)
 	if err != nil {
 		if exist {
 			log.Warn().Err(err).Msg("Failed to scrape schedule, using old cache")

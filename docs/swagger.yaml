@@ -2,10 +2,15 @@ basePath: /api/v1
 definitions:
   github_com_azzimoda_raspishika-gx_internal_model.Department:
     properties:
+      id:
+        example: "28728"
+        type: string
       name:
+        example: АиЭС
         type: string
-      url:
-        type: string
+      year:
+        example: 2026
+        type: integer
     type: object
   github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse:
     properties:

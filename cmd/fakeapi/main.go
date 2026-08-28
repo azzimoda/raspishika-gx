@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/azzimoda/raspishika-gx/internal/api/browser"
 	"github.com/azzimoda/raspishika-gx/internal/api/handler"
 	"github.com/azzimoda/raspishika-gx/internal/api/router"
 	"github.com/azzimoda/raspishika-gx/internal/api/service"
@@ -34,16 +33,6 @@ func run() error {
 	config.Init()
 
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
-
-	browser, err := browser.New()
-	if err != nil {
-		return fmt.Errorf("failed to create browser: %w", err)
-	}
-	defer func() {
-		if err := browser.Close(); err != nil {
-			log.Error().Err(err).Msg("Browser closed with an error")
-		}
-	}()
 
 	redisAddr := fmt.Sprintf("%s:%s", viper.GetString(config.KeyRedisHost), viper.GetString(config.KeyRedisPort))
 	redisDB := viper.GetInt(config.KeyRedisDB)

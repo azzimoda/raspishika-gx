@@ -45,7 +45,6 @@
   - `spf13/viper`
   - API:
     - `gin-gonic/gin`
-    - `mxschmitt/playwright-go`
     - `swaggo/swag` (Swagger-документация)
   - Бот:
     - `go-telegram/bot`
@@ -53,7 +52,6 @@
     - `pressly/goose/v3` (миграции БД)
     - `chromedp/chromedp`
 - Redis (кэш API)
-- Node.js — Playwright v1.61.1
 - SQLite v3.37
 
 ## Архитектура
@@ -61,7 +59,7 @@
 Проект состоит из двух сервисов:
 
 - `cmd/bot` — Telegram-бот. Хранит данные в SQLite (доступ через GORM, миграции применяются автоматически при запуске через goose), рендерит скриншоты расписания через собственный браузер Chromium (`chromedp`), расписания получает по HTTP от API.
-- `cmd/api` — HTTP-сервис скрейпинга. Собирает расписание с `coworking.tyuiu.ru` с помощью Playwright, кэширует результаты в Redis и отдаёт по `/api/v1/*` (Swagger-документация доступна по адресам `/swagger/index.html` (UI) и `/swagger/doc.json`). Бот обращается к нему через `internal/apiclient` по `SCRAPER_HOST`/`SCRAPER_PORT`.
+- `cmd/api` — HTTP-сервис скрейпинга. Собирает расписание с `coworking.tyuiu.ru` напрямую по HTTP (`internal/api/scraper`), кэширует результаты в Redis и отдаёт по `/api/v1/*` (Swagger-документация доступна по адресам `/swagger/index.html` (UI) и `/swagger/doc.json`). Бот обращается к нему через `internal/apiclient` по `SCRAPER_HOST`/`SCRAPER_PORT`.
 
 Для локальной разработки с демо-данными (без реального скрейпинга) есть `cmd/fakeapi` и `cmd/fakebot`.
 
@@ -90,7 +88,6 @@ docker compose -f compose-fakeapi.yaml up --build
 2. Установить зависимости:
    ```bash
    go mod download
-   go run github.com/mxschmitt/playwright-go/cmd/playwright@v0.6100.0 install chromium chromium-headless-shell --with-deps
    ```
 3. Собрать API-сервис:
    ```bash

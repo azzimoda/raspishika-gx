@@ -12,14 +12,11 @@ RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -v -o
 RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -v -o fakeapi ./cmd/fakeapi
 
 
-FROM golang:1.26-bookworm
+FROM golang:1.26-alpine
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y nodejs chromium curl
-
-RUN go run github.com/mxschmitt/playwright-go/cmd/playwright@v0.6100.0 install chromium chromium-headless-shell --with-deps
-RUN rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /app/api .
 COPY --from=builder /app/fakeapi .
