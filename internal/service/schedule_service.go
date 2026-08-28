@@ -76,8 +76,8 @@ func (s *ScheduleService) GetSchedules(
 			schedules[i] = schedule
 		}
 	}
-	if len(errs) > 0 {
-		return schedules, fmt.Errorf("errors occurred: %w", errors.Join(errs...))
+	if err := errors.Join(errs...); err != nil {
+		return schedules, fmt.Errorf("errors occurred: %w", err)
 	}
 	return schedules, nil
 }
