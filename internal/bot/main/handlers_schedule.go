@@ -29,6 +29,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -46,6 +47,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -65,6 +67,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.SchedulePageURL(conf, nil)),
 		})
 		return
 	}
@@ -80,12 +83,13 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.SchedulePageURL(conf, nil)),
 		})
 		return
 	}
 	log.Trace().Msg("Prepared schedule image")
 
-	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData, schedule.IsOld)
+	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), schedule.IsOld)
 	addHandlerCtxErr(ctx, err)
 
 	log.Info().Msg("Handled command week")
@@ -106,6 +110,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -123,6 +128,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -141,6 +147,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.SchedulePageURL(conf, nil)),
 		})
 		return
 	}
@@ -155,7 +162,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,
-		ReplyMarkup:     botutil.UpdateScheduleMarkup("tomorrow", string(group.GroupName)),
+		ReplyMarkup:     botutil.UpdateScheduleMarkup("tomorrow", string(group.GroupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -177,6 +184,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -194,9 +202,12 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
+
+	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 
 	// If today is Sunday, send a special message
 	if time.Now().Weekday() == time.Sunday {
@@ -204,14 +215,13 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            "Сегодня воскресенье, отдыхайте!",
-			ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName)),
+			ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName), botutil.SchedulePageURL(conf, nil)),
 		})
 		addHandlerCtxErr(ctx, err)
 		return
 	}
 	// Otherwise, send today's schedule
 
-	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		if errors.Is(err, apiclient.ErrServiceUnavailable) {
@@ -225,6 +235,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.SchedulePageURL(conf, nil)),
 		})
 		return
 	}
@@ -238,7 +249,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,
-		ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName)),
+		ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -268,6 +279,7 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            "Такой группы не существует",
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -279,6 +291,7 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -296,6 +309,7 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -314,6 +328,7 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.SchedulePageURL(conf, nil)),
 		})
 		return
 	}
@@ -328,11 +343,12 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.SchedulePageURL(conf, nil)),
 		})
 		return
 	}
 
-	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData, schedule.IsOld)
+	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), schedule.IsOld)
 	addHandlerCtxErr(ctx, err)
 
 	log.Info().Msg("Handled quick group")

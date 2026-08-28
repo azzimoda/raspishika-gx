@@ -3,7 +3,64 @@ package botutil
 import (
 	"testing"
 	"time"
+
+	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/go-telegram/bot/models"
 )
+
+const testLinkURL = "https://coworking.tyuiu.ru/shs/all_t/sh.php"
+
+func TestUpdateScheduleMarkupWithLink(t *testing.T) {
+	markup := UpdateScheduleMarkup("group", "ИСПт-22-(9)-2", testLinkURL)
+
+	row := markup.InlineKeyboard[0]
+	if len(row) != 2 {
+		t.Fatalf("want 2 buttons (link + update), got %d", len(row))
+	}
+	if row[0].Text != ScheduleLinkLabel || row[0].URL != testLinkURL {
+		t.Fatalf("link button = %+v, want Text=%q URL=%q", row[0], ScheduleLinkLabel, testLinkURL)
+	}
+	if row[0].CallbackData != "" {
+		t.Fatalf("link button must not have callback data, got %q", row[0].CallbackData)
+	}
+	if row[1].Text != "Обновить" || row[1].URL != "" || row[1].CallbackData == "" {
+		t.Fatalf("update button = %+v, want Text=%q with callback data", row[1], "Обновить")
+	}
+}
+
+func TestUpdateScheduleMarkupWithoutLink(t *testing.T) {
+	markup := UpdateScheduleMarkup("group", "ИСПт-22-(9)-2", "")
+
+	row := markup.InlineKeyboard[0]
+	if len(row) != 1 {
+		t.Fatalf("want 1 button (update only), got %d", len(row))
+	}
+	if row[0].Text != "Обновить" {
+		t.Fatalf("button = %+v, want Text=%q", row[0], "Обновить")
+	}
+}
+
+func TestLinkOnlyMarkup(t *testing.T) {
+	markup := LinkOnlyMarkup(testLinkURL)
+
+	row := markup.InlineKeyboard[0]
+	if len(row) != 1 {
+		t.Fatalf("want 1 button, got %d", len(row))
+	}
+	if row[0].Text != ScheduleLinkLabel || row[0].URL != testLinkURL {
+		t.Fatalf("button = %+v, want Text=%q URL=%q", row[0], ScheduleLinkLabel, testLinkURL)
+	}
+}
+
+func TestWeekScheduleMarkup(t *testing.T) {
+	groupConf := model.ScheduleConfig{
+		Group: &model.Group{GroupID: "205", GroupName: "ИСПт-22-(9)-2", DepartmentID: "15", Year: 2026},
+	}
+	markup := WeekScheduleMarkup(groupConf, testLinkURL)
+	if _, ok := markup.(models.InlineKeyboardMarkup); !ok {
+		t.Fatalf("expected InlineKeyboardMarkup, got %T", markup)
+	}
+}
 
 func Test_firstSunday(t *testing.T) {
 	tests := []struct {

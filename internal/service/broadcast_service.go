@@ -243,6 +243,7 @@ func (s *BroadcastService) sendDaily(
 				c.schedule.Config,
 				c.imageFileName,
 				c.imageData,
+				botutil.SchedulePageURL(c.schedule.Config, nil),
 				c.schedule.IsOld,
 			); err != nil {
 				errs = append(errs, err)
@@ -578,6 +579,7 @@ func (s *BroadcastService) sendChangeReports(
 				c.schedule.Config,
 				c.imageFileName,
 				c.imageData,
+				botutil.SchedulePageURL(c.schedule.Config, nil),
 				c.schedule.IsOld,
 			); errSchedule != nil {
 				err = errSchedule

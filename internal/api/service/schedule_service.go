@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/azzimoda/raspishika-gx/internal/api/scraper"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/pkg/redisdb"
 	"github.com/redis/go-redis/v9"
@@ -619,7 +618,7 @@ func (s *ScheduleService) GetSchedule(
 		return nil, err
 	}
 
-	scheduleNew, err := s.scraper.ScrapeSchedule(scraper.ScheduleURL(conf, departments), conf)
+	scheduleNew, err := s.scraper.ScrapeSchedule(model.ScheduleURL(conf, departments), conf)
 	if err != nil {
 		if exist {
 			log.Warn().Err(err).Msg("Failed to scrape schedule, using old cache")

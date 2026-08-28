@@ -80,7 +80,7 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 			Media:           "attach://image.png",
 			MediaAttachment: bytes.NewReader(imageData),
 		},
-		ReplyMarkup: botutil.UpdateScheduleMarkup("group", string(groupName)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup("group", string(groupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -168,7 +168,7 @@ func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update 
 			Media:           "attach://image.png",
 			MediaAttachment: bytes.NewReader(imageData),
 		},
-		ReplyMarkup: botutil.UpdateScheduleMarkup("teacher", string(teacherID)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup("teacher", string(teacherID), botutil.TeacherSchedulePageURL(ctx, h.Schedule, teacher)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -234,7 +234,7 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        tomorrow.HTML(),
-		ReplyMarkup: botutil.UpdateScheduleMarkup("tomorrow", string(groupName)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup("tomorrow", string(groupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -267,7 +267,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 			MessageID:   message.ID,
 			ParseMode:   models.ParseModeHTML,
 			Text:        "Сегодня воскресенье, отдыхайте!",
-			ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName)),
+			ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName), botutil.CollegeScheduleURL),
 		})
 		if err != nil {
 			addHandlerCtxErr(ctx, err)
@@ -327,7 +327,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        today.DynamicFormatHTML(time.Now()),
-		ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)

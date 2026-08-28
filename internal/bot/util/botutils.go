@@ -24,6 +24,14 @@ const (
 	ErrMsgSelectGroupAgain     = "Не удалось найти группу, выберите группу ещё раз"
 )
 
+// ScheduleLinkLabel is the text of the inline link button opening the college
+// schedule page.
+const ScheduleLinkLabel = "Сайт"
+
+// CollegeScheduleURL is the fallback schedule page used when a specific
+// group or teacher page cannot be built.
+const CollegeScheduleURL = "https://coworking.tyuiu.ru/shs/index.php"
+
 func SendErrorMessage(ctx context.Context, b *bot.Bot, params *bot.SendMessageParams) error {
 	err := SendTempMessage(ctx, b, 7*time.Second, params)
 	if err != nil {
@@ -197,6 +205,7 @@ func SendWeekScheduleMessages(
 	conf model.ScheduleConfig,
 	imageFilename string,
 	imageData []byte,
+	linkURL string,
 	isOld bool,
 ) error {
 	log.Debug().Msg("Sending week schedule message...")
@@ -220,7 +229,7 @@ func SendWeekScheduleMessages(
 		errs = append(errs, err)
 	}
 
-	replyMarkup := WeekScheduleMarkup(conf)
+	replyMarkup := WeekScheduleMarkup(conf, linkURL)
 	if err := sendSchedulePhoto(ctx, b, chat, messageThreadID, imageFilename, imageData, replyMarkup, isOld); err != nil {
 		errs = append(errs, err)
 	}
@@ -276,20 +285,67 @@ func sendSchedulePhoto(
 	return err
 }
 
-func WeekScheduleMarkup(conf model.ScheduleConfig) models.ReplyMarkup {
-	if conf.Group != nil {
-		return UpdateScheduleMarkup("group", string(conf.Group.GroupName))
-	} else if conf.Teacher != nil {
-		return UpdateScheduleMarkup("teacher", conf.Teacher.TeacherID)
-	} else {
+// SchedulePageURL builds the URL of the college schedule page for conf.
+// For a group the departments are not needed;
+// for a teacher they are used to build the "shed" query arguments.
+func SchedulePageURL(conf model.ScheduleConfig, departments []model.Department) string {
+	return model.ScheduleURL(conf, departments)
+}
+
+// DepartmentsGetter fetches the list of departments needed to build
+// a teacher schedule page URL.
+type DepartmentsGetter interface {
+	GetDepartments(context.Context) ([]model.Department, error)
+}
+
+// TeacherSchedulePageURL builds the schedule page URL for a teacher,
+// falling back to CollegeScheduleURL when departments cannot be fetched.
+func TeacherSchedulePageURL(ctx context.Context, deps DepartmentsGetter, teacher *model.Teacher) string {
+	departments, err := deps.GetDepartments(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to get departments for teacher schedule URL, using fallback")
+		return CollegeScheduleURL
+	}
+	return SchedulePageURL(model.TeacherScheduleConfig(teacher, false), departments)
+}
+
+// WeekScheduleMarkup returns the keyboard for a week schedule photo.
+func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string) models.ReplyMarkup {
+	switch {
+	case conf.Group != nil:
+		return UpdateScheduleMarkup("group", string(conf.Group.GroupName), linkURL)
+	case conf.Teacher != nil:
+		return UpdateScheduleMarkup("teacher", conf.Teacher.TeacherID, linkURL)
+	default:
 		return nil
 	}
 }
-func UpdateScheduleMarkup(kind, value string) models.InlineKeyboardMarkup {
+
+// UpdateScheduleMarkup returns the keyboard with a link to the college
+// schedule page (when linkURL is non-empty) and the update button.
+func UpdateScheduleMarkup(kind, value, linkURL string) models.InlineKeyboardMarkup {
+	row := make([]models.InlineKeyboardButton, 0, 2)
+	if linkURL != "" {
+		row = append(row, ScheduleLinkButton(linkURL))
+	}
+	row = append(row, UpdateInlineButton(kind, value))
+	return models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{row}}
+}
+
+// LinkOnlyMarkup returns the keyboard with a single link button
+// to the college schedule page.
+func LinkOnlyMarkup(linkURL string) models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{{UpdateInlineButton(kind, value)}},
+		InlineKeyboard: [][]models.InlineKeyboardButton{{ScheduleLinkButton(linkURL)}},
 	}
 }
+
+// ScheduleLinkButton returns an inline link button opening the college
+// schedule page.
+func ScheduleLinkButton(linkURL string) models.InlineKeyboardButton {
+	return models.InlineKeyboardButton{Text: ScheduleLinkLabel, URL: linkURL}
+}
+
 func UpdateInlineButton(kind, value string) models.InlineKeyboardButton {
 	_ = CallbackCommand{Command: "update_" + kind, Args: []string{value, time.Now().Format("20060102150405")}}
 	return models.InlineKeyboardButton{

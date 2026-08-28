@@ -38,6 +38,7 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -56,6 +57,7 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -69,7 +71,7 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 		ChatID:          chatID,
 		MessageThreadID: threadID,
 		Text:            "Пришлите полное имя преподавателя или его часть",
-		ReplyMarkup:     teacherMenuMarkup(teachers),
+		ReplyMarkup:     teacherMenuMarkup(teachers, ""),
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -87,6 +89,7 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,
 			Text:            botutil.ErrMsgTryLater,
+			ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.CollegeScheduleURL),
 		})
 		return
 	}
@@ -96,7 +99,7 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,
 			Text:            "Не удалось найти преподавателя, попробуйте ещё раз",
-			ReplyMarkup:     teacherMenuMarkup(nil), // Empty list
+			ReplyMarkup:     teacherMenuMarkup(nil, botutil.CollegeScheduleURL),
 		})
 		addHandlerCtxErr(ctx, err)
 		return
@@ -109,6 +112,7 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 					ChatID:          update.Message.Chat.ID,
 					MessageThreadID: update.Message.MessageThreadID,
 					Text:            botutil.ErrMsgTryLater,
+					ReplyMarkup:     botutil.LinkOnlyMarkup(botutil.TeacherSchedulePageURL(ctx, h.Schedule, &teachers[0])),
 				})
 			}
 			return
@@ -122,7 +126,7 @@ func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update 
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
 		Text:            "Выберите преподавателя из списка или попробуйте снова",
-		ReplyMarkup:     teacherMenuMarkup(teachers),
+		ReplyMarkup:     teacherMenuMarkup(teachers, ""),
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -210,10 +214,11 @@ func (h *handler) sendTeacherSchedule(
 	log.Trace().Msg("Prepared schedule image")
 
 	return botutil.SendWeekScheduleMessages(
-		ctx, b, message.MessageThreadID, chat, conf, imageFilename, imageData, schedule.IsOld)
+		ctx, b, message.MessageThreadID, chat, conf, imageFilename, imageData,
+		botutil.TeacherSchedulePageURL(ctx, h.Schedule, teacher), schedule.IsOld)
 }
 
-func teacherMenuMarkup(teachers []model.Teacher) models.InlineKeyboardMarkup {
+func teacherMenuMarkup(teachers []model.Teacher, linkURL string) models.InlineKeyboardMarkup {
 	keyboard := make([][]models.InlineKeyboardButton, 0)
 	for _, t := range teachers {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{{
@@ -221,8 +226,10 @@ func teacherMenuMarkup(teachers []model.Teacher) models.InlineKeyboardMarkup {
 			CallbackData: fmt.Sprintf("%s\n%s", botutil.CallbackCommandSelectTeacher, t.TeacherID),
 		}})
 	}
-	keyboard = append(keyboard, []models.InlineKeyboardButton{
-		{Text: "Отмена", CallbackData: botutil.CallbackCommandDelete},
-	})
+	bottomRow := []models.InlineKeyboardButton{{Text: "Отмена", CallbackData: botutil.CallbackCommandDelete}}
+	if linkURL != "" {
+		bottomRow = append([]models.InlineKeyboardButton{botutil.ScheduleLinkButton(linkURL)}, bottomRow...)
+	}
+	keyboard = append(keyboard, bottomRow)
 	return models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }
