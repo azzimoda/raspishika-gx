@@ -3,7 +3,6 @@ package mainbot
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -223,7 +222,7 @@ func teacherMenuMarkup(teachers []model.Teacher, linkURL string) models.InlineKe
 	for _, t := range teachers {
 		keyboard = append(keyboard, []models.InlineKeyboardButton{{
 			Text:         t.Name,
-			CallbackData: fmt.Sprintf("%s\n%s", botutil.CallbackCommandSelectTeacher, t.TeacherID),
+			CallbackData: botutil.NewCallbackCommand(botutil.CallbackCommandSelectTeacher, t.TeacherID).String(),
 		}})
 	}
 	bottomRow := []models.InlineKeyboardButton{{Text: "Отмена", CallbackData: botutil.CallbackCommandDelete}}

@@ -13,7 +13,7 @@ import (
 const testLinkURL = "https://coworking.tyuiu.ru/shs/all_t/sh.php"
 
 func TestUpdateScheduleMarkupWithLink(t *testing.T) {
-	markup := UpdateScheduleMarkup("group", "ИСПт-22-(9)-2", testLinkURL)
+	markup := UpdateScheduleMarkup(UpdateKindToday, "ИСПт-22-(9)-2", testLinkURL)
 
 	row := markup.InlineKeyboard[0]
 	if len(row) != 2 {
@@ -31,7 +31,7 @@ func TestUpdateScheduleMarkupWithLink(t *testing.T) {
 }
 
 func TestUpdateScheduleMarkupWithoutLink(t *testing.T) {
-	markup := UpdateScheduleMarkup("group", "ИСПт-22-(9)-2", "")
+	markup := UpdateScheduleMarkup(UpdateKindToday, "ИСПт-22-(9)-2", "")
 
 	row := markup.InlineKeyboard[0]
 	if len(row) != 1 {
@@ -60,27 +60,19 @@ func TestWeekScheduleMarkup(t *testing.T) {
 		Group: &model.Group{GroupID: "205", GroupName: "ИСПт-22-(9)-2", DepartmentID: "15", Year: 2026},
 	}
 	markup := WeekScheduleMarkup(groupConf, testLinkURL)
-	ikm, ok := markup.(models.InlineKeyboardMarkup)
-	if !ok {
-		t.Fatalf("expected InlineKeyboardMarkup, got %T", markup)
-	}
 
 	teacherConf := model.ScheduleConfig{
 		Teacher: &model.Teacher{TeacherID: "205", Name: "Иванов Иван Иванович"},
 	}
 	teacherMarkup := WeekScheduleMarkup(teacherConf, testLinkURL)
-	teacherIKM, ok := teacherMarkup.(models.InlineKeyboardMarkup)
-	if !ok {
-		t.Fatalf("expected InlineKeyboardMarkup, got %T", teacherMarkup)
-	}
 
 	for _, tt := range []struct {
 		name  string
 		ikm   models.InlineKeyboardMarkup
 		value string
 	}{
-		{"group", ikm, "ИСПт-22-(9)-2"},
-		{"teacher", teacherIKM, "205"},
+		{"group", markup, "ИСПт-22-(9)-2"},
+		{"teacher", teacherMarkup, "205"},
 	} {
 		row := tt.ikm.InlineKeyboard[0]
 		update := row[len(row)-1]
@@ -88,6 +80,59 @@ func TestWeekScheduleMarkup(t *testing.T) {
 		if !strings.HasPrefix(update.CallbackData, want) {
 			t.Errorf("%s: update callback = %q, want prefix %q", tt.name, update.CallbackData, want)
 		}
+	}
+}
+
+func TestWeekScheduleMarkupNoConfig(t *testing.T) {
+	markup := WeekScheduleMarkup(model.ScheduleConfig{}, testLinkURL)
+	if markup.InlineKeyboard != nil {
+		t.Fatalf("want empty keyboard for config without group or teacher, got %+v", markup.InlineKeyboard)
+	}
+}
+
+func TestUpdateKindCallbackCommand(t *testing.T) {
+	for _, tt := range []struct {
+		kind UpdateKind
+		want string
+	}{
+		{UpdateKindWeek, CallbackCommandUpdateWeek},
+		{UpdateKindToday, CallbackCommandUpdateToday},
+		{UpdateKindTomorrow, CallbackCommandUpdateTomorrow},
+	} {
+		if got := tt.kind.CallbackCommand(); got != tt.want {
+			t.Errorf("%s: CallbackCommand() = %q, want %q", tt.kind, got, tt.want)
+		}
+	}
+}
+
+func TestCallbackCommandRoundTrip(t *testing.T) {
+	cmd := NewCallbackCommand("update_week", "ИСПт-22-(9)-2", "20260829120000")
+	parsed := ParseCallbackData(cmd.String())
+	if parsed.Command != cmd.Command {
+		t.Fatalf("parsed command %q, want %q", parsed.Command, cmd.Command)
+	}
+	if len(parsed.Args) != len(cmd.Args) {
+		t.Fatalf("parsed args %v, want %v", parsed.Args, cmd.Args)
+	}
+	for i := range cmd.Args {
+		if parsed.Args[i] != cmd.Args[i] {
+			t.Fatalf("parsed arg %d = %q, want %q", i, parsed.Args[i], cmd.Args[i])
+		}
+	}
+}
+
+func TestUpdateInlineButtonCallbackData(t *testing.T) {
+	btn := UpdateInlineButton(UpdateKindToday, "ИСПт-22-(9)-2")
+	parsed := ParseCallbackData(btn.CallbackData)
+	wantCmd := CallbackCommandUpdateToday
+	if parsed.Command != wantCmd {
+		t.Errorf("command = %q, want %q", parsed.Command, wantCmd)
+	}
+	if parsed.Arg(0) != "ИСПт-22-(9)-2" {
+		t.Errorf("arg0 = %q, want group name", parsed.Arg(0))
+	}
+	if parsed.Arg(1) == "" {
+		t.Errorf("arg1 (timestamp) must be present, got %q", parsed.Arg(1))
 	}
 }
 

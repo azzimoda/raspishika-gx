@@ -208,7 +208,9 @@ func SendWeekScheduleMessages(
 	linkURL string,
 	isOld bool,
 ) error {
+
 	log.Debug().Msg("Sending week schedule message...")
+
 	var errs []error
 
 	if _, err := SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
@@ -310,7 +312,7 @@ func TeacherSchedulePageURL(ctx context.Context, deps DepartmentsGetter, teacher
 }
 
 // WeekScheduleMarkup returns the keyboard for a week schedule photo.
-func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string) models.ReplyMarkup {
+func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string) models.InlineKeyboardMarkup {
 
 	value := ""
 	switch {
@@ -319,14 +321,14 @@ func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string) models.ReplyM
 	case conf.Teacher != nil:
 		value = conf.Teacher.TeacherID
 	default:
-		return nil
+		return models.InlineKeyboardMarkup{}
 	}
-	return UpdateScheduleMarkup("week", value, linkURL)
+	return UpdateScheduleMarkup(UpdateKindWeek, value, linkURL)
 }
 
 // UpdateScheduleMarkup returns the keyboard with a link to the college
 // schedule page (when linkURL is non-empty) and the update button.
-func UpdateScheduleMarkup(kind, value, linkURL string) models.InlineKeyboardMarkup {
+func UpdateScheduleMarkup(kind UpdateKind, value, linkURL string) models.InlineKeyboardMarkup {
 	row := make([]models.InlineKeyboardButton, 0, 2)
 	if linkURL != "" {
 		row = append(row, ScheduleLinkButton(linkURL))
@@ -349,15 +351,18 @@ func ScheduleLinkButton(linkURL string) models.InlineKeyboardButton {
 	return models.InlineKeyboardButton{Text: ScheduleLinkLabel, URL: linkURL}
 }
 
-func UpdateInlineButton(kind, value string) models.InlineKeyboardButton {
-	_ = CallbackCommand{Command: "update_" + kind, Args: []string{value, time.Now().Format("20060102150405")}}
+// callbackTimestampLayout formats the cache-busting timestamp appended to
+// update button callback data to prevent edit errors when the content is unchanged.
+const callbackTimestampLayout = "20060102150405"
+
+func UpdateInlineButton(kind UpdateKind, value string) models.InlineKeyboardButton {
 	return models.InlineKeyboardButton{
 		Text: "Обновить",
-		CallbackData: fmt.Sprintf("update_%s\n%s\n%s",
-			kind, value,
-			time.Now().Format("20060102150405"),
-			// NOTE: Time is added to prevent editing message error when the content is the same.
-		),
+		CallbackData: NewCallbackCommand(
+			kind.CallbackCommand(),
+			value,
+			time.Now().Format(callbackTimestampLayout),
+		).String(),
 	}
 }
 

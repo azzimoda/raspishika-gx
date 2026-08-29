@@ -15,6 +15,7 @@ import (
 )
 
 func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	log.Debug().Msg("Handling command week...")
 
 	threadID := update.Message.MessageThreadID
@@ -158,12 +159,13 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	tomorrow := schedule.Tomorrow(time.Now())
 
 	text := formatDayHTML(conf.Name(), tomorrow)
+	inlineMarkup := botutil.UpdateScheduleMarkup(botutil.UpdateKindTomorrow, string(group.GroupName), botutil.SchedulePageURL(conf, nil))
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,
-		ReplyMarkup:     botutil.UpdateScheduleMarkup("tomorrow", string(group.GroupName), botutil.SchedulePageURL(conf, nil)),
+		ReplyMarkup:     inlineMarkup,
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -211,13 +213,15 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 
+	inlineMarkup := botutil.UpdateScheduleMarkup(botutil.UpdateKindToday, string(group.GroupName), botutil.SchedulePageURL(conf, nil))
+
 	// If today is Sunday, send a special message
 	if time.Now().Weekday() == time.Sunday {
 		_, err := botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            "Сегодня воскресенье, отдыхайте!",
-			ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName), botutil.SchedulePageURL(conf, nil)),
+			ReplyMarkup:     inlineMarkup,
 		})
 		addHandlerCtxErr(ctx, err)
 		return
@@ -245,13 +249,14 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), schedule.IsOld)
 
 	today := schedule.Today()
+
 	text := formatDayDynamicHTML(conf.Name(), today, time.Now())
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,
-		ReplyMarkup:     botutil.UpdateScheduleMarkup("today", string(group.GroupName), botutil.SchedulePageURL(conf, nil)),
+		ReplyMarkup:     inlineMarkup,
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -259,6 +264,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 }
 
 func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	log.Debug().Msg("Handling quick group...")
 
 	chatID := update.Message.Chat.ID

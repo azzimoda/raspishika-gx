@@ -19,5 +19,19 @@ const (
 	CallbackCommandUpdateGroup    = "update_group"
 	CallbackCommandUpdateTeacher  = "update_teacher"
 	CallbackCommandUpdateTomorrow = "update_tomorrow"
-	CallbackCommandUpdateToday = "update_today"
+	CallbackCommandUpdateToday    = "update_today"
 )
+
+// UpdateKind identifies the schedule view an update button refreshes.
+type UpdateKind string
+
+const (
+	UpdateKindWeek     UpdateKind = "week"
+	UpdateKindToday    UpdateKind = "today"
+	UpdateKindTomorrow UpdateKind = "tomorrow"
+)
+
+// CallbackCommand returns the callback command prefix for the kind.
+func (k UpdateKind) CallbackCommand() string {
+	return "update_" + string(k)
+}

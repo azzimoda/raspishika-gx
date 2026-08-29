@@ -193,7 +193,7 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        formatDayHTML(conf.Name(), tomorrow),
-		ReplyMarkup: botutil.UpdateScheduleMarkup("tomorrow", string(groupName), botutil.SchedulePageURL(conf, nil)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup(botutil.UpdateKindTomorrow, string(groupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -227,7 +227,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 			MessageID:   message.ID,
 			ParseMode:   models.ParseModeHTML,
 			Text:        "Сегодня воскресенье, отдыхайте!",
-			ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName), botutil.CollegeScheduleURL),
+			ReplyMarkup: botutil.UpdateScheduleMarkup(botutil.UpdateKindToday, string(groupName), botutil.CollegeScheduleURL),
 		})
 		if err != nil {
 			addHandlerCtxErr(ctx, err)
@@ -287,7 +287,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        formatDayDynamicHTML(conf.Name(), today, time.Now()),
-		ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName), botutil.SchedulePageURL(conf, nil)),
+		ReplyMarkup: botutil.UpdateScheduleMarkup(botutil.UpdateKindToday, string(groupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
