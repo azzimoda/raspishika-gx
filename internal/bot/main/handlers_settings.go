@@ -122,6 +122,7 @@ func (h *handler) handleCQConfigDailyTime(ctx context.Context, b *bot.Bot, updat
 	log.Info().Msg("Handled CQ config daily time")
 }
 func (h *handler) handleTextTime(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	log.Debug().Msg("Handling text time...")
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
@@ -141,7 +142,7 @@ func (h *handler) handleTextTime(ctx context.Context, b *bot.Bot, update *models
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,
 			ParseMode:       models.ParseModeHTML,
-			Text:            "Неправильный вормат времени, попробуйте ещё раз",
+			Text:            "Неправильный формат времени, попробуйте ещё раз",
 		})
 		return
 	}

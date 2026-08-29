@@ -16,35 +16,66 @@ import (
 
 const MsgScheduleUpdated = "Расписание обновлено"
 
-func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
+func (h *handler) handleCQUpdateWeek(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	darkMode := false
 	if ok {
 		darkMode = chat.DarkMode
 	} else {
+		log.Warn().Msg("Failed to get chat to get color mode, using light mode")
 		addHandlerCtxErr(ctx, ErrNoChatContext)
 	}
 
 	callbackQueryID := update.CallbackQuery.ID
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
-	groupName := model.GroupName(command.Arg(0))
+	value := command.Arg(0)
 
-	group, err := h.Schedule.GetGroupByName(ctx, groupName)
-	if err != nil {
-		if errors.Is(err, apiclient.ErrServiceUnavailable) {
-			sendVacationAnswer(ctx, b, update, false)
+	isTeacher := command.Command == botutil.CallbackCommandUpdateTeacher
+	if command.Command == botutil.CallbackCommandUpdateWeek {
+		isTeacher = isTeacherID(value)
+	}
+
+	var conf model.ScheduleConfig
+	var linkURL string
+	if isTeacher {
+		teacher, err := h.Schedule.GetTeacherByNameOrID(ctx, value)
+		if err != nil {
+			if errors.Is(err, apiclient.ErrServiceUnavailable) {
+				sendVacationAnswer(ctx, b, update, false)
+				return
+			}
+
+			addHandlerCtxErr(ctx, err)
+			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+				CallbackQueryID: callbackQueryID,
+				Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			})
 			return
 		}
 
-		addHandlerCtxErr(ctx, err)
-		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-			CallbackQueryID: callbackQueryID,
-			Text:            botutil.ErrMsgCouldNotLoadSchedule,
-		})
-		return
+		conf = model.TeacherScheduleConfig(teacher, darkMode)
+		linkURL = botutil.TeacherSchedulePageURL(ctx, h.Schedule, teacher)
+	} else {
+		group, err := h.Schedule.GetGroupByName(ctx, model.GroupName(value))
+		if err != nil {
+			if errors.Is(err, apiclient.ErrServiceUnavailable) {
+				sendVacationAnswer(ctx, b, update, false)
+				return
+			}
+
+			addHandlerCtxErr(ctx, err)
+			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+				CallbackQueryID: callbackQueryID,
+				Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			})
+			return
+		}
+
+		conf = model.GroupScheduleConfig(group, darkMode)
+		linkURL = botutil.SchedulePageURL(conf, nil)
 	}
 
-	conf := model.GroupScheduleConfig(group, darkMode)
 	schedule, err := h.Schedule.GetSchedule(ctx, conf)
 	if err != nil {
 		if errors.Is(err, apiclient.ErrServiceUnavailable) {
@@ -60,7 +91,7 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 		return
 	}
 
-	setGroupOrTeacherAndCached(ctx, string(groupName), schedule.IsOld)
+	setGroupOrTeacherAndCached(ctx, conf.Name(), schedule.IsOld)
 
 	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, schedule)
 	if err != nil {
@@ -80,7 +111,7 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 			Media:           "attach://image.png",
 			MediaAttachment: bytes.NewReader(imageData),
 		},
-		ReplyMarkup: botutil.UpdateScheduleMarkup("group", string(groupName), botutil.SchedulePageURL(conf, nil)),
+		ReplyMarkup: botutil.WeekScheduleMarkup(conf, linkURL),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -97,98 +128,26 @@ func (h *handler) handleCQUpdateGroup(ctx context.Context, b *bot.Bot, update *m
 	})
 	addHandlerCtxErr(ctx, err)
 
-	log.Info().Msg("Handled CQ update group")
+	log.Info().Msg("Handled CQ update week")
 }
 
-func (h *handler) handleCQUpdateTeacher(ctx context.Context, b *bot.Bot, update *models.Update) {
-	log.Debug().Msg("Handling CQ update teacher...")
+// isTeacherID reports whether the callback value is a numeric teacher ID;
+// group names always contain letters and are never purely numeric.
+func isTeacherID(s string) bool {
 
-	chat, ok := ctx.Value(keyChat).(*model.Chat)
-	darkMode := false
-	if ok {
-		darkMode = chat.DarkMode
-	} else {
-		addHandlerCtxErr(ctx, ErrNoChatContext)
+	if s == "" {
+		return false
 	}
-
-	callbackQueryID := update.CallbackQuery.ID
-	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
-	teacherID := command.Arg(0)
-
-	teacher, err := h.Schedule.GetTeacherByNameOrID(ctx, teacherID)
-	if err != nil {
-		if errors.Is(err, apiclient.ErrServiceUnavailable) {
-			sendVacationAnswer(ctx, b, update, false)
-			return
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
 		}
-
-		addHandlerCtxErr(ctx, err)
-		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-			CallbackQueryID: callbackQueryID,
-			Text:            botutil.ErrMsgCouldNotLoadSchedule,
-		})
-		return
 	}
-
-	conf := model.TeacherScheduleConfig(teacher, darkMode)
-	schedule, err := h.Schedule.GetSchedule(ctx, conf)
-	if err != nil {
-		if errors.Is(err, apiclient.ErrServiceUnavailable) {
-			sendVacationAnswer(ctx, b, update, false)
-			return
-		}
-
-		addHandlerCtxErr(ctx, err)
-		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-			CallbackQueryID: callbackQueryID,
-			Text:            botutil.ErrMsgCouldNotLoadSchedule,
-		})
-		return
-	}
-	log.Trace().Bool("old", schedule.IsOld).Msg("Got teacher schedule")
-
-	setGroupOrTeacherAndCached(ctx, string(schedule.Config.Teacher.Name), schedule.IsOld)
-
-	_, imageData, err := h.Schedule.PrepareScheduleImage(ctx, schedule)
-	if err != nil {
-		addHandlerCtxErr(ctx, err)
-		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-			CallbackQueryID: callbackQueryID,
-			Text:            botutil.ErrMsgCouldNotLoadSchedule,
-		})
-		return
-	}
-	log.Trace().Msg("Prepared schedule image")
-
-	message := update.CallbackQuery.Message.Message
-	_, err = b.EditMessageMedia(ctx, &bot.EditMessageMediaParams{
-		ChatID:    message.Chat.ID,
-		MessageID: message.ID,
-		Media: &models.InputMediaPhoto{
-			Media:           "attach://image.png",
-			MediaAttachment: bytes.NewReader(imageData),
-		},
-		ReplyMarkup: botutil.UpdateScheduleMarkup("teacher", string(teacherID), botutil.TeacherSchedulePageURL(ctx, h.Schedule, teacher)),
-	})
-	if err != nil {
-		addHandlerCtxErr(ctx, err)
-		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-			CallbackQueryID: callbackQueryID,
-			Text:            botutil.ErrMsgCouldNotSendSchedule,
-		})
-		return
-	}
-
-	_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: callbackQueryID,
-		Text:            MsgScheduleUpdated,
-	})
-	addHandlerCtxErr(ctx, err)
-
-	log.Info().Msg("Handled CQ update teacher")
+	return true
 }
 
 func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	callbackQueryID := update.CallbackQuery.ID
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	groupName := model.GroupName(command.Arg(0))
@@ -233,7 +192,7 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 		ChatID:      message.Chat.ID,
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
-		Text:        tomorrow.HTML(),
+		Text:        formatDayHTML(conf.Name(), tomorrow),
 		ReplyMarkup: botutil.UpdateScheduleMarkup("tomorrow", string(groupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {
@@ -255,6 +214,7 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 }
 
 func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	callbackQueryID := update.CallbackQuery.ID
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	groupName := model.GroupName(command.Arg(0))
@@ -326,7 +286,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		ChatID:      message.Chat.ID,
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
-		Text:        today.DynamicFormatHTML(time.Now()),
+		Text:        formatDayDynamicHTML(conf.Name(), today, time.Now()),
 		ReplyMarkup: botutil.UpdateScheduleMarkup("today", string(groupName), botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {

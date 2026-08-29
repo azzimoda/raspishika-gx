@@ -311,14 +311,17 @@ func TeacherSchedulePageURL(ctx context.Context, deps DepartmentsGetter, teacher
 
 // WeekScheduleMarkup returns the keyboard for a week schedule photo.
 func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string) models.ReplyMarkup {
+
+	value := ""
 	switch {
 	case conf.Group != nil:
-		return UpdateScheduleMarkup("group", string(conf.Group.GroupName), linkURL)
+		value = string(conf.Group.GroupName)
 	case conf.Teacher != nil:
-		return UpdateScheduleMarkup("teacher", conf.Teacher.TeacherID, linkURL)
+		value = conf.Teacher.TeacherID
 	default:
 		return nil
 	}
+	return UpdateScheduleMarkup("week", value, linkURL)
 }
 
 // UpdateScheduleMarkup returns the keyboard with a link to the college

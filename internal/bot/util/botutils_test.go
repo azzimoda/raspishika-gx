@@ -1,6 +1,8 @@
 package botutil
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,12 +55,39 @@ func TestLinkOnlyMarkup(t *testing.T) {
 }
 
 func TestWeekScheduleMarkup(t *testing.T) {
+
 	groupConf := model.ScheduleConfig{
 		Group: &model.Group{GroupID: "205", GroupName: "ИСПт-22-(9)-2", DepartmentID: "15", Year: 2026},
 	}
 	markup := WeekScheduleMarkup(groupConf, testLinkURL)
-	if _, ok := markup.(models.InlineKeyboardMarkup); !ok {
+	ikm, ok := markup.(models.InlineKeyboardMarkup)
+	if !ok {
 		t.Fatalf("expected InlineKeyboardMarkup, got %T", markup)
+	}
+
+	teacherConf := model.ScheduleConfig{
+		Teacher: &model.Teacher{TeacherID: "205", Name: "Иванов Иван Иванович"},
+	}
+	teacherMarkup := WeekScheduleMarkup(teacherConf, testLinkURL)
+	teacherIKM, ok := teacherMarkup.(models.InlineKeyboardMarkup)
+	if !ok {
+		t.Fatalf("expected InlineKeyboardMarkup, got %T", teacherMarkup)
+	}
+
+	for _, tt := range []struct {
+		name  string
+		ikm   models.InlineKeyboardMarkup
+		value string
+	}{
+		{"group", ikm, "ИСПт-22-(9)-2"},
+		{"teacher", teacherIKM, "205"},
+	} {
+		row := tt.ikm.InlineKeyboard[0]
+		update := row[len(row)-1]
+		want := fmt.Sprintf("update_week\n%s\n", tt.value)
+		if !strings.HasPrefix(update.CallbackData, want) {
+			t.Errorf("%s: update callback = %q, want prefix %q", tt.name, update.CallbackData, want)
+		}
 	}
 }
 

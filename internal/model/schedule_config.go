@@ -17,6 +17,16 @@ type ScheduleConfig struct {
 	IsDark  bool     `json:"is_dark"`
 }
 
+func (cs ScheduleConfig) Name() string {
+
+	if cs.Group != nil {
+		return string(cs.Group.GroupName)
+	} else if cs.Teacher != nil {
+		return cs.Teacher.Name
+	}
+	return ""
+}
+
 func (cs ScheduleConfig) WithDarkMode(isDark bool) ScheduleConfig {
 	return ScheduleConfig{Group: cs.Group, Teacher: cs.Teacher, IsDark: isDark}
 }

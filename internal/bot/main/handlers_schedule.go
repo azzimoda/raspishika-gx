@@ -96,6 +96,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 }
 
 func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	log.Debug().Msg("Handling command tomorrow...")
 
 	chatID := update.Message.Chat.ID
@@ -156,7 +157,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 
 	tomorrow := schedule.Tomorrow(time.Now())
 
-	text := tomorrow.HTML()
+	text := formatDayHTML(conf.Name(), tomorrow)
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: threadID,
@@ -170,6 +171,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 }
 
 func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models.Update) {
+
 	log.Debug().Msg("Handling command today...")
 
 	chatID := update.Message.Chat.ID
@@ -243,7 +245,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), schedule.IsOld)
 
 	today := schedule.Today()
-	text := today.DynamicFormatHTML(time.Now())
+	text := formatDayDynamicHTML(conf.Name(), today, time.Now())
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
@@ -406,4 +408,58 @@ func sendVacationAnswer(ctx context.Context, b *bot.Bot, update *models.Update, 
 			addHandlerCtxErr(ctx, err)
 		}
 	}
+}
+
+func formatDayHTML(name string, day model.ScheduleDay) string {
+
+	text := fmt.Sprintf("📅 %s — %s, %s", name, day.Weekday, day.Date) + ": "
+
+	if kind := day.CommonKind(); kind != "" {
+		log.Trace().Msgf("Detected common kind: %s", kind)
+		if kind == model.PairKindEmpty {
+			text += "Нет пар"
+		} else {
+			text += day.Pairs[0].Label
+		}
+		return text
+	}
+
+	for _, pair := range day.Pairs {
+		if pair.Kind == model.PairKindEmpty {
+			continue
+		}
+		text += "\n\n" + pair.HTML()
+	}
+
+	return text
+}
+func formatDayDynamicHTML(name string, day model.ScheduleDay, t time.Time) string {
+
+	text := fmt.Sprintf("📅 %s — %s, %s", name, day.Weekday, day.Date) + ": "
+
+	if kind := day.CommonKind(); kind != "" {
+		log.Trace().Msgf("Detected common kind: %s", kind)
+		if kind == model.PairKindEmpty {
+			text += "Нет пар"
+		} else {
+			text += day.Pairs[0].Label
+		}
+		return text
+	}
+
+	for _, pair := range day.Pairs {
+		if pair.Kind == model.PairKindEmpty {
+			continue
+		}
+		text += "\n\n"
+		if pair.IsPassedAt(t) {
+			log.Trace().Msg("Before")
+			text += fmt.Sprintf("<s>%s</s>", pair.HTML())
+		} else {
+			log.Trace().Msg("After")
+			text += pair.HTML()
+		}
+	}
+
+	return text
 }

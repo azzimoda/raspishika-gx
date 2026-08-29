@@ -31,6 +31,7 @@ type handler struct {
 }
 
 func (h *handler) registerHandlers(b *bot.Bot) {
+
 	// Commands
 	{
 		registerCommandHandler(b, "start", h.handleCmdStart, h.checkRegularAccess)
@@ -95,8 +96,9 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 
 		registerRegularCallbackHandler(botutil.CallbackCommandDelete, h.handleCQDelete)
 		registerRegularCallbackHandler(botutil.CallbackCommandSelectTeacher, h.handleCQTeacher)
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateGroup)
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateTeacher)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateWeek, h.handleCQUpdateWeek)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateWeek) // legacy
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateWeek) // legacy
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow)
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateToday, h.handleCQUpdateToday)
 

@@ -15,6 +15,7 @@ const (
 	CallbackCommandSelectDepartment = "select_department"
 	CallbackCommandSelectTeacher    = "select_teacher"
 
+	CallbackCommandUpdateWeek     = "update_week"
 	CallbackCommandUpdateGroup    = "update_group"
 	CallbackCommandUpdateTeacher  = "update_teacher"
 	CallbackCommandUpdateTomorrow = "update_tomorrow"
