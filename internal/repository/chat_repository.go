@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -391,9 +392,45 @@ func (r *chatRepository) GetChatCountByDepartment(ctx context.Context) ([]NameCo
 		SELECT COALESCE(NULLIF(department, ''), 'unknown') AS name, count(*) AS count
 		FROM chats
 		GROUP BY COALESCE(NULLIF(department, ''), 'unknown')
-		ORDER BY count DESC, name ASC
 	`).Scan(&result).Error
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+	return mergeNameCounts(result), nil
+}
+
+// mergeNameCounts объединяет строки по нормализованному имени отделения
+// и сортирует по убыванию количества, затем по имени.
+func mergeNameCounts(rows []NameCount) []NameCount {
+	merged := make(map[string]int, len(rows))
+	for _, row := range rows {
+		merged[normalizeDepartmentName(row.Name)] += row.Count
+	}
+	out := make([]NameCount, 0, len(merged))
+	for name, count := range merged {
+		out = append(out, NameCount{Name: name, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// normalizeDepartmentName приводит устаревшие названия отделений
+// (префикс «Отделение …» из старого Playwright-скрейпера) к каноническому виду.
+func normalizeDepartmentName(name string) string {
+	s := strings.TrimSpace(name)
+	if s == "" || s == "unknown" {
+		return "unknown"
+	}
+	s = strings.TrimPrefix(s, "Отделение ")
+	if s == "ПО" {
+		return "Политехническое"
+	}
+	return s
 }
 
 func (r *chatRepository) GetChatsByAccessLevel(ctx context.Context) (map[model.ChatAccessLevel]int, error) {
