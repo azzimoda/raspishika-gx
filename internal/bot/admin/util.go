@@ -17,8 +17,16 @@ func parsePeriod(str string) (time.Duration, bool) {
 
 	re := regexp.MustCompile(`^(\d+)\s*(h|d|w|m|y)?$`)
 	matches := re.FindStringSubmatch(str)
+	// matches is nil when the string does not match the pattern (no leading number).
+	if len(matches) < 2 {
+		return 0, false
+	}
+	suffix := ""
+	if len(matches) > 2 {
+		suffix = matches[2]
+	}
 	multiplier := time.Hour
-	switch matches[2] {
+	switch suffix {
 	case "d":
 		multiplier = 24 * time.Hour
 	case "w":

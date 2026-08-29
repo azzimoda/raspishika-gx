@@ -7,6 +7,7 @@ import (
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
+	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 )
 
 func NewStatsService(logRepo repository.LogRepository, chatRepo repository.ChatRepository) *StatsService {
@@ -71,6 +72,18 @@ func (s *StatsService) GetChatStats(ctx context.Context, duration time.Duration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count all configured groups: %w", err)
 	}
+	chatsByDepartment, err := s.chatRepo.GetChatCountByDepartment(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chat count by department: %w", err)
+	}
+	chatsByAccess, err := s.chatRepo.GetChatsByAccessLevel(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chats by access level: %w", err)
+	}
+	topGroups, err := s.chatRepo.GetTopGroupsByChatCount(ctx, topGroupsLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get top groups by chat count: %w", err)
+	}
 
 	stats := &ChatStatsData{
 		ChatsTotal:      chatsTotal,
@@ -82,20 +95,29 @@ func (s *StatsService) GetChatStats(ctx context.Context, duration time.Duration)
 		ChatsNewGrouped: chatsNewGrouped,
 		ChatsPerGroup:   chatsPerGroup,
 		GroupsTotal:     groupsTotal,
+		Departments:     chatsByDepartment,
+		TopGroups:       topGroups,
+		ChatsByAccess:   chatsByAccess,
 	}
 	return stats, nil
 }
 
+// topGroupsLimit bounds the number of rows in the "top groups by chats" table.
+const topGroupsLimit = 10
+
 type ChatStatsData struct {
-	ChatsTotal      int         `json:"chats_total"`
-	ChatsPrivate    int         `json:"chats_private"`
-	ChatsActive     int         `json:"chats_active"`
-	ChatsSemiactive int         `json:"chats_semiactive"`
-	ChatsInactive   int         `json:"chats_inactive"`
-	ChatsNew        int         `json:"chats_new"`
-	ChatsNewGrouped map[int]int `json:"chats_new_grouped"`
-	ChatsPerGroup   float64     `json:"chat_per_group"`
-	GroupsTotal     int         `json:"groups_total"`
+	ChatsTotal      int                           `json:"chats_total"`
+	ChatsPrivate    int                           `json:"chats_private"`
+	ChatsActive     int                           `json:"chats_active"`
+	ChatsSemiactive int                           `json:"chats_semiactive"`
+	ChatsInactive   int                           `json:"chats_inactive"`
+	ChatsNew        int                           `json:"chats_new"`
+	ChatsNewGrouped map[int]int                   `json:"chats_new_grouped"`
+	ChatsPerGroup   float64                       `json:"chat_per_group"`
+	GroupsTotal     int                           `json:"groups_total"`
+	Departments     []repository.NameCount        `json:"departments"`
+	TopGroups       []repository.NameCount        `json:"top_groups"`
+	ChatsByAccess   map[model.ChatAccessLevel]int `json:"chats_by_access"`
 }
 
 func (s *StatsService) GetConfigStats(ctx context.Context) (*ConfigStatsData, error) {
@@ -131,6 +153,14 @@ func (s *StatsService) GetConfigStats(ctx context.Context) (*ConfigStatsData, er
 	if err != nil {
 		return nil, err
 	}
+	privateChatsConfigured, err := s.chatRepo.CountPrivateChatsWithConfiguredGroup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	watchedGroupNames, err := s.chatRepo.GetWatchedGroupNames(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	return &ConfigStatsData{
 		ChatsTotal:             chatsTotal,
@@ -141,6 +171,8 @@ func (s *StatsService) GetConfigStats(ctx context.Context) (*ConfigStatsData, er
 		ChangeEnabled:          changeEnabled,
 		DarkEnabled:            darkEnabled,
 		ChatCountByTime:        chatCountByTime,
+		PrivateChatsConfigured: privateChatsConfigured,
+		WatchedGroups:          len(watchedGroupNames),
 	}, nil
 }
 
@@ -153,6 +185,8 @@ type ConfigStatsData struct {
 	ChangeEnabled          int
 	DarkEnabled            int
 	ChatCountByTime        []repository.TimeCount
+	PrivateChatsConfigured int
+	WatchedGroups          int
 }
 
 func (s *StatsService) GetLogStats(ctx context.Context, dur time.Duration) (*LogStatsData, error) {
@@ -198,6 +232,44 @@ func (s *StatsService) GetLogStats(ctx context.Context, dur time.Duration) (*Log
 		return nil, err
 	}
 	requestsPotential, err := s.logRepo.CountPotentialRequests(ctx, past, now)
+	if err != nil {
+		return nil, err
+	}
+
+	requestsCached, requestsUncached, err := s.logRepo.CountScheduleRequestsByPeriod(ctx, past, now)
+	if err != nil {
+		return nil, err
+	}
+	distinctChats, err := s.logRepo.CountDistinctChatsByPeriod(ctx, past, now)
+	if err != nil {
+		return nil, err
+	}
+	updatesByKind, err := s.logRepo.GetUpdateLogCountByKind(ctx, past, now)
+	if err != nil {
+		return nil, err
+	}
+	updateLatency, err := s.logRepo.GetUpdateLatencyStatsByPeriod(ctx, past, now)
+	if err != nil {
+		return nil, err
+	}
+	requestsByHour, err := s.logRepo.GetRequestsCountByHour(ctx, past, now)
+	if err != nil {
+		return nil, err
+	}
+	topRequestedSchedules, err := s.logRepo.GetTopRequestedSchedules(ctx, past, now, topSchedulesLimit)
+	if err != nil {
+		return nil, err
+	}
+	broadcastTasksByKind, err := s.logRepo.GetBroadcastTaskStatsByKind(ctx, past, now)
+	if err != nil {
+		return nil, err
+	}
+
+	scheduleRequests := requestsCached + requestsUncached
+	cacheHitRate := 0.0
+	if scheduleRequests > 0 {
+		cacheHitRate = float64(requestsCached) / float64(scheduleRequests)
+	}
 
 	stats := &LogStatsData{
 		UpdatesTotal:   updatesTotal,
@@ -212,9 +284,24 @@ func (s *StatsService) GetLogStats(ctx context.Context, dur time.Duration) (*Log
 
 		RequestsActual:    requestsActual,
 		RequestsPotential: requestsPotential,
+
+		ScheduleRequests:      scheduleRequests,
+		RequestsCached:        requestsCached,
+		RequestsUncached:      requestsUncached,
+		CacheHitRate:          cacheHitRate,
+		DistinctChats:         distinctChats,
+		UpdatesByKind:         updatesByKind,
+		UpdateLatency:         refutil.DerefOrTypeDefault(updateLatency),
+		RequestsByHour:        requestsByHour,
+		TopRequestedSchedules: topRequestedSchedules,
+		BroadcastByKind:       broadcastTasksByKind,
 	}
 	return stats, nil
 }
+
+// topSchedulesLimit bounds the number of rows in the "top requested schedules"
+// table.
+const topSchedulesLimit = 10
 
 type LogStatsData struct {
 	UpdatesTotal   int
@@ -229,6 +316,17 @@ type LogStatsData struct {
 
 	RequestsActual    int
 	RequestsPotential int
+
+	ScheduleRequests      int
+	RequestsCached        int
+	RequestsUncached      int
+	CacheHitRate          float64
+	DistinctChats         int
+	UpdatesByKind         map[string]int
+	UpdateLatency         repository.LatencyStats
+	RequestsByHour        []repository.TimeCount
+	TopRequestedSchedules []repository.NameCount
+	BroadcastByKind       []repository.BroadcastTaskKindStats
 }
 
 func (s *StatsService) GetGeneralStats(ctx context.Context, duration time.Duration) (*GeneralStatsData, error) {

@@ -66,16 +66,56 @@ func (r ReportBuilder) Debug(name string, value any) ReportBuilder {
 }
 
 // Send sends a report message with an empty string.
-func (rc ReportBuilder) Send() (*Report, error) { return rc.Msg("") }
+func (rc ReportBuilder) Send() (*Report, error) {
+	return rc.send("", rc.formatFunc("", rc.debugValues, rc.error), 3)
+}
 
 // Msgf sends a report message with the given format string and arguments.
 func (rc ReportBuilder) Msgf(format string, a ...any) (*Report, error) {
-
-	return rc.Msg(fmt.Sprintf(format, a...))
+	msg := fmt.Sprintf(format, a...)
+	return rc.send(msg, rc.formatFunc(msg, rc.debugValues, rc.error), 3)
 }
 
 // Msg sends a report message with the given string.
 func (rc ReportBuilder) Msg(msg string) (*Report, error) {
+	return rc.send(msg, rc.formatFunc(msg, rc.debugValues, rc.error), 2)
+}
+
+// MsgRich sends a report message built from structured rich message blocks
+// (headings, dividers, tables, details, ...). Unlike [ReportBuilder.Msg] it
+// bypasses the format function and sends the given blocks as-is, so the caller
+// controls the rich message composition.
+func (rc ReportBuilder) MsgRich(msg string, blocks []models.InputRichBlock) (*Report, error) {
+
+	if rc.error != nil {
+		blocks = append([]models.InputRichBlock{errorRichBlock(rc.error.Error())}, blocks...)
+	}
+
+	params := &bot.SendRichMessageParams{RichMessage: models.InputRichMessage{Blocks: blocks}}
+	return rc.send(msg, params, 2)
+}
+
+// errorRichBlock builds a blockquote rich block with the given error message.
+func errorRichBlock(errText string) models.InputRichBlock {
+	return models.InputRichBlock{
+		Type: models.RichBlockTypeBlockQuotation,
+		InputRichBlockBlockQuotation: &models.InputRichBlockBlockQuotation{
+			Type: models.RichBlockTypeBlockQuotation,
+			Blocks: []models.InputRichBlock{
+				{
+					Type:                    models.RichBlockTypeParagraph,
+					InputRichBlockParagraph: &models.InputRichBlockParagraph{Text: models.RichText{PlainText: errText}},
+				},
+			},
+		},
+	}
+}
+
+// send logs the report and sends the given rich message params to the report
+// recipient with retries. Params must not carry a ChatID; it is set here.
+// callerSkipFrames is the number of frames between the actual call site and
+// this logger: 2 for Msg/MsgRich, 3 for Msgf/Send.
+func (rc ReportBuilder) send(msg string, params *bot.SendRichMessageParams, callerSkipFrames int) (*Report, error) {
 
 	log.Trace().Msg("Sending report...")
 
@@ -86,7 +126,7 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 		} else {
 			logEvent = log.Debug()
 		}
-		logEvent = logEvent.CallerSkipFrame(1)
+		logEvent = logEvent.CallerSkipFrame(callerSkipFrames)
 		for key, value := range rc.debugValues {
 			logEvent.Any(key, value)
 		}
@@ -100,7 +140,6 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 		return nil, fmt.Errorf("bot is nil")
 	}
 
-	params := rc.formatFunc(msg, rc.debugValues, rc.error)
 	params.ChatID = rc.recipientChatID
 
 	// Send the message
@@ -121,7 +160,7 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 			Text:      fmt.Sprintf("Failed to send report:\n<pre>%s</pre>", err),
 			ParseMode: models.ParseModeHTML,
 		})
-		log.Error().Err(err).Str("text", params.RichMessage.HTML).Msg("Failed to send report message")
+		log.Error().Err(err).Str("msg", msg).Int("blocks", len(params.RichMessage.Blocks)).Msg("Failed to send report message")
 	}
 
 	return &Report{rc, message}, err

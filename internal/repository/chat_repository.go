@@ -50,6 +50,16 @@ type ChatRepository interface {
 	CountDarkEnabled(context.Context) (int, error)
 	GetAvgChatPerGroup(context.Context) (float64, error)
 	GetGroupedCountChatCountByTime(context.Context) ([]TimeCount, error)
+	// GetChatCountByDepartment returns the number of chats per department,
+	// ordered by count descending.
+	GetChatCountByDepartment(context.Context) ([]NameCount, error)
+	// GetChatsByAccessLevel returns the number of chats per access level.
+	GetChatsByAccessLevel(context.Context) (map[model.ChatAccessLevel]int, error)
+	// GetTopGroupsByChatCount returns the configured groups with the most chats.
+	GetTopGroupsByChatCount(ctx context.Context, limit int) ([]NameCount, error)
+	// CountPrivateChatsWithConfiguredGroup returns the number of private chats
+	// (tg_chat_id > 0) that have a group configured.
+	CountPrivateChatsWithConfiguredGroup(context.Context) (int, error)
 
 	DeleteChat(ctx context.Context, id int64) error
 
@@ -373,6 +383,56 @@ func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) ([]
 		ORDER BY daily_sending_time
 	`).Scan(&result).Error
 	return result, err
+}
+
+func (r *chatRepository) GetChatCountByDepartment(ctx context.Context) ([]NameCount, error) {
+	var result []NameCount
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT COALESCE(NULLIF(department, ''), 'unknown') AS name, count(*) AS count
+		FROM chats
+		GROUP BY COALESCE(NULLIF(department, ''), 'unknown')
+		ORDER BY count DESC, name ASC
+	`).Scan(&result).Error
+	return result, err
+}
+
+func (r *chatRepository) GetChatsByAccessLevel(ctx context.Context) (map[model.ChatAccessLevel]int, error) {
+	var result []struct {
+		Access model.ChatAccessLevel `db:"access"`
+		Count  int                   `db:"count"`
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT access, count(*) AS count FROM chats GROUP BY access ORDER BY access
+	`).Scan(&result).Error
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[model.ChatAccessLevel]int, len(result))
+	for _, row := range result {
+		m[row.Access] = row.Count
+	}
+	return m, nil
+}
+
+func (r *chatRepository) GetTopGroupsByChatCount(ctx context.Context, limit int) ([]NameCount, error) {
+	var result []NameCount
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT "group" AS name, count(*) AS count FROM chats
+		WHERE "group" IS NOT NULL AND "group" != ''
+		GROUP BY "group"
+		ORDER BY count DESC, name ASC
+		LIMIT ?
+	`, limit).Scan(&result).Error
+	return result, err
+}
+
+func (r *chatRepository) CountPrivateChatsWithConfiguredGroup(ctx context.Context) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where("tg_chat_id > 0 AND \"group\" IS NOT NULL AND \"group\" != ''").
+		Count(&count).Error
+	return int(count), err
 }
 
 type TimeCount struct {
