@@ -167,7 +167,6 @@ paths:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get departments
       tags:
-      - schedule
       - departments
   /groups:
     get:
@@ -196,7 +195,6 @@ paths:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get groups
       tags:
-      - schedule
       - groups
   /groups/{name}:
     get:
@@ -259,8 +257,6 @@ paths:
       summary: Get schedule
       tags:
       - schedule
-      - groups
-      - teachers
   /teachers:
     get:
       description: Returns list of all existing teachers
@@ -279,7 +275,6 @@ paths:
             $ref: '#/definitions/github_com_azzimoda_raspishika-gx_internal_model.ErrorResponse'
       summary: Get teachers
       tags:
-      - schedule
       - teachers
   /teachers/{name_or_id}:
     get:

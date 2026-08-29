@@ -16,7 +16,6 @@
                     "application/json"
                 ],
                 "tags": [
-                    "schedule",
                     "departments"
                 ],
                 "summary": "Get departments",
@@ -46,7 +45,6 @@
                     "application/json"
                 ],
                 "tags": [
-                    "schedule",
                     "groups"
                 ],
                 "summary": "Get groups",
@@ -131,9 +129,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "schedule",
-                    "groups",
-                    "teachers"
+                    "schedule"
                 ],
                 "summary": "Get schedule",
                 "parameters": [
@@ -185,7 +181,6 @@
                     "application/json"
                 ],
                 "tags": [
-                    "schedule",
                     "teachers"
                 ],
                 "summary": "Get teachers",

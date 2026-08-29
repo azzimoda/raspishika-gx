@@ -36,7 +36,7 @@ type Handler struct{ service Service }
 //
 // @Summary     Get departments
 // @Description Returns list of all existing departments
-// @Tags        schedule,departments
+// @Tags        departments
 // @Produce     json
 // @Success     200  {object}  []model.Department
 // @Failure     503  {object}  model.ErrorResponse
@@ -60,11 +60,11 @@ func (h *Handler) GetDepartments(c *gin.Context) {
 	c.JSON(http.StatusOK, &departments)
 }
 
-// GetGroups returns the list of all groups, optionally filtered by department.
+// GetGroups returns the list of all existing groups, optionally filtered by department.
 //
 // @Summary     Get groups
 // @Description Returns list of all existing groups, optionally filtered by department
-// @Tags        schedule,groups
+// @Tags        groups
 // @Produce     json
 // @Param       department  query  string  false  "Department name"
 // @Success     200  {object}  []model.Group
@@ -158,7 +158,7 @@ func (h *Handler) GetGroup(c *gin.Context) {
 //
 // @Summary     Get teachers
 // @Description Returns list of all existing teachers
-// @Tags        schedule,teachers
+// @Tags        teachers
 // @Produce     json
 // @Success     200  {object}  []model.Teacher
 // @Failure     503  {object}  model.ErrorResponse
@@ -261,7 +261,7 @@ func (h *Handler) GetTeacher(c *gin.Context) {
 //
 // @Summary     Get schedule
 // @Description Returns schedule of a group or a teacher
-// @Tags        schedule,groups,teachers
+// @Tags        schedule
 // @Produce     json
 // @Param       group    query  string  false  "Group name"
 // @Param       teacher  query  string  false  "Teacher name or college internal ID"

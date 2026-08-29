@@ -15,11 +15,14 @@ func Init(h *handler.Handler) *gin.Engine {
 	api := r.Group("/api/v1")
 	{
 		api.GET("/departments", h.GetDepartments)
+		// api.GET("/departments/:name", h.GetDepartmentGroups)
 		api.GET("/groups", h.GetGroups)
 		api.GET("/groups/:name", h.GetGroup)
+		// api.GET("/groups/:name/schedule", h.GetGroupSchedule)
 		api.GET("/teachers", h.GetTeachers)
 		api.GET("/teachers/search", h.SearchTeachers)
 		api.GET("/teachers/:name_or_id", h.GetTeacher)
+		// api.GET("/teachers/:name_or_id/schedule", h.GetTeacherSchedule)
 		api.GET("/schedule", h.GetSchedule)
 	}
 

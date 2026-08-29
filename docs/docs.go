@@ -22,7 +22,6 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "schedule",
                     "departments"
                 ],
                 "summary": "Get departments",
@@ -52,7 +51,6 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "schedule",
                     "groups"
                 ],
                 "summary": "Get groups",
@@ -137,9 +135,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "schedule",
-                    "groups",
-                    "teachers"
+                    "schedule"
                 ],
                 "summary": "Get schedule",
                 "parameters": [
@@ -191,7 +187,6 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "schedule",
                     "teachers"
                 ],
                 "summary": "Get teachers",
