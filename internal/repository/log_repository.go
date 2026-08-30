@@ -61,26 +61,26 @@ type logRepository struct{ db *gorm.DB }
 
 // NameCount is a generic name/count aggregation row.
 type NameCount struct {
-	Name  string `db:"name"`
-	Count int    `db:"count"`
+	Name  string
+	Count int
 }
 
 // LatencyStats holds update handler latency aggregation (milliseconds).
 // Count is the number of logs with elapsed set; AvgMs/P95Ms/MaxMs are zero when
 // there are no logs.
 type LatencyStats struct {
-	Count int `db:"count"`
-	AvgMs int `db:"avg_ms"`
-	P95Ms int `db:"p95_ms"`
-	MaxMs int `db:"max_ms"`
+	Count int
+	AvgMs int
+	P95Ms int
+	MaxMs int
 }
 
 // BroadcastTaskKindStats is a broadcast task aggregation row for one kind.
 type BroadcastTaskKindStats struct {
-	Kind         model.BroadcastKind `db:"kind"`
-	Tasks        int                 `db:"tasks"`
-	Groups       int                 `db:"groups"`
-	AvgElapsedMs int                 `db:"avg_elapsed_ms"`
+	Kind         model.BroadcastKind
+	Tasks        int
+	Groups       int
+	AvgElapsedMs int
 }
 
 func (r *logRepository) LogUpdate(ctx context.Context, log model.UpdateLog) error {
@@ -180,8 +180,8 @@ func (r *logRepository) CountBroadcastLogsByPeriodAndKind(ctx context.Context, k
 
 	const query = `
 		SELECT COUNT(*)
-		FROM broadcast_logs BL JOIN broadcast_task_logs BTL ON BL.broadcast_task_log_id = BTL.id
-		WHERE BL.created_at BETWEEN ? AND ? AND kind = ?
+		FROM broadcast_logs bl JOIN broadcast_task_logs btl ON bl.broadcast_task_log_id = btl.id
+		WHERE bl.created_at BETWEEN ? AND ? AND btl.kind = ?
 	`
 	var count int64
 	if err := r.db.WithContext(ctx).Raw(query, start, end, kind).Scan(&count).Error; err != nil {
@@ -208,7 +208,11 @@ func (r *logRepository) CountActualRequests(ctx context.Context, start, end time
 	return int(countUpdates + countBroadcasts), nil
 }
 func (r *logRepository) CountPotentialRequests(ctx context.Context, start, end time.Time) (int, error) {
-	const query = `SELECT COUNT(*) FROM update_logs WHERE group_or_teacher IS NULL OR group_or_teacher = '' AND created_at BETWEEN ? AND ?`
+	const query = `
+		SELECT COUNT(*) FROM update_logs
+		WHERE (group_or_teacher IS NULL OR group_or_teacher = '')
+			AND created_at BETWEEN ? AND ?
+	`
 	var count int64
 	if err := r.db.WithContext(ctx).Raw(query, start, end).Scan(&count).Error; err != nil {
 		return 0, fmt.Errorf("failed to count potential requests: %w", err)
@@ -224,8 +228,8 @@ func (r *logRepository) CountScheduleRequestsByPeriod(ctx context.Context, start
 		GROUP BY cached
 	`
 	var rows []struct {
-		Cached bool `db:"cached"`
-		Count  int  `db:"count"`
+		Cached bool
+		Count  int
 	}
 	if err = r.db.WithContext(ctx).Raw(query, start, end).Scan(&rows).Error; err != nil {
 		return 0, 0, fmt.Errorf("failed to count schedule requests by cache: %w", err)
@@ -259,8 +263,8 @@ func (r *logRepository) GetUpdateLogCountByKind(ctx context.Context, start, end 
 		GROUP BY kind
 	`
 	var rows []struct {
-		Kind  string `db:"kind"`
-		Count int    `db:"count"`
+		Kind  string
+		Count int
 	}
 	if err := r.db.WithContext(ctx).Raw(query, start, end).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("failed to count update logs by kind: %w", err)

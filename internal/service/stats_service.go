@@ -44,17 +44,9 @@ func (s *StatsService) GetChatStats(ctx context.Context, duration time.Duration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count private chats: %w", err)
 	}
-	chatsActive, err := s.chatRepo.CountActiveChats(ctx, duration)
+	chatActivities, err := s.chatRepo.CountChatActivities(ctx, duration)
 	if err != nil {
-		return nil, fmt.Errorf("failed to count active chats: %w", err)
-	}
-	chatsSemiactive, err := s.chatRepo.CountSemiactiveChats(ctx, duration)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count semiactive chats: %w", err)
-	}
-	chatsInactive, err := s.chatRepo.CountInactiveChats(ctx, duration)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count inactive chats: %w", err)
+		return nil, fmt.Errorf("failed to count chats by activity: %w", err)
 	}
 	chatsNew, err := s.chatRepo.CountNewChats(ctx, duration)
 	if err != nil {
@@ -88,9 +80,9 @@ func (s *StatsService) GetChatStats(ctx context.Context, duration time.Duration)
 	stats := &ChatStatsData{
 		ChatsTotal:      chatsTotal,
 		ChatsPrivate:    chatsPrivate,
-		ChatsActive:     chatsActive,
-		ChatsSemiactive: chatsSemiactive,
-		ChatsInactive:   chatsInactive,
+		ChatsActive:     chatActivities.Active,
+		ChatsSemiactive: chatActivities.Semiactive,
+		ChatsInactive:   chatActivities.Inactive,
 		ChatsNew:        chatsNew,
 		ChatsNewGrouped: chatsNewGrouped,
 		ChatsPerGroup:   chatsPerGroup,

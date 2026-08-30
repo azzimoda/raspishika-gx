@@ -40,9 +40,9 @@ type ChatRepository interface {
 	CountPricateChats(context.Context) (int, error)
 	CountNewChats(context.Context, time.Duration) (int, error)
 	GetNewChatCountByYear(context.Context, time.Duration) (map[int]int, error)
-	CountActiveChats(context.Context, time.Duration) (int, error)
-	CountSemiactiveChats(context.Context, time.Duration) (int, error)
-	CountInactiveChats(context.Context, time.Duration) (int, error)
+	// CountChatActivities returns the number of chats split by activity level
+	// within the given period.
+	CountChatActivities(context.Context, time.Duration) (ChatActivityCounts, error)
 	CountChatsWithConfiguredGroup(context.Context) (int, error)
 	CountUniqueConfiguredGroups(context.Context) (int, error)
 	CountDailyEnabled(context.Context) (int, error)
@@ -228,12 +228,13 @@ func (r *chatRepository) CountNewChats(ctx context.Context, dur time.Duration) (
 }
 func (r *chatRepository) GetNewChatCountByYear(ctx context.Context, dur time.Duration) (map[int]int, error) {
 	result := make([]struct {
-		Group *string `db:"group"`
-		Count int     `db:"count"`
+		Group *string
+		Count int
 	}, 0)
 	period := sqlPeriod(dur)
 	err := r.db.WithContext(ctx).Raw(`
-		SELECT "group", count(*) AS count FROM chats
+		SELECT "group", count(*) AS count
+		FROM chats
 		WHERE created_at > datetime('now', ?)
 		GROUP BY "group"
 	`, period).Scan(&result).Error
@@ -255,61 +256,41 @@ func (r *chatRepository) GetNewChatCountByYear(ctx context.Context, dur time.Dur
 	return m, nil
 }
 
-// CountActiveChats returns the number of active chats,
-// those with update logs within the given period.
-func (r *chatRepository) CountActiveChats(ctx context.Context, dur time.Duration) (int, error) {
-	var count int
-	period := sqlPeriod(dur)
-	err := r.db.WithContext(ctx).Raw(`
-			SELECT count(*) FROM (
-				SELECT c.id, c.tg_chat_id, c.username, c."group", c.daily_sending_time, c.pair_sending, c.updated_at,
-					count(ul.id) as count FROM chats c
-				LEFT JOIN (
-					SELECT * FROM update_logs WHERE created_at > datetime('now', ?)
-				) ul ON c.id = ul.chat_id
-				GROUP BY c.id
-				HAVING count > 0
-			);
-		`, period).Scan(&count).Error
-	return count, err
+// ChatActivityCounts holds the number of chats split by their activity level
+// within a given period.
+type ChatActivityCounts struct {
+	Active     int
+	Semiactive int
+	Inactive   int
 }
 
-// CountSemiactiveChats returns the number of semiactive chats,
-// those with no update logs within the given period but with a group or daily/pair/change broadcast enabled.
-func (r *chatRepository) CountSemiactiveChats(ctx context.Context, dur time.Duration) (int, error) {
-	var count int
-	period := sqlPeriod(dur)
-	err := r.db.WithContext(ctx).Raw(`
-			SELECT count(*) FROM (
-				SELECT c.id, c.tg_chat_id, c.username, c."group", c.daily_sending_time, c.pair_sending, c.updated_at,
-					count(ul.id) as count FROM chats c
-				LEFT JOIN (
-					SELECT * FROM update_logs WHERE created_at > datetime('now', ?)
-				) ul ON c.id = ul.chat_id
-				GROUP BY c.id
-				HAVING count = 0 AND ("group" IS NOT NULL AND "group" != '' AND (daily_sending_time IS NOT NULL OR pair_sending = 1 OR update_notification = 1))
-			);
-		`, period).Scan(&count).Error
-	return count, err
-}
-
-// CountInactiveChats returns the number of inactive chats,
-// those with no update logs within the given period and no group or daily/pair/change broadcast enabled.
-func (r *chatRepository) CountInactiveChats(ctx context.Context, dur time.Duration) (int, error) {
-	var count int
-	period := sqlPeriod(dur)
-	err := r.db.WithContext(ctx).Raw(`
-			SELECT count(*) FROM (
-				SELECT c.id, c.tg_chat_id, c.username, c."group", c.daily_sending_time, c.pair_sending, c.updated_at,
-					count(ul.id) as count FROM chats c
-				LEFT JOIN (
-					SELECT * FROM update_logs WHERE created_at > datetime('now', ?)
-				) ul ON c.id = ul.chat_id
-				GROUP BY c.id
-				HAVING count = 0 AND ("group" IS NULL OR "group" = '' OR daily_sending_time IS NULL AND pair_sending = 0 AND update_notification = 0)
-			);
-		`, period).Scan(&count).Error
-	return count, err
+// CountChatActivities counts active, semiactive and inactive chats in a single
+// pass. Each chat falls into exactly one bucket:
+//   - active: at least one update log within the period;
+//   - semiactive: no logs within the period, but a group configured and at
+//     least one of daily/pair/change broadcast enabled;
+//   - inactive: no logs within the period and otherwise (no group or no
+//     broadcast enabled).
+func (r *chatRepository) CountChatActivities(ctx context.Context, dur time.Duration) (ChatActivityCounts, error) {
+	const query = `
+		SELECT
+			COALESCE(SUM(CASE WHEN cnt > 0 THEN 1 ELSE 0 END), 0) AS active,
+			COALESCE(SUM(CASE WHEN cnt = 0 AND has_group AND has_broadcast THEN 1 ELSE 0 END), 0) AS semiactive,
+			COALESCE(SUM(CASE WHEN cnt = 0 AND (NOT has_group OR NOT has_broadcast) THEN 1 ELSE 0 END), 0) AS inactive
+		FROM (
+			SELECT c.id,
+				COUNT(ul.id) AS cnt,
+				("group" IS NOT NULL AND "group" != '') AS has_group,
+				(daily_sending_time IS NOT NULL OR pair_sending = 1 OR update_notification = 1) AS has_broadcast
+			FROM chats c
+			LEFT JOIN update_logs ul
+				ON ul.chat_id = c.id AND ul.created_at > datetime('now', ?)
+			GROUP BY c.id
+		)
+	`
+	var counts ChatActivityCounts
+	err := r.db.WithContext(ctx).Raw(query, sqlPeriod(dur)).Scan(&counts).Error
+	return counts, err
 }
 
 func (r *chatRepository) CountChatsWithConfiguredGroup(ctx context.Context) (int, error) {
@@ -364,35 +345,39 @@ func (r *chatRepository) CountDarkEnabled(ctx context.Context) (int, error) {
 
 // GetAvgChatPerGroup returns the average number of chats per group.
 func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error) {
-	var avg *float64
-	err := r.db.WithContext(ctx).Raw(`
+	const query = `
 		SELECT AVG(chats) FROM (
 			SELECT COUNT(*) AS chats FROM chats
-			WHERE "group" != '' AND "group" IS NOT NULL
+			WHERE "group" IS NOT NULL AND "group" != ''
 			GROUP BY "group"
 		)
-	`).Scan(&avg).Error
+	`
+	var avg *float64
+	err := r.db.WithContext(ctx).Raw(query).Scan(&avg).Error
 	return refutil.DerefOrTypeDefault(avg), err
 }
 
 func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) ([]TimeCount, error) {
-	var result []TimeCount
-	err := r.db.WithContext(ctx).Raw(`
+	const query = `
 		SELECT daily_sending_time AS time, count(*) AS count FROM chats
-		WHERE "group" != '' AND "group" IS NOT NULL AND daily_sending_time IS NOT NULL AND daily_sending_time != ''
+		WHERE "group" IS NOT NULL AND "group" != ''
+			AND daily_sending_time IS NOT NULL AND daily_sending_time != ''
 		GROUP BY daily_sending_time
 		ORDER BY daily_sending_time
-	`).Scan(&result).Error
+	`
+	var result []TimeCount
+	err := r.db.WithContext(ctx).Raw(query).Scan(&result).Error
 	return result, err
 }
 
 func (r *chatRepository) GetChatCountByDepartment(ctx context.Context) ([]NameCount, error) {
-	var result []NameCount
-	err := r.db.WithContext(ctx).Raw(`
+	const query = `
 		SELECT COALESCE(NULLIF(department, ''), 'unknown') AS name, count(*) AS count
 		FROM chats
 		GROUP BY COALESCE(NULLIF(department, ''), 'unknown')
-	`).Scan(&result).Error
+	`
+	var result []NameCount
+	err := r.db.WithContext(ctx).Raw(query).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -434,13 +419,16 @@ func normalizeDepartmentName(name string) string {
 }
 
 func (r *chatRepository) GetChatsByAccessLevel(ctx context.Context) (map[model.ChatAccessLevel]int, error) {
+	const query = `
+		SELECT access, count(*) AS count FROM chats
+		GROUP BY access
+		ORDER BY access
+	`
 	var result []struct {
-		Access model.ChatAccessLevel `db:"access"`
-		Count  int                   `db:"count"`
+		Access model.ChatAccessLevel
+		Count  int
 	}
-	err := r.db.WithContext(ctx).Raw(`
-		SELECT access, count(*) AS count FROM chats GROUP BY access ORDER BY access
-	`).Scan(&result).Error
+	err := r.db.WithContext(ctx).Raw(query).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -452,14 +440,15 @@ func (r *chatRepository) GetChatsByAccessLevel(ctx context.Context) (map[model.C
 }
 
 func (r *chatRepository) GetTopGroupsByChatCount(ctx context.Context, limit int) ([]NameCount, error) {
-	var result []NameCount
-	err := r.db.WithContext(ctx).Raw(`
+	const query = `
 		SELECT "group" AS name, count(*) AS count FROM chats
 		WHERE "group" IS NOT NULL AND "group" != ''
 		GROUP BY "group"
 		ORDER BY count DESC, name ASC
 		LIMIT ?
-	`, limit).Scan(&result).Error
+	`
+	var result []NameCount
+	err := r.db.WithContext(ctx).Raw(query, limit).Scan(&result).Error
 	return result, err
 }
 
@@ -473,8 +462,8 @@ func (r *chatRepository) CountPrivateChatsWithConfiguredGroup(ctx context.Contex
 }
 
 type TimeCount struct {
-	Time  string `db:"time"`
-	Count int    `db:"count"`
+	Time  string
+	Count int
 }
 
 func (r *chatRepository) DeleteChat(ctx context.Context, id int64) error {
@@ -482,23 +471,25 @@ func (r *chatRepository) DeleteChat(ctx context.Context, id int64) error {
 }
 
 func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, error) {
-	var count int
-	err := r.db.WithContext(ctx).Raw(`
+	const query = `
 		SELECT count(*) FROM (
 			SELECT DISTINCT "group" FROM chats
-			WHERE "group" != '' AND "group" IS NOT NULL
+			WHERE "group" IS NOT NULL AND "group" != ''
 		)
-	`).Scan(&count).Error
+	`
+	var count int
+	err := r.db.WithContext(ctx).Raw(query).Scan(&count).Error
 	return count, err
 }
 
 // TODO: Use in config stats
 func (r *chatRepository) GetWatchedGroupNames(ctx context.Context) ([]string, error) {
-	var groupNames []string
-	err := r.db.WithContext(ctx).Raw(`
+	const query = `
 		SELECT DISTINCT "group" FROM chats
 		WHERE "group" IS NOT NULL AND "group" != '' AND update_notification = 1
-	`).Scan(&groupNames).Error
+	`
+	var groupNames []string
+	err := r.db.WithContext(ctx).Raw(query).Scan(&groupNames).Error
 	return groupNames, err
 }
 
