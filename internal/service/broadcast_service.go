@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
+	"github.com/azzimoda/go-tg-proxy/botservice"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
@@ -20,12 +21,12 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 )
 
-func NewBroadcastService(bot *BotService, services *Services, reporter reporter.Reporter) *BroadcastService {
+func NewBroadcastService(bot *botservice.BotService, services *Services, reporter reporter.Reporter) *BroadcastService {
 	return &BroadcastService{Bot: bot, Services: services, Reporter: reporter, cron: cron.New(cron.WithSeconds())}
 }
 
 type BroadcastService struct {
-	Bot *BotService
+	Bot *botservice.BotService
 	*Services
 	reporter.Reporter
 	cron   *cron.Cron

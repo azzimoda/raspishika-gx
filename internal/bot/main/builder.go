@@ -10,11 +10,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
+	"github.com/azzimoda/go-tg-proxy/proxyutil"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
-	"github.com/azzimoda/raspishika-gx/pkg/proxyutil"
 )
 
 //go:embed commands.yaml

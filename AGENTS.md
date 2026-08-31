@@ -7,7 +7,12 @@ Go 1.26 Telegram bot ("Распиши-ка") that shows МПК ТИУ college sc
 - `cmd/bot` — the Telegram bot (the main binary). Persists to SQLite, renders schedule screenshots via its own chromedp browser (`internal/browser`), talks to the scraper API over HTTP (`internal/apiclient`).
 - `cmd/api` — HTTP scraper API (`internal/api/*`). Scrapes `coworking.tyuiu.ru` over plain HTTP (`internal/api/scraper`), caches in Redis, exposes `/api/v1/*` + Swagger UI (gin).
 - `cmd/fakeapi` — same API server but with hardcoded fake data (`fake_scraper.go`).
-- Bot connects to Telegram via SOCKS5 proxies fetched at runtime from a public proxifly list (filtered to non-RU socks5, cached 1h in memory). No proxies → `ErrNoAvailableProxy`.
+- Bot connects to Telegram via SOCKS5 proxies fetched at runtime from a proxy source (filtered to non-RU socks5, cached 1h in memory). No proxies → `ErrNoAvailableProxy`.
+
+## External modules
+
+- The proxy stack and the bot lifecycle manager live in `github.com/azzimoda/go-tg-proxy` (packages `proxy`, `botservice`, `proxyutil`), pinned at `v0.1.0` here. Its source provider is injected (`proxy.NewProxiflySource`), the default URL is proxifly's jsdelivr mirror, overridable with `PROXY_SOURCE_URL`.
+- After pushing changes to the module, bump the version here with `go get github.com/azzimoda/go-tg-proxy@<version>` and `go mod tidy`.
 
 ## Build & run
 

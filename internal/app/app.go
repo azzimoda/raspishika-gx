@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/azzimoda/go-tg-proxy/botservice"
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
@@ -68,13 +69,13 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 		return nil, fmt.Errorf("failed to create services: %w", err)
 	}
 
-	mainBot := service.NewBotService(
+	mainBot := botservice.NewBotService(
 		func(p string, onActivity func()) (*bot.Bot, error) {
 			return mainbot.New(services, p, appReporter, onActivity)
 		},
 		services.Proxy,
 	)
-	adminBot := service.NewBotService(
+	adminBot := botservice.NewBotService(
 		func(p string, onActivity func()) (*bot.Bot, error) {
 			return adminbot.New(services, p, appReporter, onActivity)
 		},
@@ -107,8 +108,8 @@ type App struct {
 	DB        *gorm.DB
 	Services  *service.Services
 	Broadcast *service.BroadcastService
-	MainBot   *service.BotService
-	AdminBot  *service.BotService
+	MainBot   *botservice.BotService
+	AdminBot  *botservice.BotService
 	*AppReporter
 }
 

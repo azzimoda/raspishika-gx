@@ -36,6 +36,8 @@ const (
 	KeyAdminBotToken = "admin_bot_token"
 	KeyAdminID       = "admin_id"
 
+	KeyProxySourceURL = "proxy_source_url"
+
 	KeyBotCommands      = "bot_commands"
 	KeyAdminBotCommands = "admin_bot_commands"
 
@@ -98,6 +100,8 @@ func Init() {
 
 	viper.SetDefault(KeyScheduleTemplateFile, "templates/light.html")
 	viper.SetDefault(KeyScheduleTemplateDarkFile, "templates/dark.html")
+
+	viper.SetDefault(KeyProxySourceURL, "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json")
 
 	// Environment variables
 	if err := godotenv.Load(); err != nil {

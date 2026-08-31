@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/spf13/viper"
+
+	"github.com/azzimoda/go-tg-proxy/proxy"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
 )
 
 func NewServices(ctx context.Context, container *repository.Container, scraperAPI APIClient) (*Services, error) {
@@ -15,9 +19,12 @@ func NewServices(ctx context.Context, container *repository.Container, scraperAP
 		return nil, fmt.Errorf("browser: %w", err)
 	}
 
+	proxySource := proxy.NewProxiflySource(viper.GetString(config.KeyProxySourceURL))
+	proxyService := proxy.NewService(proxySource)
+
 	return &Services{
 		Browser:  browser,
-		Proxy:    NewProxyService(container.Proxy),
+		Proxy:    proxyService,
 		Chat:     NewChatService(container.Chat),
 		Schedule: NewScheduleService(scraperAPI, browser, container.Schedule),
 		Stats:    NewStatsService(container.Log, container.Chat),
@@ -26,7 +33,7 @@ func NewServices(ctx context.Context, container *repository.Container, scraperAP
 
 type Services struct {
 	Browser  *browser.ChromedpBrowser
-	Proxy    *ProxyService
+	Proxy    *proxy.Service
 	Chat     *ChatService
 	Schedule *ScheduleService
 	Stats    *StatsService
