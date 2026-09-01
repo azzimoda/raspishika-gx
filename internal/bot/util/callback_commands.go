@@ -20,6 +20,17 @@ const (
 	CallbackCommandUpdateTeacher  = "update_teacher"
 	CallbackCommandUpdateTomorrow = "update_tomorrow"
 	CallbackCommandUpdateToday    = "update_today"
+
+	CallbackCommandBroadcast           = "broadcast"
+	CallbackCommandBroadcastAll        = "broadcast_all"
+	CallbackCommandBroadcastPriv       = "broadcast_priv"
+	CallbackCommandBroadcastGroupChats = "broadcast_group_chats"
+	CallbackCommandBroadcastByGroup    = "broadcast_by_group"
+	CallbackCommandBroadcastDept       = "broadcast_dept"
+	CallbackCommandBroadcastActive     = "broadcast_active"
+	CallbackCommandBroadcastEdit       = "broadcast_edit"
+	CallbackCommandBroadcastConfirm    = "broadcast_confirm"
+	CallbackCommandBroadcastCancel     = "broadcast_cancel"
 )
 
 // UpdateKind identifies the schedule view an update button refreshes.

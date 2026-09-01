@@ -18,18 +18,54 @@ import (
 	"gorm.io/gorm"
 )
 
-func newHandler(s *service.Services, reporter reporter.Reporter) *handler {
-	return &handler{Services: s, Reporter: reporter}
+func newHandler(s *service.Services, reporter reporter.Reporter, broadcast *service.BroadcastService) *handler {
+	return &handler{Services: s, Reporter: reporter, broadcast: broadcast}
 }
 
 type handler struct {
 	*service.Services
 	reporter.Reporter
+	broadcast *service.BroadcastService
+	flowMu    sync.Mutex
+	flow      *broadcastFlow
 }
 
 func (h *handler) registerHandlers(b *bot.Bot) {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommandStartOnly, h.handleCmdStart)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "dashboard", bot.MatchTypeCommandStartOnly, h.handleCmdDashboard)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "broadcast", bot.MatchTypeCommandStartOnly, h.handleCmdBroadcast)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "cancel", bot.MatchTypeCommandStartOnly, h.handleCmdCancel)
+
+	// Broadcast wizard callbacks
+	registerBroadcastCallback := func(command string, f bot.HandlerFunc) {
+		b.RegisterHandlerRegexp(bot.HandlerTypeCallbackQueryData, callbackDataRegexp(command), f)
+	}
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastAll, h.handleBroadcastAudience)
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastPriv, h.handleBroadcastAudience)
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastGroupChats, h.handleBroadcastAudience)
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastByGroup, h.handleBroadcastAudience)
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastDept, h.handleBroadcastAudience)
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastActive, h.handleBroadcastAudience)
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastConfirm, h.handleBroadcastConfirm)
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastEdit, h.handleBroadcastEdit)
+	registerBroadcastCallback(botutil.CallbackCommandBroadcastCancel, h.handleBroadcastCancel)
+
+	// While a broadcast wizard is active, ordinary text messages feed it.
+	b.RegisterHandlerMatchFunc(h.broadcastTextMatch, h.handleBroadcastText)
+}
+
+// broadcastTextMatch matches a plain message only while a broadcast wizard is
+// waiting for a spec or text input.
+func (h *handler) broadcastTextMatch(update *models.Update) bool {
+	if update.Message == nil || update.Message.Text == "" {
+		return false
+	}
+	h.flowMu.Lock()
+	defer h.flowMu.Unlock()
+	if h.flow == nil {
+		return false
+	}
+	return h.flow.step == broadcastStepSpec || h.flow.step == broadcastStepText
 }
 
 func (*handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.Update) {

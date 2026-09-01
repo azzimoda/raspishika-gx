@@ -193,6 +193,8 @@ func broadcastKindLabel(kind model.BroadcastKind) string {
 		return "pair"
 	case model.BChange:
 		return "change"
+	case model.BMass:
+		return "mass"
 	default:
 		return "all"
 	}

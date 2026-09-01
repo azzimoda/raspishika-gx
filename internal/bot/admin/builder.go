@@ -5,23 +5,22 @@ import (
 	_ "embed"
 	"time"
 
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
-
 	"github.com/azzimoda/go-tg-proxy/proxyutil"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 )
 
 //go:embed commands.yaml
 var myCommandsBytes []byte
 
-func New(s *service.Services, proxy string, reporter reporter.Reporter, onActivity func()) (*bot.Bot, error) {
-	h := newHandler(s, reporter)
+func New(s *service.Services, proxy string, reporter reporter.Reporter, broadcast *service.BroadcastService, onActivity func()) (*bot.Bot, error) {
+	h := newHandler(s, reporter, broadcast)
 
 	httpClient, err := proxyutil.NewHTTPProxyClient(proxy)
 	if err != nil {

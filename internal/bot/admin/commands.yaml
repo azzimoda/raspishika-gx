@@ -1,2 +1,3 @@
 dashboard: "Bot dashboard: general + config stats (optional period, e.g. 7d; default 24h)"
 start: Greet the admin
+broadcast: "Mass message to selected chats (audience wizard)"

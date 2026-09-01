@@ -9,11 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
-
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
+	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 )
 
 type ChatRepository interface {
@@ -30,11 +29,15 @@ type ChatRepository interface {
 	GetPrivateChats(context.Context) ([]*model.Chat, error)
 	GetNewChats(context.Context, time.Duration) ([]*model.Chat, error)
 	GetChatsByGroup(context.Context, model.GroupName) ([]*model.Chat, error)
+	GetChatsByDepartment(context.Context, string) ([]*model.Chat, error)
 	GetChatsByWatchedGroup(context.Context, model.GroupName) ([]*model.Chat, error)
+	GetGroupChats(context.Context) ([]*model.Chat, error)
 	GetChatsWithDailyTime(ctx context.Context, time string) ([]*model.Chat, error)
 	GetChatsWithPairNotification(context.Context) ([]*model.Chat, error)
 	GetChatsWithChangeAlert(context.Context) ([]*model.Chat, error)
 	GetChatsWithDarkMode(context.Context) ([]*model.Chat, error)
+	GetActiveChats(context.Context, time.Duration) ([]*model.Chat, error)
+	CountActiveChats(context.Context, time.Duration) (int, error)
 
 	CountAllChats(context.Context) (int, error)
 	CountPricateChats(context.Context) (int, error)
@@ -162,6 +165,11 @@ func (r *chatRepository) GetPrivateChats(ctx context.Context) ([]*model.Chat, er
 	err := r.db.WithContext(ctx).Where("tg_chat_id > 0").Find(&chats).Error
 	return chats, err
 }
+func (r *chatRepository) GetGroupChats(ctx context.Context) ([]*model.Chat, error) {
+	var chats []*model.Chat
+	err := r.db.WithContext(ctx).Where("tg_chat_id < 0").Find(&chats).Error
+	return chats, err
+}
 func (r *chatRepository) GetNewChats(ctx context.Context, dur time.Duration) ([]*model.Chat, error) {
 	var chats []*model.Chat
 	if err := r.db.WithContext(ctx).
@@ -174,6 +182,11 @@ func (r *chatRepository) GetNewChats(ctx context.Context, dur time.Duration) ([]
 func (r *chatRepository) GetChatsByGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
 	var chats []*model.Chat
 	err := r.db.WithContext(ctx).Where("group = ?", group).Find(&chats).Error
+	return chats, err
+}
+func (r *chatRepository) GetChatsByDepartment(ctx context.Context, dept string) ([]*model.Chat, error) {
+	var chats []*model.Chat
+	err := r.db.WithContext(ctx).Where("department = ?", dept).Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsByWatchedGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
@@ -206,6 +219,27 @@ func (r *chatRepository) GetChatsWithDarkMode(ctx context.Context) ([]*model.Cha
 	var chats []*model.Chat
 	err := r.db.WithContext(ctx).Where("dark_mode = 1").Find(&chats).Error
 	return chats, err
+}
+
+// GetActiveChats returns the chats that have at least one update log within
+// the given period.
+func (r *chatRepository) GetActiveChats(ctx context.Context, dur time.Duration) ([]*model.Chat, error) {
+	var chats []*model.Chat
+	err := r.db.WithContext(ctx).
+		Where("id IN (SELECT DISTINCT chat_id FROM update_logs WHERE created_at > datetime('now', ?))", sqlPeriod(dur)).
+		Find(&chats).Error
+	return chats, err
+}
+
+// CountActiveChats returns the number of chats that have at least one update
+// log within the given period.
+func (r *chatRepository) CountActiveChats(ctx context.Context, dur time.Duration) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Chat{}).
+		Where("id IN (SELECT DISTINCT chat_id FROM update_logs WHERE created_at > datetime('now', ?))", sqlPeriod(dur)).
+		Count(&count).Error
+	return int(count), err
 }
 
 func (r *chatRepository) CountAllChats(ctx context.Context) (int, error) {

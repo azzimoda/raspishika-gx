@@ -7,18 +7,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-	"github.com/robfig/cron/v3"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
-
 	"github.com/azzimoda/go-tg-proxy/botservice"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+	"github.com/robfig/cron/v3"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 )
 
 func NewBroadcastService(bot *botservice.BotService, services *Services, reporter reporter.Reporter) *BroadcastService {
@@ -618,11 +617,80 @@ func (s *BroadcastService) logBroadcast(ctx context.Context, taskID int64, chat 
 	if err := s.Stats.LogBroadcast(ctx, model.BroadcastLog{
 		TaskID: taskID,
 		ChatID: int64(chat.TgChatID),
-		Group:  refutil.DerefOrTypeDefault(chat.GroupName), // chat.GroupName must be not empty here
+		Group:  refutil.DerefOrTypeDefault(chat.GroupName),
 		Error:  errVal,
 	}); err != nil {
 		s.Report().Err(err).Msg("Failed to log broadcast")
 	}
+}
+
+// BroadcastText sends the given HTML message to every chat in chats as a mass
+// broadcast task, asynchronously and tracked by the service so shutdown waits
+// for it to finish. Returns only synchronous setup errors; per-chat send
+// outcomes are reported via the service reporter.
+func (s *BroadcastService) BroadcastText(ctx context.Context, chats []*model.Chat, htmlText string) error {
+	if s.Bot == nil {
+		return fmt.Errorf("bot is not initialized")
+	}
+	if len(chats) == 0 {
+		log.Debug().Msg("No chats for mass broadcast")
+		return nil
+	}
+
+	taskLog := model.BroadcastTaskLog{Kind: model.BMass, Groups: 1}
+	if err := s.Stats.LogBroadcastTask(ctx, &taskLog); err != nil {
+		s.Report().Err(err).Msg("Failed to log broadcast task")
+		return err
+	}
+
+	// Run the send under the service lifecycle context so shutdown can cancel
+	// an in-flight send and Stop() waits for the job to finish.
+	taskCtx := ctx
+	if taskCtx == nil {
+		taskCtx = s.ctx
+	}
+	start := time.Now()
+
+	s.runJob(func() {
+		var successCount int
+		var errs []error
+		for _, chat := range chats {
+			if chat == nil {
+				continue
+			}
+			var sendErr error
+			if _, sendErr = s.Bot.SendMessage(taskCtx, &bot.SendMessageParams{
+				ChatID:          chat.TgChatID,
+				MessageThreadID: 0,
+				Text:            htmlText,
+				ParseMode:       models.ParseModeHTML,
+			}); sendErr != nil {
+				if errors.Is(sendErr, bot.ErrorForbidden) {
+					s.handleForbidden(taskCtx, sendErr, chat)
+				} else {
+					errs = append(errs, sendErr)
+					log.Error().Err(sendErr).Msg("Failed to send mass broadcast message")
+				}
+			} else {
+				successCount++
+			}
+			s.logBroadcast(taskCtx, taskLog.ID, chat, sendErr)
+		}
+
+		taskLog.Elapsed = time.Since(start).Milliseconds()
+		if err := s.Stats.UpdateBroadcastTaskLog(taskCtx, &taskLog); err != nil {
+			s.Report().Err(err).Msg("Failed to update broadcast task log")
+		}
+
+		if len(errs) > 0 {
+			s.Report().Err(errors.Join(errs...)).Debug("success", successCount).Msg("Mass broadcast finished with errors")
+		} else {
+			s.Report().Debug("success", successCount).Msg("Mass broadcast finished")
+		}
+	})
+
+	log.Debug().Msg("Mass broadcast started in background")
+	return nil
 }
 
 func (s *BroadcastService) prepareBroadcast(ctx context.Context, chats []*model.Chat) (

@@ -17,4 +17,5 @@ const (
 	BDaily  BroadcastKind = "daily"
 	BPair   BroadcastKind = "pair"
 	BChange BroadcastKind = "update"
+	BMass   BroadcastKind = "mass"
 )

@@ -49,8 +49,20 @@ func (s *ChatService) GetNewChats(ctx context.Context, duration time.Duration) (
 func (s *ChatService) GetChatsByGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
 	return s.repo.GetChatsByGroup(ctx, group)
 }
+func (s *ChatService) GetChatsByDepartment(ctx context.Context, dept string) ([]*model.Chat, error) {
+	return s.repo.GetChatsByDepartment(ctx, dept)
+}
 func (s *ChatService) GetChatsByWatchedGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
 	return s.repo.GetChatsByWatchedGroup(ctx, group)
+}
+func (s *ChatService) GetActiveChats(ctx context.Context, dur time.Duration) ([]*model.Chat, error) {
+	return s.repo.GetActiveChats(ctx, dur)
+}
+func (s *ChatService) GetGroupChats(ctx context.Context) ([]*model.Chat, error) {
+	return s.repo.GetGroupChats(ctx)
+}
+func (s *ChatService) CountActiveChats(ctx context.Context, dur time.Duration) (int, error) {
+	return s.repo.CountActiveChats(ctx, dur)
 }
 func (s *ChatService) GetChatsByDailyTime(ctx context.Context, time string) ([]*model.Chat, error) {
 	return s.repo.GetChatsWithDailyTime(ctx, time)

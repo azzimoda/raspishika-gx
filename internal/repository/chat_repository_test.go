@@ -3,11 +3,52 @@ package repository
 import (
 	"context"
 	"testing"
+	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// openTestChatDBFull builds a chats table with the columns needed by the list
+// queries (tg_chat_id, department, group), plus an update_logs table for the
+// activity queries.
+func openTestChatDBFull(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open("file:chat_repo_spec_test?mode=memory&cache=shared"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get sql handle: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	db.Exec(`DROP TABLE IF EXISTS update_logs`)
+	db.Exec(`DROP TABLE IF EXISTS chats`)
+	if err := db.Exec(`
+		CREATE TABLE chats (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			tg_chat_id INTEGER,
+			department TEXT,
+			"group" TEXT
+		)
+	`).Error; err != nil {
+		t.Fatalf("failed to create chats table: %v", err)
+	}
+	if err := db.Exec(`
+		CREATE TABLE update_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			chat_id INTEGER,
+			created_at DATETIME
+		)
+	`).Error; err != nil {
+		t.Fatalf("failed to create update_logs table: %v", err)
+	}
+	return db
+}
 
 func openTestChatDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -117,5 +158,82 @@ func TestGetChatCountByDepartment(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("rows[%d] = %+v, want %+v (all: %v)", i, got[i], want[i], got)
 		}
+	}
+}
+
+func TestGetChatsByDepartment(t *testing.T) {
+	db := openTestChatDBFull(t)
+	for _, r := range []struct{ dept string }{
+		{"АиЭС"}, {"АиЭС"}, {"НГО"},
+	} {
+		if err := db.Exec(`INSERT INTO chats (department) VALUES (?)`, r.dept).Error; err != nil {
+			t.Fatalf("failed to insert: %v", err)
+		}
+	}
+	repo := &chatRepository{db: db}
+	got, err := repo.GetChatsByDepartment(context.Background(), "АиЭС")
+	if err != nil {
+		t.Fatalf("GetChatsByDepartment() error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d chats, want 2", len(got))
+	}
+}
+
+func TestGetGroupChatsAndPrivate(t *testing.T) {
+	db := openTestChatDBFull(t)
+	for _, id := range []int64{10, 20, -5, -7} {
+		if err := db.Exec(`INSERT INTO chats (tg_chat_id) VALUES (?)`, id).Error; err != nil {
+			t.Fatalf("failed to insert: %v", err)
+		}
+	}
+	repo := &chatRepository{db: db}
+
+	groups, err := repo.GetGroupChats(context.Background())
+	if err != nil {
+		t.Fatalf("GetGroupChats() error: %v", err)
+	}
+	if len(groups) != 2 {
+		t.Fatalf("got %d group chats, want 2", len(groups))
+	}
+
+	priv, err := repo.GetPrivateChats(context.Background())
+	if err != nil {
+		t.Fatalf("GetPrivateChats() error: %v", err)
+	}
+	if len(priv) != 2 {
+		t.Fatalf("got %d private chats, want 2", len(priv))
+	}
+}
+
+func TestGetActiveChatsAndCount(t *testing.T) {
+	db := openTestChatDBFull(t)
+	// chats 1,2,3
+	if err := db.Exec(`INSERT INTO chats (id, tg_chat_id) VALUES (1, 10), (2, 20), (3, 30)`).Error; err != nil {
+		t.Fatalf("failed to insert chats: %v", err)
+	}
+	// chat 1 has a recent update log (active), chat 2 has an old one (inactive)
+	now := time.Now()
+	if err := db.Exec(`INSERT INTO update_logs (chat_id, created_at) VALUES (1, ?), (2, ?)`,
+		now.Add(-time.Hour), now.Add(-7*24*time.Hour)).Error; err != nil {
+		t.Fatalf("failed to insert update_logs: %v", err)
+	}
+
+	repo := &chatRepository{db: db}
+
+	active, err := repo.GetActiveChats(context.Background(), 24*time.Hour)
+	if err != nil {
+		t.Fatalf("GetActiveChats() error: %v", err)
+	}
+	if len(active) != 1 || active[0].ID != 1 {
+		t.Fatalf("got active chats %+v, want just chat 1", active)
+	}
+
+	count, err := repo.CountActiveChats(context.Background(), 24*time.Hour)
+	if err != nil {
+		t.Fatalf("CountActiveChats() error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("got active count %d, want 1", count)
 	}
 }

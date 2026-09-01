@@ -1,6 +1,7 @@
 package adminbot
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"time"
@@ -9,6 +10,12 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 )
+
+// callbackDataRegexp matches a callback data that starts with command and may
+// carry extra "\n"-separated arguments after it.
+func callbackDataRegexp(command string) *regexp.Regexp {
+	return regexp.MustCompile(fmt.Sprintf("^%s(\n.*)*$", command))
+}
 
 func parsePeriod(str string) (time.Duration, bool) {
 	if str == "" {
