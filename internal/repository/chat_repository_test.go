@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/internal/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -74,6 +76,127 @@ func openTestChatDB(t *testing.T) *gorm.DB {
 		t.Fatalf("failed to create chats table: %v", err)
 	}
 	return db
+}
+
+// openTestChatDBUnique builds a chats table that mirrors the production schema
+// (00001_baseline.sql), including the UNIQUE constraint on tg_chat_id.
+func openTestChatDBUnique(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open("file:chat_repo_unique_test?mode=memory&cache=shared"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get sql handle: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	if err := db.Exec(`DROP TABLE IF EXISTS chats`).Error; err != nil {
+		t.Fatalf("failed to drop chats table: %v", err)
+	}
+	if err := db.Exec(`
+		CREATE TABLE chats (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			tg_chat_id INTEGER NOT NULL UNIQUE,
+			username TEXT,
+			state TEXT DEFAULT 'default',
+			department TEXT,
+			"group" TEXT,
+			daily_sending_time TEXT,
+			pair_sending BOOLEAN NOT NULL DEFAULT 0,
+			update_notification BOOLEAN NOT NULL DEFAULT 0,
+			dark_mode BOOLEAN NOT NULL DEFAULT 0,
+			access INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		t.Fatalf("failed to create chats table: %v", err)
+	}
+	return db
+}
+
+func TestCreateOrUpdateChatConcurrentCreate(t *testing.T) {
+	db := openTestChatDBUnique(t)
+	repo := &chatRepository{db: db}
+
+	const baseChatID = int64(1327362040)
+	const goroutines = 16
+	const iterations = 5
+	const username = "some_user"
+
+	for iter := 0; iter < iterations; iter++ {
+		chatID := model.ChatID(baseChatID + int64(iter))
+		var createdCount int
+		seen := make(map[int64]struct{}, goroutines)
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+
+		wg.Add(goroutines)
+		for i := 0; i < goroutines; i++ {
+			go func() {
+				defer wg.Done()
+				<-start
+				chat := &model.Chat{TgChatID: chatID, UserName: new(username)}
+				created, err := repo.CreateOrUpdateChat(context.Background(), chat)
+				if err != nil {
+					t.Errorf("CreateOrUpdateChat() error: %v", err)
+					return
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				if created {
+					createdCount++
+				}
+				seen[chat.ID] = struct{}{}
+			}()
+		}
+		close(start)
+		wg.Wait()
+
+		if createdCount != 1 {
+			t.Fatalf("iteration %d: createdCount = %d, want 1", iter, createdCount)
+		}
+		if len(seen) != 1 {
+			t.Fatalf("iteration %d: %d distinct chat rows created, want 1", iter, len(seen))
+		}
+	}
+}
+
+func TestCreateOrUpdateChatExisting(t *testing.T) {
+	db := openTestChatDBUnique(t)
+	repo := &chatRepository{db: db}
+
+	username := "first_name"
+	chat := &model.Chat{TgChatID: model.ChatID(100), UserName: new(username)}
+	created, err := repo.CreateOrUpdateChat(context.Background(), chat)
+	if err != nil {
+		t.Fatalf("first CreateOrUpdateChat() error: %v", err)
+	}
+	if !created || chat.ID == 0 {
+		t.Fatalf("first call: created = %v, id = %d; want created=true and non-zero id", created, chat.ID)
+	}
+	firstID := chat.ID
+
+	// Second call for the same chat must reuse the existing row.
+	updatedUsername := "second_name"
+	again := &model.Chat{TgChatID: model.ChatID(100), UserName: new(updatedUsername)}
+	created, err = repo.CreateOrUpdateChat(context.Background(), again)
+	if err != nil {
+		t.Fatalf("second CreateOrUpdateChat() error: %v", err)
+	}
+	if created {
+		t.Fatal("second call: created = true, want false")
+	}
+	if again.ID != firstID {
+		t.Fatalf("second call: id = %d, want %d (same row)", again.ID, firstID)
+	}
+	if again.UserName == nil || *again.UserName != updatedUsername {
+		t.Fatalf("second call: username = %v, want %q", again.UserName, updatedUsername)
+	}
 }
 
 func TestNormalizeDepartmentName(t *testing.T) {

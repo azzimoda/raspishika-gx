@@ -13,6 +13,7 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ChatRepository interface {
@@ -86,10 +87,20 @@ func (r *chatRepository) CreateOrUpdateChat(ctx context.Context, chat *model.Cha
 	err = r.db.WithContext(ctx).Where("tg_chat_id = ?", chat.TgChatID).First(&existingChat).Error
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		// Create new chat
+		// Create new chat. Two concurrent updates for the same never-seen chat
+		// may both miss the select above, so the insert is made atomic at the
+		// database level: the loser of the race gets RowsAffected == 0 and
+		// falls back to reloading the row the winner created.
 		log.Debug().Any("tgChatID", chat.TgChatID).Msg("Chat does not exist, creating...")
-		if err := r.CreateChat(ctx, chat); err != nil {
-			return true, fmt.Errorf("failed to create chat (%v): %w", chat, err)
+		res := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(chat)
+		if res.Error != nil {
+			return true, fmt.Errorf("failed to create chat (%v): %w", chat, res.Error)
+		}
+		if res.RowsAffected == 0 {
+			if err := r.db.WithContext(ctx).Where("tg_chat_id = ?", chat.TgChatID).First(chat).Error; err != nil {
+				return false, fmt.Errorf("failed to load chat after concurrent create (%d): %w", chat.TgChatID, err)
+			}
+			return false, nil
 		}
 		return true, nil
 	}
