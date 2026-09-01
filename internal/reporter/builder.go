@@ -86,12 +86,21 @@ func (rc ReportBuilder) Msg(msg string) (*Report, error) {
 // bypasses the format function and sends the given blocks as-is, so the caller
 // controls the rich message composition.
 func (rc ReportBuilder) MsgRich(msg string, blocks []models.InputRichBlock) (*Report, error) {
+	return rc.MsgRichWithMarkup(msg, blocks, nil)
+}
+
+// MsgRichWithMarkup is like [ReportBuilder.MsgRich] but attaches the given
+// reply markup (e.g. an inline keyboard) to the sent message.
+func (rc ReportBuilder) MsgRichWithMarkup(msg string, blocks []models.InputRichBlock, markup models.ReplyMarkup) (*Report, error) {
 
 	if rc.error != nil {
 		blocks = append([]models.InputRichBlock{errorRichBlock(rc.error.Error())}, blocks...)
 	}
 
-	params := &bot.SendRichMessageParams{RichMessage: models.InputRichMessage{Blocks: blocks}}
+	params := &bot.SendRichMessageParams{
+		RichMessage: models.InputRichMessage{Blocks: blocks},
+		ReplyMarkup: markup,
+	}
 	return rc.send(msg, params, 2)
 }
 

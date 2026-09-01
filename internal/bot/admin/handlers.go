@@ -1,8 +1,10 @@
 package adminbot
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -49,6 +51,8 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 	registerBroadcastCallback(botutil.CallbackCommandBroadcastConfirm, h.handleBroadcastConfirm)
 	registerBroadcastCallback(botutil.CallbackCommandBroadcastEdit, h.handleBroadcastEdit)
 	registerBroadcastCallback(botutil.CallbackCommandBroadcastCancel, h.handleBroadcastCancel)
+
+	b.RegisterHandlerRegexp(bot.HandlerTypeCallbackQueryData, callbackDataRegexp(botutil.CallbackCommandExportStats), h.handleExportStats)
 
 	// While a broadcast wizard is active, ordinary text messages feed it.
 	b.RegisterHandlerMatchFunc(h.broadcastTextMatch, h.handleBroadcastText)
@@ -115,6 +119,7 @@ func (h *handler) handleCmdDashboard(ctx context.Context, b *bot.Bot, update *mo
 	spec, ok := parsePeriodSpec(args)
 	if !ok {
 		spec, _ = parsePeriodSpec("1d")
+		args = "1d"
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -134,9 +139,65 @@ func (h *handler) handleCmdDashboard(ctx context.Context, b *bot.Bot, update *mo
 	}
 
 	blocks := buildDashboard(generalStats, configStats, spec)
-	_, err := h.Report().MsgRich("Dashboard", blocks)
+	_, err := h.Report().MsgRichWithMarkup("Dashboard", blocks, dashboardExportMarkup(args))
 	if err != nil {
 		h.Report().Err(err).Msg("Failed to send dashboard")
+	}
+}
+
+// handleExportStats sends the dashboard statistics as a JSON file in response
+// to pressing the "Экспорт JSON" button on the dashboard message.
+func (h *handler) handleExportStats(ctx context.Context, b *bot.Bot, update *models.Update) {
+	if update.CallbackQuery == nil || update.CallbackQuery.Message.Message == nil {
+		return
+	}
+	// Acknowledge the press immediately so the button stops spinning.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
+	period := botutil.ParseCallbackData(update.CallbackQuery.Data).Arg(0)
+	spec, ok := parsePeriodSpec(period)
+	if !ok {
+		spec, _ = parsePeriodSpec("1d")
+	}
+
+	g, gctx := errgroup.WithContext(ctx)
+	var generalStats *service.GeneralStatsData
+	var configStats *service.ConfigStatsData
+	g.Go(func() (err error) {
+		generalStats, err = h.Stats.GetGeneralStats(gctx, spec.start, spec.end)
+		return err
+	})
+	g.Go(func() (err error) {
+		configStats, err = h.Stats.GetConfigStats(gctx)
+		return err
+	})
+	if err := g.Wait(); err != nil {
+		h.Report().Err(err).Msg("Failed to collect statistics for export")
+		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID, Text: "Не удалось собрать статистику", ShowAlert: true,
+		})
+		return
+	}
+
+	payload, err := exportStatsPayload(generalStats, configStats, spec)
+	if err != nil {
+		h.Report().Err(err).Msg("Failed to build export payload")
+		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID, Text: "Не удалось сформировать файл", ShowAlert: true,
+		})
+		return
+	}
+
+	_, err = b.SendDocument(ctx, &bot.SendDocumentParams{
+		ChatID:   update.CallbackQuery.Message.Message.Chat.ID,
+		Document: &models.InputFileUpload{Filename: exportFilename(spec), Data: bytes.NewReader(payload)},
+		Caption:  fmt.Sprintf("Статистика дашборда: %s", generalPeriodLabel(spec)),
+	})
+	if err != nil {
+		h.Report().Err(err).Msg("Failed to send export document")
+		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID, Text: "Не удалось отправить файл", ShowAlert: true,
+		})
 	}
 }
 

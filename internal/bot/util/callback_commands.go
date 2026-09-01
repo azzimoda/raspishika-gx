@@ -31,6 +31,8 @@ const (
 	CallbackCommandBroadcastEdit       = "broadcast_edit"
 	CallbackCommandBroadcastConfirm    = "broadcast_confirm"
 	CallbackCommandBroadcastCancel     = "broadcast_cancel"
+
+	CallbackCommandExportStats = "export_stats"
 )
 
 // UpdateKind identifies the schedule view an update button refreshes.

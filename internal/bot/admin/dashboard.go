@@ -1,10 +1,13 @@
 package adminbot
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
+	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
 	"github.com/azzimoda/raspishika-gx/internal/service"
@@ -23,6 +26,50 @@ func buildDashboard(general *service.GeneralStatsData, config *service.ConfigSta
 	blocks = append(blocks, blockDivider())
 	blocks = append(blocks, buildConfigSection(config, general.ChatsPrivate, general.ChatsByAccess)...)
 	return blocks
+}
+
+// dashboardExport is the JSON file payload exported from a dashboard: the
+// general+config statistics for the given period plus its human label.
+type dashboardExport struct {
+	Period  string                    `json:"period"`
+	General *service.GeneralStatsData `json:"general"`
+	Config  *service.ConfigStatsData  `json:"config"`
+}
+
+// exportStatsPayload renders the dashboard statistics as an indented JSON file
+// payload ready to be sent as a document.
+func exportStatsPayload(general *service.GeneralStatsData, config *service.ConfigStatsData, spec periodSpec) ([]byte, error) {
+	payload, err := json.MarshalIndent(dashboardExport{
+		Period:  generalPeriodLabel(spec),
+		General: general,
+		Config:  config,
+	}, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(payload, '\n'), nil
+}
+
+// dashboardExportMarkup builds the inline keyboard attached to the dashboard
+// message: a single button that exports the same statistics as a JSON file.
+func dashboardExportMarkup(period string) models.ReplyMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{{Text: "Экспорт JSON", CallbackData: botutil.CallbackCommandExportStats + "\n" + period}},
+		},
+	}
+}
+
+// exportFilename builds a file name for the dashboard export, e.g.
+// "dashboard-2026-09-01-1d.json".
+func exportFilename(spec periodSpec) string {
+	period := "period"
+	if spec.isRelative {
+		period = formatDuration(spec.end.Sub(spec.start))
+	} else if spec.label != "" {
+		period = strings.NewReplacer(" ", "", "→", "-", ":", "").Replace(spec.label)
+	}
+	return fmt.Sprintf("dashboard-%s-%s.json", time.Now().In(statsTZ).Format("2006-01-02"), period)
 }
 
 // generalPeriodLabel renders a human description of the statistics window.

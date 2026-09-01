@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
 	"github.com/azzimoda/raspishika-gx/internal/service"
@@ -127,6 +128,74 @@ func TestBuildDashboard(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %s in dashboard", want)
 		}
+	}
+}
+
+func TestExportStatsPayload(t *testing.T) {
+	general := &service.GeneralStatsData{
+		ChatStatsData: &service.ChatStatsData{
+			ChatsTotal: 10, ChatsPrivate: 8, ChatsNew: 1,
+			Departments: []repository.NameCount{{Name: "МПК", Count: 6}},
+		},
+		LogStatsData: &service.LogStatsData{
+			UpdatesTotal: 100, UpdatesSuccess: 95, ScheduleRequests: 80,
+		},
+	}
+	config := &service.ConfigStatsData{ChatsTotal: 10, ConfiguredGroupsUnique: 4}
+
+	now := time.Now()
+	spec := periodSpec{start: now.Add(-24 * time.Hour), end: now, isRelative: true}
+	payload, err := exportStatsPayload(general, config, spec)
+	if err != nil {
+		t.Fatalf("exportStatsPayload() error: %v", err)
+	}
+
+	var out struct {
+		Period  string                    `json:"period"`
+		General *service.GeneralStatsData `json:"general"`
+		Config  *service.ConfigStatsData  `json:"config"`
+	}
+	if err := json.Unmarshal(payload, &out); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if out.Period != "last 1d" {
+		t.Fatalf("period = %q, want %q", out.Period, "last 1d")
+	}
+	if out.General == nil || out.General.ChatsTotal != 10 || out.General.UpdatesTotal != 100 {
+		t.Fatalf("general = %+v, want chats_total 10, updates_total 100", out.General)
+	}
+	if out.Config == nil || out.Config.ConfiguredGroupsUnique != 4 {
+		t.Fatalf("config = %+v, want configured_groups_unique 4", out.Config)
+	}
+}
+
+func TestDashboardExportMarkup(t *testing.T) {
+	markup := dashboardExportMarkup("7d")
+	inline, ok := markup.(models.InlineKeyboardMarkup)
+	if !ok {
+		t.Fatalf("markup type = %T, want InlineKeyboardMarkup", markup)
+	}
+	if len(inline.InlineKeyboard) != 1 || len(inline.InlineKeyboard[0]) != 1 {
+		t.Fatalf("unexpected keyboard: %+v", inline.InlineKeyboard)
+	}
+	btn := inline.InlineKeyboard[0][0]
+	if want := botutil.CallbackCommandExportStats + "\n7d"; btn.CallbackData != want {
+		t.Fatalf("callback data = %q, want %q", btn.CallbackData, want)
+	}
+	if btn.Text == "" {
+		t.Fatal("button text is empty")
+	}
+}
+
+func TestExportFilename(t *testing.T) {
+	now := time.Now()
+	relative := periodSpec{start: now.Add(-24 * time.Hour), end: now, isRelative: true}
+	if got := exportFilename(relative); !strings.HasSuffix(got, "-1d.json") {
+		t.Fatalf("exportFilename(relative) = %q, want suffix -1d.json", got)
+	}
+	rangeSpec := periodSpec{label: "2026-08-20 → 2026-08-27"}
+	if got := exportFilename(rangeSpec); !strings.HasSuffix(got, "-2026-08-20-2026-08-27.json") {
+		t.Fatalf("exportFilename(range) = %q, want sanitized suffix", got)
 	}
 }
 
