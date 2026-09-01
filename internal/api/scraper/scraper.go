@@ -183,7 +183,7 @@ func (s *Scraper) ScrapeDepartmentGroups(department *model.Department) ([]model.
 		groups = append(groups, model.Group{
 			GroupID:        r[0],
 			DepartmentID:   department.ID,
-			GroupName:      model.GroupName(groupTitle(r)),
+			GroupName:      model.GroupName(model.NormalizeCyrillicLookalikes(groupTitle(r))),
 			DepartmentName: name,
 			Year:           department.Year,
 		})

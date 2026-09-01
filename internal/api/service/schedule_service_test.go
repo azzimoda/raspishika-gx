@@ -349,3 +349,26 @@ func TestTTLFreshExpiresBeforeData(t *testing.T) {
 		t.Fatal("expected cached data bytes")
 	}
 }
+
+func TestGetGroupByNameNormalizesLookalikes(t *testing.T) {
+	ctx := context.Background()
+
+	// The college emits the group name with a Latin "C"; the user types the
+	// Cyrillic "С". They must match.
+	departments := []model.Department{{Name: "Отделение СЭЗ"}}
+	groupsByDept := map[string][]model.Group{
+		"Отделение СЭЗ": {
+			{GroupID: "5", DepartmentID: "20", GroupName: "CЭЗт-25-(9)-1", DepartmentName: "Отделение СЭЗ", Year: 2026},
+		},
+	}
+	mock := &mockScraper{departments: departments, groupsByDept: groupsByDept}
+	svc, _ := newTestService(t, mock)
+
+	got, err := svc.GetGroupByName(ctx, model.GroupName("СЭЗт-25-(9)-1"))
+	if err != nil {
+		t.Fatalf("GetGroupByName() error: %v", err)
+	}
+	if got.GroupID != "5" {
+		t.Fatalf("GetGroupByName().GroupID = %q, want %q", got.GroupID, "5")
+	}
+}

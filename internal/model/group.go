@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // Group represents a study group with all identifiers required to build
@@ -52,4 +53,32 @@ func (group GroupName) Parse() (name string, year int, base int, n int, err erro
 	base, _ = strconv.Atoi(subs[3])
 	n, _ = strconv.Atoi(subs[4])
 	return subs[1], year, base, n, nil
+}
+
+// latinToCyrillic maps Latin letters that are visually identical to Cyrillic
+// ones onto their Cyrillic equivalents. The college occasionally emits such
+// lookalikes in group name prefixes (e.g. "CЭЗт" with a Latin C instead of
+// Cyrillic "С"), which prevents matching against Cyrillic user input.
+var latinToCyrillic = strings.NewReplacer(
+	"c", "с", "C", "С",
+	"t", "т", "T", "Т",
+	"p", "р", "P", "Р",
+	"o", "о", "O", "О",
+	"e", "е", "E", "Е",
+	"a", "а", "A", "А",
+	"h", "н", "H", "Н",
+	"k", "к", "K", "К",
+	"m", "м", "M", "М",
+	"b", "в", "B", "В",
+	"x", "х", "X", "Х",
+	"y", "у", "Y", "У",
+)
+
+// NormalizeCyrillicLookalikes rewrites Latin letter lookalikes in s to their
+// Cyrillic equivalents. It is applied to raw college data (scraped group
+// names) and to user input before lookup, so a group always matches whether
+// its source letters were Latin or Cyrillic. Only letters are affected;
+// digits and separators are left untouched.
+func NormalizeCyrillicLookalikes(s string) string {
+	return latinToCyrillic.Replace(s)
 }

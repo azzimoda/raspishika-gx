@@ -231,6 +231,12 @@ func (s *ScheduleService) GetGroupByName(ctx context.Context, name model.GroupNa
 	log.Debug().Str("name", string(name)).Msg("GetGroupByName")
 
 	var err error
+
+	// The college occasionally emits Latin letter lookalikes (e.g. "CЭЗт"
+	// with Latin C) in group names. Normalize user input to Cyrillic so it
+	// always matches the canonical scraped form.
+	name = model.GroupName(model.NormalizeCyrillicLookalikes(string(name)))
+
 	name, err = name.ValidateFormat()
 	if err != nil {
 		return nil, err
@@ -272,7 +278,9 @@ func (s *ScheduleService) GetGroupByName(ctx context.Context, name model.GroupNa
 	}
 	var groupNew *model.Group = nil
 	for _, g := range groups {
-		if strings.ToLower(string(g.GroupName)) == string(name) {
+		// Normalize the scraped name as well so legacy data stored with
+		// Latin lookalikes (e.g. "CЭЗт") still matches Cyrillic input.
+		if strings.ToLower(model.NormalizeCyrillicLookalikes(string(g.GroupName))) == string(name) {
 			groupNew = &g
 			break
 		}

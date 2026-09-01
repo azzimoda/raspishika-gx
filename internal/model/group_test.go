@@ -161,3 +161,55 @@ func TestGroupNameParse(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeCyrillicLookalikes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "latin C prefix",
+			input: "CЭЗт-25-(9)-1",
+			want:  "СЭЗт-25-(9)-1",
+		},
+		{
+			name:  "mixed lookalikes",
+			input: "ИCПT-26-(11)-2",
+			want:  "ИСПТ-26-(11)-2",
+		},
+		{
+			name:  "already cyrillic unchanged",
+			input: "СЭЗт-25-(9)-1",
+			want:  "СЭЗт-25-(9)-1",
+		},
+		{
+			name:  "digits and separators untouched",
+			input: "СЭЗт-25-(9)-1",
+			want:  "СЭЗт-25-(9)-1",
+		},
+		{
+			name:  "lowercase lookalikes",
+			input: "cae-25-(9)-1",
+			want:  "сае-25-(9)-1",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "only digits",
+			input: "26-22-(10)-1",
+			want:  "26-22-(10)-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeCyrillicLookalikes(tt.input); got != tt.want {
+				t.Fatalf("NormalizeCyrillicLookalikes(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

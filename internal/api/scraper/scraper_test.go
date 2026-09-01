@@ -53,6 +53,20 @@ func TestGroupTitle(t *testing.T) {
 	}
 }
 
+func TestScrapeGroupsNormalizesLookalikes(t *testing.T) {
+	_, groupRows := parseDepartmentRows([][]string{
+		{"otd", "1", "2", "3", "4", "otd", "Отделение"},
+		{"28728", "CЭЗт", "25", "9", "1", "р"},
+	})
+	if len(groupRows) != 1 {
+		t.Fatalf("groupRows = %d, want 1", len(groupRows))
+	}
+	title := groupTitle(groupRows[0])
+	if got, want := model.NormalizeCyrillicLookalikes(title), "СЭЗт-25-(9)-1"; got != want {
+		t.Fatalf("normalized groupTitle = %q, want %q", got, want)
+	}
+}
+
 func TestScrapeDepartments(t *testing.T) {
 	old := groupsFunctURL
 	t.Cleanup(func() { groupsFunctURL = old })
