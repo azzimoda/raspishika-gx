@@ -216,12 +216,17 @@ func unmarshalRows(body []byte) ([][]string, error) {
 }
 
 // parseDepartmentRows splits the rows of a list_groups response into the
-// department name (from the header row) and the group rows.
+// department name (from the marker row) and the group rows.
 func parseDepartmentRows(rows [][]string) (name string, groupRows [][]string) {
 	for _, r := range rows {
 		if len(r) >= 7 && r[5] == "otd" && strings.TrimSpace(r[6]) != "" {
 			name = strings.TrimSpace(r[6])
-			continue
+			// The college attaches the department marker (otd/<name>) to its
+			// first/oldest group row rather than to a separate header row, so a
+			// matched row is a real group unless it is a genuine header (r[0]=="otd").
+			if len(r) > 0 && r[0] == "otd" {
+				continue
+			}
 		}
 		if len(r) >= 2 && strings.TrimSpace(r[1]) != "" {
 			groupRows = append(groupRows, r)

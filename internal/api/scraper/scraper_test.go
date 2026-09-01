@@ -46,6 +46,28 @@ func TestParseDepartmentRows(t *testing.T) {
 	}
 }
 
+func TestParseDepartmentRowsKeepsGroupRowCarryingMarker(t *testing.T) {
+	// The college attaches the department marker (otd/<name>) to its first
+	// group row rather than to a separate header row. That row is a real group
+	// and must be kept, otherwise the oldest group of each department is lost.
+	rows := [][]string{
+		{"926", "КИПр", "25", "9", "1", "otd", "АиЭС"},
+		{"991", "КИПр", "26", "9", "1"},
+		{"992", "КИПр", "26", "11", "1"},
+	}
+
+	name, groupRows := parseDepartmentRows(rows)
+	if name != "АиЭС" {
+		t.Fatalf("name = %q, want %q", name, "АиЭС")
+	}
+	if len(groupRows) != 3 {
+		t.Fatalf("groupRows = %d, want 3 (%+v)", len(groupRows), groupRows)
+	}
+	if got, want := groupTitle(groupRows[0]), "КИПр-25-(9)-1"; got != want {
+		t.Fatalf("first group title = %q, want %q (group row dropped)", got, want)
+	}
+}
+
 func TestGroupTitle(t *testing.T) {
 	got := groupTitle([]string{"28728", "26", "22", "10", "1", "р"})
 	if want := "26-22-(10)-1"; got != want {
@@ -174,6 +196,43 @@ func TestScrapeDepartmentGroups(t *testing.T) {
 	}
 	if got[0] != want {
 		t.Errorf("group 0 = %+v, want %+v", got[0], want)
+	}
+}
+
+func TestScrapeDepartmentGroupsKeepsGroupWithMarker(t *testing.T) {
+	// Mirrors the real college response: the department marker (otd/<name>)
+	// rides on the first group row, which must be kept.
+	old := groupsFunctURL
+	t.Cleanup(func() { groupsFunctURL = old })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		form, _ := url.ParseQuery(string(b))
+		if form.Get("vd") == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		fmt.Fprint(w, `[
+			["926","КИПр","25","9","1","otd","АиЭС"],
+			["991","КИПр","26","9","1"],
+			["992","КИПр","26","11","1"]
+		]`)
+	}))
+	defer srv.Close()
+	groupsFunctURL = srv.URL + "/shs/gr_all/funct.php"
+
+	got, err := New().ScrapeDepartmentGroups(&model.Department{ID: "28728"})
+	if err != nil {
+		t.Fatalf("ScrapeDepartmentGroups() error: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("ScrapeDepartmentGroups() = %+v, want 3 groups (oldest group dropped)", got)
+	}
+	if got[0].GroupName != "КИПр-25-(9)-1" {
+		t.Fatalf("oldest group = %q, want %q", got[0].GroupName, "КИПр-25-(9)-1")
+	}
+	if got[0].DepartmentName != "АиЭС" {
+		t.Fatalf("department name = %q, want %q", got[0].DepartmentName, "АиЭС")
 	}
 }
 
