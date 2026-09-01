@@ -111,20 +111,17 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 
 func (h *handler) handleCmdDashboard(ctx context.Context, b *bot.Bot, update *models.Update) {
 	_, args := botutil.ParseCommand(update.Message.Text)
-	if args == "" {
-		args = "1d"
-	}
 
-	duration, ok := parsePeriod(args)
+	spec, ok := parsePeriodSpec(args)
 	if !ok {
-		duration = 24 * time.Hour
+		spec, _ = parsePeriodSpec("1d")
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
 	var generalStats *service.GeneralStatsData
 	var configStats *service.ConfigStatsData
 	g.Go(func() (err error) {
-		generalStats, err = h.Stats.GetGeneralStats(gctx, duration)
+		generalStats, err = h.Stats.GetGeneralStats(gctx, spec.start, spec.end)
 		return err
 	})
 	g.Go(func() (err error) {
@@ -136,7 +133,7 @@ func (h *handler) handleCmdDashboard(ctx context.Context, b *bot.Bot, update *mo
 		return
 	}
 
-	blocks := buildDashboard(generalStats, configStats, args, duration)
+	blocks := buildDashboard(generalStats, configStats, spec)
 	_, err := h.Report().MsgRich("Dashboard", blocks)
 	if err != nil {
 		h.Report().Err(err).Msg("Failed to send dashboard")

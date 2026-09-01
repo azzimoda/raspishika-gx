@@ -33,7 +33,8 @@ func openTestChatDBFull(t *testing.T) *gorm.DB {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			tg_chat_id INTEGER,
 			department TEXT,
-			"group" TEXT
+			"group" TEXT,
+			created_at DATETIME
 		)
 	`).Error; err != nil {
 		t.Fatalf("failed to create chats table: %v", err)
@@ -235,5 +236,58 @@ func TestGetActiveChatsAndCount(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("got active count %d, want 1", count)
+	}
+}
+
+func TestCountNewChatsByPeriod(t *testing.T) {
+	db := openTestChatDBFull(t)
+	startT := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
+	endT := time.Date(2026, 8, 27, 23, 59, 59, 0, time.UTC)
+	in := "2026-08-25T12:00:00Z"
+	before := "2026-08-10T12:00:00Z"
+	after := "2026-09-01T12:00:00Z"
+	if err := db.Exec(`INSERT INTO chats (id, tg_chat_id, created_at) VALUES (1, 10, ?), (2, 20, ?), (3, 30, ?)`,
+		in, before, after).Error; err != nil {
+		t.Fatalf("failed to insert chats: %v", err)
+	}
+
+	repo := &chatRepository{db: db}
+	got, err := repo.CountNewChatsByPeriod(context.Background(), startT, endT)
+	if err != nil {
+		t.Fatalf("CountNewChatsByPeriod() error: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("CountNewChatsByPeriod() = %d, want 1", got)
+	}
+}
+
+func TestGetNewChatCountByYearByPeriod(t *testing.T) {
+	db := openTestChatDBFull(t)
+	startT := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
+	endT := time.Date(2026, 8, 27, 23, 59, 59, 0, time.UTC)
+	in := "2026-08-25T12:00:00Z"
+	before := "2026-08-10T12:00:00Z"
+	if err := db.Exec(`INSERT INTO chats (id, tg_chat_id, "group", created_at) VALUES
+		(1, 10, 'ИСПт-24-(9)-1', ?), (2, 20, 'ГРПт-24-11-2', ?), (3, 30, 'Б-123', ?), (4, 40, '', ?)`,
+		in, in, before, in).Error; err != nil {
+		t.Fatalf("failed to insert chats: %v", err)
+	}
+
+	repo := &chatRepository{db: db}
+	got, err := repo.GetNewChatCountByYearByPeriod(context.Background(), startT, endT)
+	if err != nil {
+		t.Fatalf("GetNewChatCountByYearByPeriod() error: %v", err)
+	}
+	// Only chats within the window: ids 1 (ИСПт-24 -> 24), 2 (ГРПт-24 -> 24)
+	// and 4 ('' -> year 0). Chat 3's group parses to an error and is skipped;
+	// it is outside the window anyway.
+	want := map[int]int{24: 2, 0: 1}
+	if len(got) != len(want) {
+		t.Fatalf("GetNewChatCountByYearByPeriod() = %v, want %v", got, want)
+	}
+	for y, c := range want {
+		if got[y] != c {
+			t.Fatalf("GetNewChatCountByYearByPeriod()[%d] = %d, want %d", y, got[y], c)
+		}
 	}
 }

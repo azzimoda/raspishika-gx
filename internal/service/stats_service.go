@@ -35,7 +35,7 @@ func (s *StatsService) LogBroadcast(ctx context.Context, log model.BroadcastLog)
 	return s.logRepo.LogBroadcast(ctx, log)
 }
 
-func (s *StatsService) GetChatStats(ctx context.Context, duration time.Duration) (*ChatStatsData, error) {
+func (s *StatsService) GetChatStats(ctx context.Context, start, end time.Time) (*ChatStatsData, error) {
 	chatsTotal, err := s.chatRepo.CountAllChats(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count all chats: %w", err)
@@ -44,15 +44,15 @@ func (s *StatsService) GetChatStats(ctx context.Context, duration time.Duration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count private chats: %w", err)
 	}
-	chatActivities, err := s.chatRepo.CountChatActivities(ctx, duration)
+	chatActivities, err := s.chatRepo.CountChatActivitiesByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count chats by activity: %w", err)
 	}
-	chatsNew, err := s.chatRepo.CountNewChats(ctx, duration)
+	chatsNew, err := s.chatRepo.CountNewChatsByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count new chats: %w", err)
 	}
-	chatsNewGrouped, err := s.chatRepo.GetNewChatCountByYear(ctx, duration)
+	chatsNewGrouped, err := s.chatRepo.GetNewChatCountByYearByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get new chat count by group: %w", err)
 	}
@@ -181,78 +181,75 @@ type ConfigStatsData struct {
 	WatchedGroups          int
 }
 
-func (s *StatsService) GetLogStats(ctx context.Context, dur time.Duration) (*LogStatsData, error) {
-	now := time.Now()
-	past := now.Add(-dur)
-
-	updatesTotal, err := s.logRepo.CountUpdateLogsByPeriod(ctx, past, now)
+func (s *StatsService) GetLogStats(ctx context.Context, start, end time.Time) (*LogStatsData, error) {
+	updatesTotal, err := s.logRepo.CountUpdateLogsByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	updatesSuccess, err := s.logRepo.CountSuccessfulUpdateLogsByPeriod(ctx, past, now)
-	if err != nil {
-		return nil, err
-	}
-
-	broadcastTasks, err := s.logRepo.CountBroadcastTaskLogsByPeriod(ctx, past, now)
-	if err != nil {
-		return nil, err
-	}
-	broadcastLogs, err := s.logRepo.CountBroadcastLogsByPeriod(ctx, past, now)
-	if err != nil {
-		return nil, err
-	}
-	broadcastSuccess, err := s.logRepo.CountSuccessfulBroadcastLogsByPeriod(ctx, past, now)
-	if err != nil {
-		return nil, err
-	}
-	broadcastDaily, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BDaily, past, now)
-	if err != nil {
-		return nil, err
-	}
-	broadcastPair, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BPair, past, now)
-	if err != nil {
-		return nil, err
-	}
-	broadcastChange, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BChange, past, now)
+	updatesSuccess, err := s.logRepo.CountSuccessfulUpdateLogsByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
 
-	requestsActual, err := s.logRepo.CountActualRequests(ctx, past, now)
+	broadcastTasks, err := s.logRepo.CountBroadcastTaskLogsByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	requestsPotential, err := s.logRepo.CountPotentialRequests(ctx, past, now)
+	broadcastLogs, err := s.logRepo.CountBroadcastLogsByPeriod(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	broadcastSuccess, err := s.logRepo.CountSuccessfulBroadcastLogsByPeriod(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	broadcastDaily, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BDaily, start, end)
+	if err != nil {
+		return nil, err
+	}
+	broadcastPair, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BPair, start, end)
+	if err != nil {
+		return nil, err
+	}
+	broadcastChange, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BChange, start, end)
 	if err != nil {
 		return nil, err
 	}
 
-	requestsCached, requestsUncached, err := s.logRepo.CountScheduleRequestsByPeriod(ctx, past, now)
+	requestsActual, err := s.logRepo.CountActualRequests(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	distinctChats, err := s.logRepo.CountDistinctChatsByPeriod(ctx, past, now)
+	requestsPotential, err := s.logRepo.CountPotentialRequests(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	updatesByKind, err := s.logRepo.GetUpdateLogCountByKind(ctx, past, now)
+
+	requestsCached, requestsUncached, err := s.logRepo.CountScheduleRequestsByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	updateLatency, err := s.logRepo.GetUpdateLatencyStatsByPeriod(ctx, past, now)
+	distinctChats, err := s.logRepo.CountDistinctChatsByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	requestsByHour, err := s.logRepo.GetRequestsCountByHour(ctx, past, now)
+	updatesByKind, err := s.logRepo.GetUpdateLogCountByKind(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	topRequestedSchedules, err := s.logRepo.GetTopRequestedSchedules(ctx, past, now, topSchedulesLimit)
+	updateLatency, err := s.logRepo.GetUpdateLatencyStatsByPeriod(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	broadcastTasksByKind, err := s.logRepo.GetBroadcastTaskStatsByKind(ctx, past, now)
+	requestsByHour, err := s.logRepo.GetRequestsCountByHour(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	topRequestedSchedules, err := s.logRepo.GetTopRequestedSchedules(ctx, start, end, topSchedulesLimit)
+	if err != nil {
+		return nil, err
+	}
+	broadcastTasksByKind, err := s.logRepo.GetBroadcastTaskStatsByKind(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -321,12 +318,12 @@ type LogStatsData struct {
 	BroadcastByKind       []repository.BroadcastTaskKindStats
 }
 
-func (s *StatsService) GetGeneralStats(ctx context.Context, duration time.Duration) (*GeneralStatsData, error) {
-	chatStats, err := s.GetChatStats(ctx, duration)
+func (s *StatsService) GetGeneralStats(ctx context.Context, start, end time.Time) (*GeneralStatsData, error) {
+	chatStats, err := s.GetChatStats(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
-	logStats, err := s.GetLogStats(ctx, duration)
+	logStats, err := s.GetLogStats(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +336,9 @@ type GeneralStatsData struct {
 }
 
 func (s *StatsService) HealthCheck() error {
-	if _, err := s.GetGeneralStats(context.Background(), time.Hour); err != nil {
+	now := time.Now()
+	past := now.Add(-time.Hour)
+	if _, err := s.GetGeneralStats(context.Background(), past, now); err != nil {
 		return err
 	}
 	return nil

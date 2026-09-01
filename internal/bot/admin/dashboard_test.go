@@ -111,7 +111,8 @@ func TestBuildDashboard(t *testing.T) {
 		WatchedGroups:          2,
 	}
 
-	blocks := buildDashboard(general, config, "1d", 24*time.Hour)
+	spec := periodSpec{start: time.Now().Add(-24 * time.Hour), end: time.Now(), isRelative: true}
+	blocks := buildDashboard(general, config, spec)
 	if len(blocks) < 10 {
 		t.Fatalf("expected many blocks, got %d", len(blocks))
 	}

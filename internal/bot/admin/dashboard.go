@@ -13,16 +13,27 @@ import (
 
 // buildDashboard assembles the rich message blocks of the admin dashboard:
 // general statistics for the given period plus current configuration stats.
-func buildDashboard(general *service.GeneralStatsData, config *service.ConfigStatsData, periodStr string, dur time.Duration) []models.InputRichBlock {
+func buildDashboard(general *service.GeneralStatsData, config *service.ConfigStatsData, spec periodSpec) []models.InputRichBlock {
 	blocks := []models.InputRichBlock{
 		blockHeading("Dashboard", 1),
-		blockParagraph(textPlain(fmt.Sprintf("General: last %s (%s) · Config: current", periodStr, formatDuration(dur)))),
+		blockParagraph(textPlain(fmt.Sprintf("General: %s · Config: current", generalPeriodLabel(spec)))),
 		blockDivider(),
 	}
 	blocks = append(blocks, buildGeneralSection(general)...)
 	blocks = append(blocks, blockDivider())
 	blocks = append(blocks, buildConfigSection(config, general.ChatsPrivate, general.ChatsByAccess)...)
 	return blocks
+}
+
+// generalPeriodLabel renders a human description of the statistics window.
+func generalPeriodLabel(spec periodSpec) string {
+	if spec.label != "" {
+		return spec.label
+	}
+	if spec.isRelative {
+		return fmt.Sprintf("last %s", formatDuration(spec.end.Sub(spec.start)))
+	}
+	return fmt.Sprintf("%s → %s", formatMomentLocal(spec.start), formatMomentLocal(spec.end))
 }
 
 func buildGeneralSection(general *service.GeneralStatsData) []models.InputRichBlock {

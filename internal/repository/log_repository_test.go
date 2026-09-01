@@ -99,9 +99,12 @@ func TestCountChatActivities(t *testing.T) {
 	insertLog(6, "Б-999", "-2 days")
 
 	repo := &chatRepository{db: db}
-	got, err := repo.CountChatActivities(context.Background(), 24*time.Hour)
+	now := time.Now()
+	start := now.Add(-24 * time.Hour)
+	end := now.Add(time.Minute)
+	got, err := repo.CountChatActivitiesByPeriod(context.Background(), start, end)
 	if err != nil {
-		t.Fatalf("CountChatActivities() error: %v", err)
+		t.Fatalf("CountChatActivitiesByPeriod() error: %v", err)
 	}
 
 	want := ChatActivityCounts{Active: 2, Semiactive: 3, Inactive: 2}
@@ -111,6 +114,35 @@ func TestCountChatActivities(t *testing.T) {
 	// The three buckets must partition all chats exactly.
 	if sum := got.Active + got.Semiactive + got.Inactive; sum != 7 {
 		t.Fatalf("buckets do not partition all chats: sum = %d, want 7", sum)
+	}
+}
+
+func TestCountChatActivitiesByPeriod(t *testing.T) {
+	db := openTestLogDB(t)
+
+	daily := "09:00"
+	insertChat(t, db, 1, "", nil, false, false)
+	insertChat(t, db, 2, "Б-123", &daily, false, false)
+	insertChat(t, db, 3, "", nil, false, false)
+
+	now := time.Now()
+	start := now.Add(-24 * time.Hour)
+	end := now.Add(time.Minute)
+	if err := db.Exec(`
+		INSERT INTO update_logs (chat_id, group_or_teacher, created_at)
+		VALUES (1, 'Б-111', ?), (3, 'Б-111', ?)
+	`, now.Add(-time.Hour), now.Add(-48*time.Hour)).Error; err != nil {
+		t.Fatalf("failed to insert update_logs: %v", err)
+	}
+
+	repo := &chatRepository{db: db}
+	got, err := repo.CountChatActivitiesByPeriod(context.Background(), start, end)
+	if err != nil {
+		t.Fatalf("CountChatActivitiesByPeriod() error: %v", err)
+	}
+	want := ChatActivityCounts{Active: 1, Semiactive: 1, Inactive: 1}
+	if got != want {
+		t.Fatalf("CountChatActivitiesByPeriod() = %+v, want %+v", got, want)
 	}
 }
 

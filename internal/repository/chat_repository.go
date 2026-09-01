@@ -41,11 +41,11 @@ type ChatRepository interface {
 
 	CountAllChats(context.Context) (int, error)
 	CountPricateChats(context.Context) (int, error)
-	CountNewChats(context.Context, time.Duration) (int, error)
-	GetNewChatCountByYear(context.Context, time.Duration) (map[int]int, error)
-	// CountChatActivities returns the number of chats split by activity level
-	// within the given period.
-	CountChatActivities(context.Context, time.Duration) (ChatActivityCounts, error)
+	CountNewChatsByPeriod(context.Context, time.Time, time.Time) (int, error)
+	GetNewChatCountByYearByPeriod(context.Context, time.Time, time.Time) (map[int]int, error)
+	// CountChatActivitiesByPeriod returns the number of chats split by activity
+	// level within the given period.
+	CountChatActivitiesByPeriod(context.Context, time.Time, time.Time) (ChatActivityCounts, error)
 	CountChatsWithConfiguredGroup(context.Context) (int, error)
 	CountUniqueConfiguredGroups(context.Context) (int, error)
 	CountDailyEnabled(context.Context) (int, error)
@@ -252,26 +252,25 @@ func (r *chatRepository) CountPricateChats(ctx context.Context) (int, error) {
 	err := r.db.WithContext(ctx).Model(&model.Chat{}).Where("tg_chat_id > 0").Count(&count).Error
 	return int(count), err
 }
-func (r *chatRepository) CountNewChats(ctx context.Context, dur time.Duration) (int, error) {
+func (r *chatRepository) CountNewChatsByPeriod(ctx context.Context, start, end time.Time) (int, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&model.Chat{}).
-		Where("created_at > datetime('now', ?)", sqlPeriod(dur)).
+		Where("created_at BETWEEN ? AND ?", start, end).
 		Count(&count).Error
 	return int(count), err
 }
-func (r *chatRepository) GetNewChatCountByYear(ctx context.Context, dur time.Duration) (map[int]int, error) {
+func (r *chatRepository) GetNewChatCountByYearByPeriod(ctx context.Context, start, end time.Time) (map[int]int, error) {
 	result := make([]struct {
 		Group *string
 		Count int
 	}, 0)
-	period := sqlPeriod(dur)
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT "group", count(*) AS count
 		FROM chats
-		WHERE created_at > datetime('now', ?)
+		WHERE created_at BETWEEN ? AND ?
 		GROUP BY "group"
-	`, period).Scan(&result).Error
+	`, start, end).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -298,14 +297,14 @@ type ChatActivityCounts struct {
 	Inactive   int
 }
 
-// CountChatActivities counts active, semiactive and inactive chats in a single
-// pass. Each chat falls into exactly one bucket:
+// CountChatActivitiesByPeriod counts active, semiactive and inactive chats in
+// a single pass over the given period. Each chat falls into exactly one bucket:
 //   - active: at least one update log within the period;
 //   - semiactive: no logs within the period, but a group configured and at
 //     least one of daily/pair/change broadcast enabled;
 //   - inactive: no logs within the period and otherwise (no group or no
 //     broadcast enabled).
-func (r *chatRepository) CountChatActivities(ctx context.Context, dur time.Duration) (ChatActivityCounts, error) {
+func (r *chatRepository) CountChatActivitiesByPeriod(ctx context.Context, start, end time.Time) (ChatActivityCounts, error) {
 	const query = `
 		SELECT
 			COALESCE(SUM(CASE WHEN cnt > 0 THEN 1 ELSE 0 END), 0) AS active,
@@ -318,12 +317,12 @@ func (r *chatRepository) CountChatActivities(ctx context.Context, dur time.Durat
 				(daily_sending_time IS NOT NULL OR pair_sending = 1 OR update_notification = 1) AS has_broadcast
 			FROM chats c
 			LEFT JOIN update_logs ul
-				ON ul.chat_id = c.id AND ul.created_at > datetime('now', ?)
+				ON ul.chat_id = c.id AND ul.created_at BETWEEN ? AND ?
 			GROUP BY c.id
 		)
 	`
 	var counts ChatActivityCounts
-	err := r.db.WithContext(ctx).Raw(query, sqlPeriod(dur)).Scan(&counts).Error
+	err := r.db.WithContext(ctx).Raw(query, start, end).Scan(&counts).Error
 	return counts, err
 }
 
