@@ -464,7 +464,7 @@ func (h *handler) handleCQSelectDepartment(ctx context.Context, b *bot.Bot, upda
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          message.Chat.ID,
 		MessageThreadID: message.MessageThreadID,
-		Text:            "Выберите группы на клавиатуре или введите название в верном формате, например: ИСПт-22-(9)-2",
+		Text:            `Выберите группы на клавиатуре или введите название в верном формате, например: "ИСПт 22 9 2"`,
 		ReplyMarkup:     groupMenuMarkup(groups),
 	})
 	addHandlerCtxErr(ctx, err)
@@ -672,7 +672,7 @@ func (h *handler) sendDepartmentSelectionMenu(
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: messageThreadID,
-		Text:            fmt.Sprintf("%s\nВведите название группы или выберите отделение", currentGroup),
+		Text:            fmt.Sprintf(`%s\nВведите название группы, например "ИСПт 22 9 2", или выберите отделение`, currentGroup),
 		ReplyMarkup:     departmentMenuMarkup(departments),
 	})
 	return err
