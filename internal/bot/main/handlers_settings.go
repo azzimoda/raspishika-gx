@@ -2,10 +2,12 @@ package mainbot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
@@ -472,7 +474,9 @@ func (h *handler) handleCQSelectDepartment(ctx context.Context, b *bot.Bot, upda
 func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
 	groupName, err := h.Schedule.ValidateGroupName(ctx, model.GroupName(update.Message.Text))
 	if err != nil {
-		addHandlerCtxErr(ctx, err)
+		if !errors.Is(err, model.ErrInvalidGroupNameFormat) && !errors.Is(err, apiclient.ErrNotFound) {
+			addHandlerCtxErr(ctx, err)
+		}
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          update.Message.Chat.ID,
 			MessageThreadID: update.Message.MessageThreadID,

@@ -202,6 +202,10 @@ func (s *ScheduleService) GetGroupsByDepartmentName(ctx context.Context, name st
 	return s.scraper.GetGroups(ctx, name)
 }
 func (s *ScheduleService) ValidateGroupName(ctx context.Context, name model.GroupName) (model.GroupName, error) {
+	if _, err := name.ValidateFormat(); err != nil {
+		return name, err
+	}
+
 	g, err := s.scraper.GetGroup(ctx, string(name))
 	if err != nil {
 		return name, err

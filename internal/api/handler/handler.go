@@ -56,7 +56,7 @@ func (h *Handler) GetDepartments(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{Error: err.Error()})
 		return
 	}
-	log.Info().Any("departments", departments).Msg("Got departments")
+	log.Info().Any("departmentsCount", len(departments)).Msg("Got departments")
 	c.JSON(http.StatusOK, &departments)
 }
 
@@ -103,7 +103,7 @@ func (h *Handler) GetGroups(c *gin.Context) {
 		return
 	}
 
-	log.Info().Str("department", department).Any("groups", groups).Msg("Got groups")
+	log.Info().Str("department", department).Any("groupsCount", len(groups)).Msg("Got groups")
 	c.JSON(http.StatusOK, groups)
 }
 
@@ -345,6 +345,6 @@ func (h *Handler) GetSchedule(c *gin.Context) {
 		return
 	}
 
-	log.Info().Any("config", conf).Msg("Got schedule")
+	log.Info().Any("imageKey", conf.ImageKey()).Msg("Got schedule")
 	c.JSON(http.StatusOK, schedule)
 }
