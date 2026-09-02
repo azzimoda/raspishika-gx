@@ -37,6 +37,13 @@ func openTestLogDB(t *testing.T) *gorm.DB {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			chat_id INTEGER NOT NULL,
 			group_or_teacher TEXT,
+			cached BOOLEAN NOT NULL DEFAULT 0,
+			created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+		);
+		CREATE TABLE broadcast_task_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			kind TEXT NOT NULL,
+			groups INTEGER NOT NULL DEFAULT 0,
 			created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 		);
 	`).Error; err != nil {
@@ -162,21 +169,16 @@ func TestCountPotentialRequests(t *testing.T) {
 		}
 	}
 
-	// In-period, empty group_or_teacher — counted.
-	insertLog(1, nil)
-	// In-period, non-empty group_or_teacher — not counted.
-	insertLog(2, "Б-123")
-	// Out-of-period, empty group_or_teacher — not counted.
+	// In-period, non-empty group_or_teacher — counted (a manual schedule request).
+	insertLog(1, "Б-123")
+	// In-period, empty group_or_teacher — not counted (not a schedule request).
+	insertLog(2, "")
+	// In-period, NULL group_or_teacher — not counted.
+	insertLog(3, nil)
+	// Out-of-period, non-empty group_or_teacher — not counted.
 	if err := db.Exec(`
 		INSERT INTO update_logs (chat_id, group_or_teacher, created_at)
-		VALUES (3, '', datetime('now', '-2 hours'))
-	`).Error; err != nil {
-		t.Fatalf("failed to insert out-of-period log: %v", err)
-	}
-	// Out-of-period, NULL group_or_teacher — must NOT be counted (precedence fix).
-	if err := db.Exec(`
-		INSERT INTO update_logs (chat_id, group_or_teacher, created_at)
-		VALUES (4, NULL, datetime('now', '-2 hours'))
+		VALUES (4, 'Б-456', datetime('now', '-2 hours'))
 	`).Error; err != nil {
 		t.Fatalf("failed to insert out-of-period log: %v", err)
 	}
@@ -188,5 +190,56 @@ func TestCountPotentialRequests(t *testing.T) {
 	}
 	if got != 1 {
 		t.Fatalf("CountPotentialRequests() = %d, want 1", got)
+	}
+}
+
+func TestCountActualRequests(t *testing.T) {
+	db := openTestLogDB(t)
+
+	now := time.Now().UTC()
+	start := now.Add(-time.Hour)
+	end := now.Add(time.Hour)
+
+	// Manual requests.
+	insertLogs := [][]any{
+		// In-period, group set, not cached — counted.
+		{1, "Б-123", 0, "-30 minutes"},
+		// In-period, group set, cached — not counted (served from cache).
+		{2, "Б-456", 1, "-30 minutes"},
+		// In-period, no group — not counted.
+		{3, "", 0, "-30 minutes"},
+		// Out-of-period, group set, not cached — not counted.
+		{4, "Б-789", 0, "-2 hours"},
+	}
+	for _, l := range insertLogs {
+		if err := db.Exec(`
+			INSERT INTO update_logs (chat_id, group_or_teacher, cached, created_at)
+			VALUES (?, ?, ?, datetime('now', ?))
+		`, l...).Error; err != nil {
+			t.Fatalf("failed to insert update log %v: %v", l, err)
+		}
+	}
+
+	// Broadcasts: two in-period tasks (3+2 groups), one out-of-period (5 groups).
+	insertBroadcast := func(kind string, groups int, offset string) {
+		if err := db.Exec(`
+			INSERT INTO broadcast_task_logs (kind, groups, created_at)
+			VALUES (?, ?, datetime('now', ?))
+		`, kind, groups, offset).Error; err != nil {
+			t.Fatalf("failed to insert broadcast task log: %v", err)
+		}
+	}
+	insertBroadcast("daily", 3, "-30 minutes")
+	insertBroadcast("pair", 2, "-30 minutes")
+	insertBroadcast("daily", 5, "-2 hours")
+
+	repo := &logRepository{db: db}
+	got, err := repo.CountActualRequests(context.Background(), start, end)
+	if err != nil {
+		t.Fatalf("CountActualRequests() error: %v", err)
+	}
+	// 1 (manual uncached) + 5 (broadcast groups) = 6.
+	if got != 6 {
+		t.Fatalf("CountActualRequests() = %d, want 6", got)
 	}
 }

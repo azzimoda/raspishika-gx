@@ -190,6 +190,9 @@ func (r *logRepository) CountBroadcastLogsByPeriodAndKind(ctx context.Context, k
 	return int(count), nil
 }
 
+// CountActualRequests counts requests the bot actually made: manual schedule
+// requests that were not served from cache (cached = 0) plus all broadcast
+// group schedule requests.
 func (r *logRepository) CountActualRequests(ctx context.Context, start, end time.Time) (int, error) {
 	var countUpdates int64
 	if err := r.db.WithContext(ctx).
@@ -207,10 +210,14 @@ func (r *logRepository) CountActualRequests(ctx context.Context, start, end time
 
 	return int(countUpdates + countBroadcasts), nil
 }
+
+// CountPotentialRequests counts how many requests to the college site users
+// could have made without the bot: every manual schedule request (cached or
+// not), excluding broadcasts.
 func (r *logRepository) CountPotentialRequests(ctx context.Context, start, end time.Time) (int, error) {
 	const query = `
 		SELECT COUNT(*) FROM update_logs
-		WHERE (group_or_teacher IS NULL OR group_or_teacher = '')
+		WHERE group_or_teacher IS NOT NULL AND group_or_teacher != ''
 			AND created_at BETWEEN ? AND ?
 	`
 	var count int64
