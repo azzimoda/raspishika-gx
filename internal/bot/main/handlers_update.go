@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
@@ -61,6 +62,13 @@ func (h *handler) handleCQUpdateWeek(ctx context.Context, b *bot.Bot, update *mo
 		if err != nil {
 			if errors.Is(err, apiclient.ErrServiceUnavailable) {
 				sendVacationAnswer(ctx, b, update, false)
+				return
+			}
+			if errors.Is(err, apiclient.ErrNotFound) {
+				b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+					CallbackQueryID: callbackQueryID,
+					Text:            fmt.Sprintf(botutil.MsgGroupRemoved, value),
+				})
 				return
 			}
 
@@ -158,6 +166,13 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 			sendVacationAnswer(ctx, b, update, false)
 			return
 		}
+		if errors.Is(err, apiclient.ErrNotFound) {
+			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+				CallbackQueryID: callbackQueryID,
+				Text:            fmt.Sprintf(botutil.MsgGroupRemoved, groupName),
+			})
+			return
+		}
 
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -251,6 +266,13 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 	if err != nil {
 		if errors.Is(err, apiclient.ErrServiceUnavailable) {
 			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+		if errors.Is(err, apiclient.ErrNotFound) {
+			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+				CallbackQueryID: callbackQueryID,
+				Text:            fmt.Sprintf(botutil.MsgGroupRemoved, groupName),
+			})
 			return
 		}
 

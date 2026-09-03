@@ -41,6 +41,10 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 			sendVacationAnswer(ctx, b, update, false)
 			return
 		}
+		if errors.Is(err, apiclient.ErrNotFound) {
+			h.resetChatForExpiredGroup(ctx, b, chat, chatID, threadID)
+			return
+		}
 
 		log.Error().Err(err).Msg("Failed to get group by name")
 		addHandlerCtxErr(ctx, err)
@@ -123,6 +127,10 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 			sendVacationAnswer(ctx, b, update, false)
 			return
 		}
+		if errors.Is(err, apiclient.ErrNotFound) {
+			h.resetChatForExpiredGroup(ctx, b, chat, chatID, threadID)
+			return
+		}
 
 		log.Error().Err(err).Msg("Failed to get group by name")
 		addHandlerCtxErr(ctx, err)
@@ -197,6 +205,10 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	if err != nil {
 		if errors.Is(err, apiclient.ErrServiceUnavailable) {
 			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+		if errors.Is(err, apiclient.ErrNotFound) {
+			h.resetChatForExpiredGroup(ctx, b, chat, chatID, threadID)
 			return
 		}
 
@@ -468,4 +480,19 @@ func formatDayDynamicHTML(name string, day model.ScheduleDay, t time.Time) strin
 	}
 
 	return text
+}
+
+func (h *handler) resetChatForExpiredGroup(ctx context.Context, b *bot.Bot, chat *model.Chat, chatID int64, threadID int) {
+	groupName := string(*chat.GroupName)
+
+	if err := h.Chat.ResetGroupSettings(ctx, chat); err != nil {
+		log.Error().Err(err).Msg("Failed to reset group settings")
+	}
+
+	botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
+		ChatID:          chatID,
+		MessageThreadID: threadID,
+		Text:            fmt.Sprintf(botutil.MsgGroupRemoved, groupName),
+		ReplyMarkup:     botutil.MainMenuMarkup(chat.IsPrivate()),
+	})
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/azzimoda/go-tg-proxy/botservice"
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
@@ -159,8 +160,9 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 		return
 	}
 
-	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, chats)
+	groupedChats, groups, confs, invalidGroups, shouldReturn := s.prepareBroadcast(ctx, chats)
 	if shouldReturn {
+		s.notifyAndResetInvalidChats(ctx, invalidGroups)
 		return
 	}
 
@@ -308,8 +310,9 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 		return
 	}
 
-	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, chats)
+	groupedChats, groups, confs, invalidGroups, shouldReturn := s.prepareBroadcast(ctx, chats)
 	if shouldReturn {
+		s.notifyAndResetInvalidChats(ctx, invalidGroups)
 		return
 	}
 
@@ -474,8 +477,9 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 		return
 	}
 
-	groupedChats, groups, confs, shouldReturn := s.prepareBroadcast(ctx, chats)
+	groupedChats, groups, confs, invalidGroups, shouldReturn := s.prepareBroadcast(ctx, chats)
 	if shouldReturn {
+		s.notifyAndResetInvalidChats(ctx, invalidGroups)
 		return
 	}
 
@@ -697,12 +701,13 @@ func (s *BroadcastService) prepareBroadcast(ctx context.Context, chats []*model.
 	groupedChats map[model.GroupName][]*model.Chat,
 	groupNames []model.GroupName,
 	confs []model.ScheduleConfig,
+	invalidGroups map[model.GroupName][]*model.Chat,
 	shouldReturn bool,
 ) {
 	chatCount := len(chats)
 	if chatCount == 0 {
 		log.Debug().Msg("No chat for broadcast")
-		return nil, nil, nil, true
+		return nil, nil, nil, nil, true
 	}
 
 	groupedChats = groupChats(chats)
@@ -712,10 +717,14 @@ func (s *BroadcastService) prepareBroadcast(ctx context.Context, chats []*model.
 
 	groupNames = make([]model.GroupName, 0, len(groupedChats))
 	confs = make([]model.ScheduleConfig, 0, len(groupedChats))
+	invalidGroups = make(map[model.GroupName][]*model.Chat)
 	for gn := range groupedChats {
 		group, err := s.Schedule.GetGroupByName(ctx, gn)
 		if err != nil {
 			log.Error().Err(err).Str("group", string(gn)).Msg("Failed to get group by name")
+			if errors.Is(err, apiclient.ErrNotFound) {
+				invalidGroups[gn] = groupedChats[gn]
+			}
 			continue
 		}
 		groupNames = append(groupNames, gn)
@@ -723,9 +732,34 @@ func (s *BroadcastService) prepareBroadcast(ctx context.Context, chats []*model.
 	}
 	if len(confs) == 0 {
 		log.Warn().Msg("No valid groups for daily broadcast")
-		return nil, nil, nil, true
+		return nil, nil, nil, invalidGroups, true
 	}
-	return groupedChats, groupNames, confs, shouldReturn
+	return groupedChats, groupNames, confs, invalidGroups, shouldReturn
+}
+
+func (s *BroadcastService) notifyAndResetInvalidChats(ctx context.Context, invalidGroups map[model.GroupName][]*model.Chat) {
+	for gn, chats := range invalidGroups {
+		for _, chat := range chats {
+			text := fmt.Sprintf(botutil.MsgGroupRemoved, gn)
+			_, err := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chat.TgChatID,
+				Text:   text,
+			})
+			if err != nil {
+				if errors.Is(err, bot.ErrorForbidden) {
+					s.handleForbidden(ctx, err, chat)
+					continue
+				}
+				log.Error().Err(err).Str("group", string(gn)).Int64("chatID", int64(chat.TgChatID)).
+					Msg("Failed to notify chat about removed group")
+			}
+
+			if err := s.Chat.ResetGroupSettings(ctx, chat); err != nil {
+				log.Error().Err(err).Str("group", string(gn)).Int64("chatID", int64(chat.TgChatID)).
+					Msg("Failed to reset group settings for expired group")
+			}
+		}
+	}
 }
 
 func groupChats(chats []*model.Chat) map[model.GroupName][]*model.Chat {

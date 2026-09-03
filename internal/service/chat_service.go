@@ -90,6 +90,15 @@ func (s *ChatService) DeleteChat(ctx context.Context, id int64) error {
 	return s.repo.DeleteChat(ctx, id)
 }
 
+func (s *ChatService) ResetGroupSettings(ctx context.Context, chat *model.Chat) error {
+	chat.GroupName = nil
+	chat.DepartmentName = nil
+	chat.PairSending = false
+	chat.ChangeAlert = false
+	chat.DailySendingTime = nil
+	return s.repo.UpdateChat(ctx, chat.WithState(model.ChatStateDefault))
+}
+
 func (s *ChatService) AddChatRecentTeacher(ctx context.Context, recentTeacher *model.RecentTeacher) error {
 	return s.repo.AddRecentTeacher(ctx, recentTeacher)
 }
