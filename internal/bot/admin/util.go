@@ -184,6 +184,17 @@ func (h *handler) reportChat(chat *model.Chat) reporter.ReportBuilder {
 	if chat == nil {
 		return r
 	}
-	return r.Debug("chatID", chat.TgChatID).Debug("username", refutil.DerefOrTypeDefault(chat.UserName)).
-		Debug("group", refutil.DerefOrTypeDefault(chat.GroupName))
+	return r.
+		Debug("chatID", chat.TgChatID).
+		Debug("username", refutil.DerefOrTypeDefault(chat.UserName)).
+		Debug("state", chat.State).
+		Debug("department", refutil.DerefOrTypeDefault(chat.DepartmentName)).
+		Debug("group", refutil.DerefOrTypeDefault(chat.GroupName)).
+		Debug("daily_sending", refutil.DerefOrTypeDefault(chat.DailySendingTime)).
+		Debug("pair_sending", chat.PairSending).
+		Debug("change_alert", chat.ChangeAlert).
+		Debug("access", chat.Access).
+		Debug("dark_mode", chat.DarkMode).
+		Debug("created_at", formatMomentLocal(chat.CreatedAt)).
+		Debug("updated_at", formatMomentLocal(chat.UpdatedAt))
 }
