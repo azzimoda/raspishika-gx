@@ -170,7 +170,13 @@ func DeleteMessage(ctx context.Context, b *bot.Bot, message *models.Message) (bo
 	if message == nil {
 		return false, nil
 	}
-	return b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: message.Chat.ID, MessageID: message.ID})
+	ok, err := b.DeleteMessage(ctx, &bot.DeleteMessageParams{ChatID: message.Chat.ID, MessageID: message.ID})
+	if err != nil {
+		log.Warn().Err(err).Msg("Message not deleted with error")
+	} else if !ok {
+		log.Warn().Msg("Message not deleted")
+	}
+	return ok, err
 }
 
 func ParseBotCommands(bytes []byte) ([]models.BotCommand, error) {

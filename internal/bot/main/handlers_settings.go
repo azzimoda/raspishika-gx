@@ -24,8 +24,7 @@ func (h *handler) handleCmdSettings(ctx context.Context, b *bot.Bot, update *mod
 	chatID := update.Message.Chat.ID
 	threadID := update.Message.MessageThreadID
 
-	_, err := botutil.DeleteMessage(ctx, b, update.Message)
-	addHandlerCtxErr(ctx, err)
+	botutil.DeleteMessage(ctx, b, update.Message)
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {
@@ -38,7 +37,7 @@ func (h *handler) handleCmdSettings(ctx context.Context, b *bot.Bot, update *mod
 		return
 	}
 
-	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
+	_, err := botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
@@ -533,8 +532,7 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 }
 
 func (h *handler) handleCmdAccess(ctx context.Context, b *bot.Bot, update *models.Update) {
-	_, err := botutil.DeleteMessage(ctx, b, update.Message)
-	addHandlerCtxErr(ctx, err)
+	botutil.DeleteMessage(ctx, b, update.Message)
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	if !ok {

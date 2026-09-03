@@ -20,8 +20,7 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 	stop := sendChatActionTyping(ctx, b, chatID, threadID)
 	defer stop()
 
-	_, err := botutil.DeleteMessage(ctx, b, update.Message)
-	addHandlerCtxErr(ctx, err)
+	botutil.DeleteMessage(ctx, b, update.Message)
 
 	if status, err := h.Schedule.IsVacation(ctx); err != nil {
 		log.Warn().Err(err).Msg("Failed to check vacation status; trying to process anyway...")
@@ -78,8 +77,7 @@ func (h *handler) handleCmdTeacher(ctx context.Context, b *bot.Bot, update *mode
 }
 
 func (h *handler) handleTextTeacherName(ctx context.Context, b *bot.Bot, update *models.Update) {
-	_, err := botutil.DeleteMessage(ctx, b, update.Message)
-	addHandlerCtxErr(ctx, err)
+	botutil.DeleteMessage(ctx, b, update.Message)
 
 	teachers, err := h.Schedule.FindTeachersByName(ctx, update.Message.Text)
 	if err != nil {
