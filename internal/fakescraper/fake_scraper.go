@@ -3,6 +3,7 @@ package fakescraper
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/rs/zerolog/log"
@@ -500,6 +501,43 @@ var FakeSchedules = map[string]model.ScheduleData{
 	},
 } // TODO: Make schedules different.
 
+// FakeSchedule returns the demo schedule for the given group name or teacher
+// name with the day dates realigned to the current calendar days.
+func FakeSchedule(key string) (model.ScheduleData, bool) {
+	schedule, ok := FakeSchedules[key]
+	if !ok {
+		return model.ScheduleData{}, false
+	}
+	return withCurrentDates(schedule), true
+}
+
+// withCurrentDates realigns the static demo days so the first day of the
+// schedule is the current calendar day, like the real college site serves the
+// current week. Sundays (when the college is closed) are skipped; weekday names
+// and dates are recomputed from the template pairs.
+func withCurrentDates(schedule model.ScheduleData) model.ScheduleData {
+	days := make([]model.ScheduleDay, len(schedule.Days))
+	copy(days, schedule.Days)
+
+	now := time.Now()
+	date := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	if date.Weekday() == time.Sunday {
+		date = date.AddDate(0, 0, 1)
+	}
+
+	for i := range days {
+		days[i].Date = date.Format("2006-01-02")
+		days[i].Weekday = model.RussianWeekday(date.Weekday())
+		date = date.AddDate(0, 0, 1)
+		if date.Weekday() == time.Sunday {
+			date = date.AddDate(0, 0, 1)
+		}
+	}
+
+	schedule.Days = days
+	return schedule
+}
+
 func NewFakeScraper() *FakeScraper { return new(FakeScraper) }
 
 // FakeScraper serves static demo data for the fake API.
@@ -551,7 +589,7 @@ func (s *FakeScraper) ScrapeSchedule(url string, conf model.ScheduleConfig) (*mo
 		panic("invalid schedule config")
 	}
 
-	schedule, ok := FakeSchedules[key]
+	schedule, ok := FakeSchedule(key)
 	if ok {
 		log.Trace().Msg("Schedule found")
 		return &schedule, nil

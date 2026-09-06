@@ -64,6 +64,13 @@ func IsNetworkError(err error) bool {
 	}
 }
 
+// IsMessageNotModified reports whether err is Telegram's "message is not
+// modified" error raised when an edit produces identical content.
+func IsMessageNotModified(err error) bool {
+	return errors.Is(err, bot.ErrorBadRequest) &&
+		strings.Contains(strings.ToLower(err.Error()), "message is not modified")
+}
+
 // SendMessageWithRetry sends a message, retrying on network errors so replies are not
 // lost when a proxy dies mid-flight.
 func SendMessageWithRetry(ctx context.Context, b *bot.Bot, params *bot.SendMessageParams) (*models.Message, error) {
@@ -205,31 +212,21 @@ func ParseBotCommands(bytes []byte) ([]models.BotCommand, error) {
 	return commands, nil
 }
 
-func SendWeekScheduleMessages(
+func SendWeekSchedule(
 	ctx context.Context,
 	b *bot.Bot,
 	messageThreadID int,
 	chat *model.Chat,
 	conf model.ScheduleConfig,
+	days []model.ScheduleDay,
 	imageFilename string,
 	imageData []byte,
 	linkURL string,
 	isOld bool,
 ) error {
-
 	log.Debug().Msg("Sending week schedule message...")
 
 	var errs []error
-
-	if _, err := SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
-		ChatID:          chat.TgChatID,
-		MessageThreadID: messageThreadID,
-		Text:            conf.FormatHTML() + ":",
-		ParseMode:       models.ParseModeHTML,
-		ReplyMarkup:     MainMenuMarkup(chat.IsPrivate()),
-	}); err != nil {
-		errs = append(errs, err)
-	}
 
 	if _, err := b.SendChatAction(ctx, &bot.SendChatActionParams{
 		ChatID:          chat.TgChatID,
@@ -239,7 +236,7 @@ func SendWeekScheduleMessages(
 		errs = append(errs, err)
 	}
 
-	replyMarkup := WeekScheduleMarkup(conf, linkURL)
+	replyMarkup := WeekScheduleMarkup(conf, linkURL, days)
 	if err := sendSchedulePhoto(ctx, b, chat, messageThreadID, imageFilename, imageData, replyMarkup, isOld); err != nil {
 		errs = append(errs, err)
 	}
@@ -319,9 +316,37 @@ func TeacherSchedulePageURL(ctx context.Context, deps DepartmentsGetter, teacher
 	return SchedulePageURL(model.TeacherScheduleConfig(teacher, false), departments)
 }
 
-// WeekScheduleMarkup returns the keyboard for a week schedule photo.
-func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string) models.InlineKeyboardMarkup {
+// daysPerRow is the maximum number of short day buttons Telegram renders on a
+// single keyboard row.
+const daysPerRow = 6
 
+// dayJumpRows returns keyboard rows of day-jump buttons, one button per
+// schedule day split into rows of daysPerRow. When markCurrent is set, the
+// button at currentIdx is enclosed in square brackets, e.g. "[Чт]".
+func dayJumpRows(value string, days []model.ScheduleDay, currentIdx int, markCurrent bool) [][]models.InlineKeyboardButton {
+	rows := make([][]models.InlineKeyboardButton, 0, len(days)/daysPerRow+1)
+	row := make([]models.InlineKeyboardButton, 0, daysPerRow)
+	for i, day := range days {
+		label := weekdayAbbr(day.Weekday)
+		if markCurrent && i == currentIdx {
+			label = "[" + label + "]"
+		}
+		row = append(row, dayJumpButton(value, i, day, label))
+		if len(row) == daysPerRow {
+			rows = append(rows, row)
+			row = nil
+		}
+	}
+	if len(row) > 0 {
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// WeekScheduleMarkup returns the keyboard for a week schedule photo.
+// Besides the schedule-link and refresh buttons it adds one button per
+// schedule day (in table order) that opens that day as a text message.
+func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string, days []model.ScheduleDay) models.InlineKeyboardMarkup {
 	value := ""
 	switch {
 	case conf.Group != nil:
@@ -331,18 +356,37 @@ func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string) models.Inline
 	default:
 		return models.InlineKeyboardMarkup{}
 	}
-	return UpdateScheduleMarkup(UpdateKindWeek, value, linkURL)
+
+	keyboard := dayJumpRows(value, days, 0, false)
+
+	bottomRow := make([]models.InlineKeyboardButton, 0, 2)
+	if linkURL != "" {
+		bottomRow = append(bottomRow, ScheduleLinkButton(linkURL))
+	}
+	bottomRow = append(bottomRow, UpdateInlineButton(UpdateKindWeek, value))
+	keyboard = append(keyboard, bottomRow)
+
+	return models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }
 
-// UpdateScheduleMarkup returns the keyboard with a link to the college
-// schedule page (when linkURL is non-empty) and the update button.
-func UpdateScheduleMarkup(kind UpdateKind, value, linkURL string) models.InlineKeyboardMarkup {
-	row := make([]models.InlineKeyboardButton, 0, 2)
+// DayScheduleMarkup returns the keyboard for a text day view: one button per
+// schedule day (the current day is enclosed in square brackets, e.g. "[Чт]"),
+// a "Неделя" button that returns to the week photo, and the schedule link and
+// refresh buttons.
+func DayScheduleMarkup(value string, days []model.ScheduleDay, idx int, linkURL string) models.InlineKeyboardMarkup {
+	daysRow := dayJumpRows(value, days, idx, true)
+
+	weekRow := []models.InlineKeyboardButton{OpenWeekButton(value)}
+
+	bottomRow := make([]models.InlineKeyboardButton, 0, 2)
 	if linkURL != "" {
-		row = append(row, ScheduleLinkButton(linkURL))
+		bottomRow = append(bottomRow, ScheduleLinkButton(linkURL))
 	}
-	row = append(row, UpdateInlineButton(kind, value))
-	return models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{row}}
+	bottomRow = append(bottomRow, UpdateInlineButton(UpdateKindDay, value, idx))
+
+	daysRow = append(daysRow, weekRow, bottomRow)
+
+	return models.InlineKeyboardMarkup{InlineKeyboard: daysRow}
 }
 
 // LinkOnlyMarkup returns the keyboard with a single link button
@@ -351,6 +395,18 @@ func LinkOnlyMarkup(linkURL string) models.InlineKeyboardMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{{ScheduleLinkButton(linkURL)}},
 	}
+}
+
+// SimpleUpdateMarkup returns a single-row keyboard with the schedule link
+// (when linkURL is non-empty) and the refresh button. It is used for messages
+// where day navigation is not applicable.
+func SimpleUpdateMarkup(kind UpdateKind, value, linkURL string) models.InlineKeyboardMarkup {
+	row := make([]models.InlineKeyboardButton, 0, 2)
+	if linkURL != "" {
+		row = append(row, ScheduleLinkButton(linkURL))
+	}
+	row = append(row, UpdateInlineButton(kind, value))
+	return models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{row}}
 }
 
 // ScheduleLinkButton returns an inline link button opening the college
@@ -363,14 +419,75 @@ func ScheduleLinkButton(linkURL string) models.InlineKeyboardButton {
 // update button callback data to prevent edit errors when the content is unchanged.
 const callbackTimestampLayout = "20060102150405"
 
-func UpdateInlineButton(kind UpdateKind, value string) models.InlineKeyboardButton {
+// dayJumpButton returns a button that opens the schedule day at the given
+// index, labeled with the given text.
+func dayJumpButton(value string, idx int, day model.ScheduleDay, label string) models.InlineKeyboardButton {
 	return models.InlineKeyboardButton{
-		Text: "Обновить",
+		Text: label,
 		CallbackData: NewCallbackCommand(
-			kind.CallbackCommand(),
+			CallbackCommandUpdateDay,
+			value,
+			fmt.Sprintf("%d", idx),
+			time.Now().Format(callbackTimestampLayout),
+		).String(),
+	}
+}
+
+// OpenWeekButton returns the button that shows the week schedule as a photo.
+func OpenWeekButton(value string) models.InlineKeyboardButton {
+	return models.InlineKeyboardButton{
+		Text: "Неделя",
+		CallbackData: NewCallbackCommand(
+			CallbackCommandOpenWeek,
 			value,
 			time.Now().Format(callbackTimestampLayout),
 		).String(),
+	}
+}
+
+// weekdayAbbr maps a Russian weekday name (in any case) to a short
+// abbreviation used as a button label on the week schedule photo.
+func weekdayAbbr(weekday string) string {
+	switch strings.ToLower(weekday) {
+	case "понедельник":
+		return "Пн"
+	case "вторник":
+		return "Вт"
+	case "среда":
+		return "Ср"
+	case "четверг":
+		return "Чт"
+	case "пятница":
+		return "Пт"
+	case "суббота":
+		return "Сб"
+	case "воскресенье":
+		return "Вс"
+	default:
+		if len(weekday) > 0 {
+			return strings.ToUpper(weekday[:1])
+		}
+		return ""
+	}
+}
+
+// UpdateInlineButton builds an "Обновить" button. For a day view (kind ==
+// UpdateKindDay) the day index is appended so the refresh keeps the same day.
+func UpdateInlineButton(kind UpdateKind, value string, extra ...int) models.InlineKeyboardButton {
+	args := make([]string, 0, 3)
+	args = append(args, value)
+	if kind == UpdateKindDay && len(extra) > 0 {
+		args = append(args, fmt.Sprintf("%d", extra[0]))
+	}
+	args = append(args, time.Now().Format(callbackTimestampLayout))
+
+	command := kind.CallbackCommand()
+	if kind == UpdateKindWeek {
+		command = CallbackCommandUpdateWeek
+	}
+	return models.InlineKeyboardButton{
+		Text:         "Обновить",
+		CallbackData: NewCallbackCommand(command, args...).String(),
 	}
 }
 

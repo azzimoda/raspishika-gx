@@ -119,7 +119,7 @@ func (h *handler) handleCQUpdateWeek(ctx context.Context, b *bot.Bot, update *mo
 			Media:           "attach://image.png",
 			MediaAttachment: bytes.NewReader(imageData),
 		},
-		ReplyMarkup: botutil.WeekScheduleMarkup(conf, linkURL),
+		ReplyMarkup: botutil.WeekScheduleMarkup(conf, linkURL, schedule.Days),
 	})
 	if err != nil {
 		addHandlerCtxErr(ctx, err)
@@ -202,15 +202,25 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 
 	tomorrow := schedule.Tomorrow(time.Now())
 
+	idx := 1
+	if time.Now().Weekday() == time.Sunday {
+		idx = 0
+	}
+
 	message := update.CallbackQuery.Message.Message
 	_, err = b.EditMessageText(ctx, &bot.EditMessageTextParams{
 		ChatID:      message.Chat.ID,
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        formatDayHTML(conf.Name(), tomorrow),
-		ReplyMarkup: botutil.UpdateScheduleMarkup(botutil.UpdateKindTomorrow, string(groupName), botutil.SchedulePageURL(conf, nil)),
+		ReplyMarkup: dayMarkup(conf, schedule.Days, idx, botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {
+		if botutil.IsMessageNotModified(err) {
+			_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
+			addHandlerCtxErr(ctx, err)
+			return
+		}
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
@@ -242,9 +252,14 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 			MessageID:   message.ID,
 			ParseMode:   models.ParseModeHTML,
 			Text:        "Сегодня воскресенье, отдыхайте!",
-			ReplyMarkup: botutil.UpdateScheduleMarkup(botutil.UpdateKindToday, string(groupName), botutil.CollegeScheduleURL),
+			ReplyMarkup: botutil.SimpleUpdateMarkup(botutil.UpdateKindToday, string(groupName), botutil.CollegeScheduleURL),
 		})
 		if err != nil {
+			if botutil.IsMessageNotModified(err) {
+				_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
+				addHandlerCtxErr(ctx, err)
+				return
+			}
 			addHandlerCtxErr(ctx, err)
 			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 				CallbackQueryID: callbackQueryID,
@@ -309,9 +324,14 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		MessageID:   message.ID,
 		ParseMode:   models.ParseModeHTML,
 		Text:        formatDayDynamicHTML(conf.Name(), today, time.Now()),
-		ReplyMarkup: botutil.UpdateScheduleMarkup(botutil.UpdateKindToday, string(groupName), botutil.SchedulePageURL(conf, nil)),
+		ReplyMarkup: dayMarkup(conf, schedule.Days, 0, botutil.SchedulePageURL(conf, nil)),
 	})
 	if err != nil {
+		if botutil.IsMessageNotModified(err) {
+			_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
+			addHandlerCtxErr(ctx, err)
+			return
+		}
 		addHandlerCtxErr(ctx, err)
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,

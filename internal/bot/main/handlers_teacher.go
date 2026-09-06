@@ -210,8 +210,8 @@ func (h *handler) sendTeacherSchedule(
 	}
 	log.Trace().Msg("Prepared schedule image")
 
-	return botutil.SendWeekScheduleMessages(
-		ctx, b, message.MessageThreadID, chat, conf, imageFilename, imageData,
+	return botutil.SendWeekSchedule(
+		ctx, b, message.MessageThreadID, chat, conf, schedule.Days, imageFilename, imageData,
 		botutil.TeacherSchedulePageURL(ctx, h.Schedule, teacher), schedule.IsOld)
 }
 

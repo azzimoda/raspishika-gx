@@ -97,10 +97,12 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerRegularCallbackHandler(botutil.CallbackCommandDelete, h.handleCQDelete)
 		registerRegularCallbackHandler(botutil.CallbackCommandSelectTeacher, h.handleCQTeacher)
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateWeek, h.handleCQUpdateWeek)
-		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateWeek) // legacy
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateGroup, h.handleCQUpdateWeek)   // legacy
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTeacher, h.handleCQUpdateWeek) // legacy
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateTomorrow, h.handleCQUpdateTomorrow)
 		registerRegularCallbackHandler(botutil.CallbackCommandUpdateToday, h.handleCQUpdateToday)
+		registerRegularCallbackHandler(botutil.CallbackCommandUpdateDay, h.handleCQUpdateDay)
+		registerRegularCallbackHandler(botutil.CallbackCommandOpenWeek, h.handleCQOpenWeek)
 
 		// Config callbacks
 		registerConfigCallbackHandler := func(callbackCommand string, handler bot.HandlerFunc) {

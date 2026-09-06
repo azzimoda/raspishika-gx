@@ -74,7 +74,7 @@ func (f fakeScraperAPI) GetSchedule(ctx context.Context, params *apiclient.GetSc
 		panic("invalid schedule config")
 	}
 
-	scheduleData, ok := fakescraper.FakeSchedules[key]
+	scheduleData, ok := fakescraper.FakeSchedule(key)
 	if ok {
 		log.Trace().Msg("Schedule found")
 		return &scheduleData, nil

@@ -237,12 +237,13 @@ func (s *BroadcastService) sendDaily(
 				c = dark
 			}
 			var err error
-			if err = botutil.SendWeekScheduleMessages(
+			if err = botutil.SendWeekSchedule(
 				ctx,
 				s.Bot.Bot,
 				0,
 				chat,
 				c.schedule.Config,
+				c.schedule.Days,
 				c.imageFileName,
 				c.imageData,
 				botutil.SchedulePageURL(c.schedule.Config, nil),
@@ -575,12 +576,13 @@ func (s *BroadcastService) sendChangeReports(
 
 			var err error = nil
 
-			if errSchedule := botutil.SendWeekScheduleMessages(
+			if errSchedule := botutil.SendWeekSchedule(
 				ctx,
 				s.Bot.Bot,
 				0,
 				chat,
 				c.schedule.Config,
+				c.schedule.Days,
 				c.imageFileName,
 				c.imageData,
 				botutil.SchedulePageURL(c.schedule.Config, nil),

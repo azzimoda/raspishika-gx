@@ -20,6 +20,8 @@ const (
 	CallbackCommandUpdateTeacher  = "update_teacher"
 	CallbackCommandUpdateTomorrow = "update_tomorrow"
 	CallbackCommandUpdateToday    = "update_today"
+	CallbackCommandUpdateDay      = "update_day"
+	CallbackCommandOpenWeek       = "open_week"
 
 	CallbackCommandBroadcast           = "broadcast"
 	CallbackCommandBroadcastAll        = "broadcast_all"
@@ -42,6 +44,7 @@ const (
 	UpdateKindWeek     UpdateKind = "week"
 	UpdateKindToday    UpdateKind = "today"
 	UpdateKindTomorrow UpdateKind = "tomorrow"
+	UpdateKindDay      UpdateKind = "day"
 )
 
 // CallbackCommand returns the callback command prefix for the kind.

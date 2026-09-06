@@ -1,19 +1,21 @@
 package botutil
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
 
 const testLinkURL = "https://coworking.tyuiu.ru/shs/all_t/sh.php"
 
-func TestUpdateScheduleMarkupWithLink(t *testing.T) {
-	markup := UpdateScheduleMarkup(UpdateKindToday, "ИСПт-22-(9)-2", testLinkURL)
+func TestSimpleUpdateMarkupWithLink(t *testing.T) {
+	markup := SimpleUpdateMarkup(UpdateKindToday, "ИСПт-22-(9)-2", testLinkURL)
 
 	row := markup.InlineKeyboard[0]
 	if len(row) != 2 {
@@ -30,8 +32,8 @@ func TestUpdateScheduleMarkupWithLink(t *testing.T) {
 	}
 }
 
-func TestUpdateScheduleMarkupWithoutLink(t *testing.T) {
-	markup := UpdateScheduleMarkup(UpdateKindToday, "ИСПт-22-(9)-2", "")
+func TestSimpleUpdateMarkupWithoutLink(t *testing.T) {
+	markup := SimpleUpdateMarkup(UpdateKindToday, "ИСПт-22-(9)-2", "")
 
 	row := markup.InlineKeyboard[0]
 	if len(row) != 1 {
@@ -56,15 +58,30 @@ func TestLinkOnlyMarkup(t *testing.T) {
 
 func TestWeekScheduleMarkup(t *testing.T) {
 
+	days := []model.ScheduleDay{
+		{Date: "2026-09-01", Weekday: "вторник"},
+		{Date: "2026-09-02", Weekday: "среда"},
+		{Date: "2026-09-03", Weekday: "четверг"},
+		{Date: "2026-09-04", Weekday: "пятница"},
+		{Date: "2026-09-05", Weekday: "суббота"},
+	}
+
 	groupConf := model.ScheduleConfig{
 		Group: &model.Group{GroupID: "205", GroupName: "ИСПт-22-(9)-2", DepartmentID: "15", Year: 2026},
 	}
-	markup := WeekScheduleMarkup(groupConf, testLinkURL)
+	markup := WeekScheduleMarkup(groupConf, testLinkURL, days)
 
 	teacherConf := model.ScheduleConfig{
 		Teacher: &model.Teacher{TeacherID: "205", Name: "Иванов Иван Иванович"},
 	}
-	teacherMarkup := WeekScheduleMarkup(teacherConf, testLinkURL)
+	teacherMarkup := WeekScheduleMarkup(teacherConf, testLinkURL, days)
+
+	// Keyboard has one row for the day buttons (up to 6 per row) plus the
+	// bottom link/update row.
+	dayRows := (len(days) + 5) / 6
+	if len(markup.InlineKeyboard) != dayRows+1 {
+		t.Errorf("group keyboard rows = %d, want %d", len(markup.InlineKeyboard), dayRows+1)
+	}
 
 	for _, tt := range []struct {
 		name  string
@@ -74,19 +91,156 @@ func TestWeekScheduleMarkup(t *testing.T) {
 		{"group", markup, "ИСПт-22-(9)-2"},
 		{"teacher", teacherMarkup, "205"},
 	} {
-		row := tt.ikm.InlineKeyboard[0]
-		update := row[len(row)-1]
+		bottom := tt.ikm.InlineKeyboard[len(tt.ikm.InlineKeyboard)-1]
+		update := bottom[len(bottom)-1]
 		want := fmt.Sprintf("update_week\n%s\n", tt.value)
 		if !strings.HasPrefix(update.CallbackData, want) {
 			t.Errorf("%s: update callback = %q, want prefix %q", tt.name, update.CallbackData, want)
+		}
+
+		// First day button should carry the day index 0 and the value.
+		firstDay := tt.ikm.InlineKeyboard[0][0]
+		wantDay := fmt.Sprintf("update_day\n%s\n0\n", tt.value)
+		if !strings.HasPrefix(firstDay.CallbackData, wantDay) {
+			t.Errorf("%s: day callback = %q, want prefix %q", tt.name, firstDay.CallbackData, wantDay)
 		}
 	}
 }
 
 func TestWeekScheduleMarkupNoConfig(t *testing.T) {
-	markup := WeekScheduleMarkup(model.ScheduleConfig{}, testLinkURL)
+	markup := WeekScheduleMarkup(model.ScheduleConfig{}, testLinkURL, nil)
 	if markup.InlineKeyboard != nil {
 		t.Fatalf("want empty keyboard for config without group or teacher, got %+v", markup.InlineKeyboard)
+	}
+}
+
+func TestDayScheduleMarkup(t *testing.T) {
+	days := []model.ScheduleDay{
+		{Date: "2026-09-07", Weekday: "понедельник"},
+		{Date: "2026-09-08", Weekday: "вторник"},
+		{Date: "2026-09-09", Weekday: "среда"},
+		{Date: "2026-09-10", Weekday: "четверг"},
+		{Date: "2026-09-11", Weekday: "пятница"},
+	}
+	markup := DayScheduleMarkup("ИСПт-22-(9)-2", days, 2, testLinkURL)
+
+	if len(markup.InlineKeyboard) != 3 {
+		t.Fatalf("want 3 rows (days, back, bottom), got %d", len(markup.InlineKeyboard))
+	}
+
+	dayRow := markup.InlineKeyboard[0]
+	if len(dayRow) != len(days) {
+		t.Fatalf("day row = %d buttons, want %d", len(dayRow), len(days))
+	}
+	wantLabels := []string{"Пн", "Вт", "[Ср]", "Чт", "Пт"}
+	for i, btn := range dayRow {
+		if btn.Text != wantLabels[i] {
+			t.Errorf("day %d button text = %q, want %q", i, btn.Text, wantLabels[i])
+		}
+		wantDay := fmt.Sprintf("update_day\nИСПт-22-(9)-2\n%d\n", i)
+		if !strings.HasPrefix(btn.CallbackData, wantDay) {
+			t.Errorf("day %d callback = %q, want prefix %q", i, btn.CallbackData, wantDay)
+		}
+	}
+
+	back := markup.InlineKeyboard[1][0]
+	if back.Text != "Неделя" || !strings.HasPrefix(back.CallbackData, "open_week\nИСПт-22-(9)-2\n") {
+		t.Errorf("back button = %+v, want open_week", back)
+	}
+}
+
+func TestDayScheduleMarkupCurrentDayBrackets(t *testing.T) {
+	days := []model.ScheduleDay{
+		{Date: "2026-09-07", Weekday: "понедельник"},
+		{Date: "2026-09-08", Weekday: "вторник"},
+		{Date: "2026-09-09", Weekday: "среда"},
+	}
+	for _, tt := range []struct {
+		name string
+		idx  int
+		want []string
+	}{
+		{"first", 0, []string{"[Пн]", "Вт", "Ср"}},
+		{"middle", 1, []string{"Пн", "[Вт]", "Ср"}},
+		{"last", 2, []string{"Пн", "Вт", "[Ср]"}},
+	} {
+		markup := DayScheduleMarkup("205", days, tt.idx, "")
+		if len(markup.InlineKeyboard) != 3 {
+			t.Fatalf("%s: rows = %d, want 3", tt.name, len(markup.InlineKeyboard))
+		}
+		dayRow := markup.InlineKeyboard[0]
+		if len(dayRow) != len(days) {
+			t.Fatalf("%s: day row = %d buttons, want %d", tt.name, len(dayRow), len(days))
+		}
+		for i, btn := range dayRow {
+			if btn.Text != tt.want[i] {
+				t.Errorf("%s: day %d text = %q, want %q", tt.name, i, btn.Text, tt.want[i])
+			}
+		}
+	}
+}
+
+func TestDayScheduleMarkupChunks(t *testing.T) {
+	days := make([]model.ScheduleDay, 0, 8)
+	weekdays := []string{"понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "понедельник", "вторник"}
+	for i, wd := range weekdays {
+		days = append(days, model.ScheduleDay{Date: fmt.Sprintf("2026-09-%02d", 14+i), Weekday: wd})
+	}
+
+	markup := DayScheduleMarkup("205", days, 6, "")
+	if len(markup.InlineKeyboard) != 4 {
+		t.Fatalf("rows = %d, want 4 (2 day rows + back + bottom)", len(markup.InlineKeyboard))
+	}
+	first, second := markup.InlineKeyboard[0], markup.InlineKeyboard[1]
+	if len(first) != 6 || len(second) != 2 {
+		t.Fatalf("day rows = %d and %d buttons, want 6 and 2", len(first), len(second))
+	}
+	if second[0].Text != "[Пн]" {
+		t.Errorf("chunked current day label = %q, want %q", second[0].Text, "[Пн]")
+	}
+	wantFirst := fmt.Sprintf("update_day\n205\n5\n")
+	if !strings.HasPrefix(first[5].CallbackData, wantFirst) {
+		t.Errorf("first chunk last callback = %q, want prefix %q", first[5].CallbackData, wantFirst)
+	}
+}
+
+func TestWeekdayAbbr(t *testing.T) {
+	for _, tt := range []struct {
+		in   string
+		want string
+	}{
+		{"понедельник", "Пн"},
+		{"Понедельник", "Пн"},
+		{"ВТОРНИК", "Вт"},
+		{"среда", "Ср"},
+		{"Четверг", "Чт"},
+		{"пятница", "Пт"},
+		{"Суббота", "Сб"},
+		{"воскресенье", "Вс"},
+		{"", ""},
+		{"unknown", "U"},
+	} {
+		if got := weekdayAbbr(tt.in); got != tt.want {
+			t.Errorf("weekdayAbbr(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestIsMessageNotModified(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"not modified", fmt.Errorf("%w, %s", bot.ErrorBadRequest, "Bad Request: message is not modified"), true},
+		{"not modified different case", fmt.Errorf("%w, %s", bot.ErrorBadRequest, "Bad Request: Message Is Not Modified"), true},
+		{"other bad request", fmt.Errorf("%w, %s", bot.ErrorBadRequest, "Bad Request: chat not found"), false},
+		{"network error", errors.New("proxy connect failed"), false},
+		{"nil", nil, false},
+	} {
+		if got := IsMessageNotModified(tt.err); got != tt.want {
+			t.Errorf("%s: IsMessageNotModified() = %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }
 
@@ -98,6 +252,7 @@ func TestUpdateKindCallbackCommand(t *testing.T) {
 		{UpdateKindWeek, CallbackCommandUpdateWeek},
 		{UpdateKindToday, CallbackCommandUpdateToday},
 		{UpdateKindTomorrow, CallbackCommandUpdateTomorrow},
+		{UpdateKindDay, CallbackCommandUpdateDay},
 	} {
 		if got := tt.kind.CallbackCommand(); got != tt.want {
 			t.Errorf("%s: CallbackCommand() = %q, want %q", tt.kind, got, tt.want)

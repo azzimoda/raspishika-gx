@@ -17,6 +17,13 @@ import (
 // PairKind describes the type of a pair (lecture, exam, vacation, etc.).
 type PairKind string
 
+// RussianWeekday returns the lowercase Russian name of a Go weekday
+// (e.g. "понедельник").
+func RussianWeekday(weekday time.Weekday) string {
+	names := [...]string{"воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"}
+	return names[weekday]
+}
+
 // Pair kinds.
 const (
 	PairKindEmpty        PairKind = "empty"

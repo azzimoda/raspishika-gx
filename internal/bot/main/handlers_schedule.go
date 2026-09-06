@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
@@ -94,7 +95,7 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	}
 	log.Trace().Msg("Prepared schedule image")
 
-	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), schedule.IsOld)
+	err = botutil.SendWeekSchedule(ctx, b, threadID, chat, conf, schedule.Days, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), schedule.IsOld)
 	addHandlerCtxErr(ctx, err)
 
 	log.Info().Msg("Handled command week")
@@ -166,8 +167,12 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 
 	tomorrow := schedule.Tomorrow(time.Now())
 
+	idx := 1
+	if time.Now().Weekday() == time.Sunday {
+		idx = 0
+	}
 	text := formatDayHTML(conf.Name(), tomorrow)
-	inlineMarkup := botutil.UpdateScheduleMarkup(botutil.UpdateKindTomorrow, string(group.GroupName), botutil.SchedulePageURL(conf, nil))
+	inlineMarkup := dayMarkup(conf, schedule.Days, idx, botutil.SchedulePageURL(conf, nil))
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.TgChatID,
 		MessageThreadID: threadID,
@@ -225,15 +230,13 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
 
-	inlineMarkup := botutil.UpdateScheduleMarkup(botutil.UpdateKindToday, string(group.GroupName), botutil.SchedulePageURL(conf, nil))
-
 	// If today is Sunday, send a special message
 	if time.Now().Weekday() == time.Sunday {
 		_, err := botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            "Сегодня воскресенье, отдыхайте!",
-			ReplyMarkup:     inlineMarkup,
+			ReplyMarkup:     botutil.SimpleUpdateMarkup(botutil.UpdateKindToday, string(group.GroupName), botutil.SchedulePageURL(conf, nil)),
 		})
 		addHandlerCtxErr(ctx, err)
 		return
@@ -268,7 +271,7 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,
-		ReplyMarkup:     inlineMarkup,
+		ReplyMarkup:     dayMarkup(conf, schedule.Days, 0, botutil.SchedulePageURL(conf, nil)),
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -368,7 +371,7 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 		return
 	}
 
-	err = botutil.SendWeekScheduleMessages(ctx, b, threadID, chat, conf, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), schedule.IsOld)
+	err = botutil.SendWeekSchedule(ctx, b, threadID, chat, conf, schedule.Days, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), schedule.IsOld)
 	addHandlerCtxErr(ctx, err)
 
 	log.Info().Msg("Handled quick group")
@@ -428,9 +431,93 @@ func sendVacationAnswer(ctx context.Context, b *bot.Bot, update *models.Update, 
 	}
 }
 
-func formatDayHTML(name string, day model.ScheduleDay) string {
+// dayMarkup returns the navigation keyboard for a text day view at the given
+// index within the week's days. The value (group name or teacher ID) is
+// derived from the schedule config.
+func dayMarkup(conf model.ScheduleConfig, days []model.ScheduleDay, idx int, linkURL string) models.InlineKeyboardMarkup {
+	value := ""
+	switch {
+	case conf.Group != nil:
+		value = string(conf.Group.GroupName)
+	case conf.Teacher != nil:
+		value = conf.Teacher.TeacherID
+	}
+	return botutil.DayScheduleMarkup(value, days, idx, linkURL)
+}
 
-	text := fmt.Sprintf("📅 %s — %s, %s", name, day.Weekday, day.Date) + ": "
+// scheduleDayDateLayouts are the date formats a schedule day may come in: the
+// real scraper produces "DD.MM.YYYY" while demo data uses "YYYY-MM-DD".
+var scheduleDayDateLayouts = []string{"02.01.2006", "2006-01-02"}
+
+// parseDayDate parses a schedule day date in any known layout.
+func parseDayDate(s string) (time.Time, bool) {
+	for _, layout := range scheduleDayDateLayouts {
+		if t, err := time.ParseInLocation(layout, s, time.Now().Location()); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// isDayOn reports whether the schedule day falls on the given calendar date.
+func isDayOn(day model.ScheduleDay, t time.Time) bool {
+	date, ok := parseDayDate(day.Date)
+	if !ok {
+		return false
+	}
+	y1, m1, d1 := date.Date()
+	y2, m2, d2 := t.Date()
+	return y1 == y2 && m1 == m2 && d1 == d2
+}
+
+// isTodayDay reports whether the schedule day is the current calendar day.
+func isTodayDay(day model.ScheduleDay) bool { return isDayOn(day, time.Now()) }
+
+// isTomorrowDay reports whether the schedule day is the next calendar day.
+func isTomorrowDay(day model.ScheduleDay) bool { return isDayOn(day, time.Now().AddDate(0, 0, 1)) }
+
+// dayMarker returns a short human-readable marker for the day when it
+// corresponds to today or tomorrow, e.g. " (сегодня)". Otherwise it returns
+// an empty string. The day is matched by calendar date; when its date cannot
+// be parsed it falls back to comparing the lowercase Russian weekday names
+// coming from the scraper.
+func dayMarker(day model.ScheduleDay) string {
+	if isTodayDay(day) {
+		return " (сегодня)"
+	}
+	if isTomorrowDay(day) {
+		return " (завтра)"
+	}
+
+	// Fallback for schedule days without a parseable date.
+	if _, ok := parseDayDate(day.Date); ok {
+		return ""
+	}
+
+	now := time.Now()
+	if strings.EqualFold(day.Weekday, model.RussianWeekday(now.Weekday())) {
+		return " (сегодня)"
+	}
+	if strings.EqualFold(day.Weekday, model.RussianWeekday(now.AddDate(0, 0, 1).Weekday())) {
+		return " (завтра)"
+	}
+	return ""
+}
+
+// formatDayDate returns the schedule day's date in the "dd.mm.yyyy" format,
+// falling back to the raw date string when it cannot be parsed. The scraped
+// and demo data provide the date in different formats ("DD.MM.YYYY" and
+// "YYYY-MM-DD"), hence the normalization.
+func formatDayDate(day model.ScheduleDay) string {
+	date, ok := parseDayDate(day.Date)
+	if !ok {
+		return day.Date
+	}
+	return date.Format("02.01.2006")
+}
+
+func formatDayHTML(name string, day model.ScheduleDay) string {
+	text := fmt.Sprintf("📅 %s — %s, %s%s: ", name, day.Weekday, formatDayDate(day), dayMarker(day))
 
 	if kind := day.CommonKind(); kind != "" {
 		log.Trace().Msgf("Detected common kind: %s", kind)
@@ -453,7 +540,7 @@ func formatDayHTML(name string, day model.ScheduleDay) string {
 }
 func formatDayDynamicHTML(name string, day model.ScheduleDay, t time.Time) string {
 
-	text := fmt.Sprintf("📅 %s — %s, %s", name, day.Weekday, day.Date) + ": "
+	text := fmt.Sprintf("📅 %s — %s, %s%s: ", name, day.Weekday, formatDayDate(day), dayMarker(day))
 
 	if kind := day.CommonKind(); kind != "" {
 		log.Trace().Msgf("Detected common kind: %s", kind)
