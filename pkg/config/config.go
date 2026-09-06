@@ -16,6 +16,13 @@ const (
 
 	KeyDBFile         = "db_file"
 	KeyDBMigrationDir = "db_migration_dir"
+	KeyDBDriver       = "db_driver"
+	KeyDBHost         = "db_host"
+	KeyDBPort         = "db_port"
+	KeyDBUser         = "db_user"
+	KeyDBPassword     = "db_password"
+	KeyDBName         = "db_name"
+	KeyDBSSLMode      = "db_sslmode"
 
 	KeyRedisHost     = "redis_host"
 	KeyRedisPort     = "redis_port"
@@ -69,6 +76,13 @@ func Init() {
 
 	viper.SetDefault(KeyDBFile, "storage/database/data.db")
 	viper.SetDefault(KeyDBMigrationDir, "migrations")
+	viper.SetDefault(KeyDBDriver, "sqlite3")
+	viper.SetDefault(KeyDBHost, "db")
+	viper.SetDefault(KeyDBPort, "5432")
+	viper.SetDefault(KeyDBUser, "postgres")
+	viper.SetDefault(KeyDBPassword, "raspishika")
+	viper.SetDefault(KeyDBName, "raspishika")
+	viper.SetDefault(KeyDBSSLMode, "disable")
 
 	viper.SetDefault(KeyRedisHost, "redis")
 	viper.SetDefault(KeyRedisPort, "6379")

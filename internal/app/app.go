@@ -47,7 +47,17 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
 
-	db, err := database.Open(viper.GetString(config.KeyDBFile), viper.GetString(config.KeyDBMigrationDir))
+	db, err := database.Open(database.Config{
+		Driver:        viper.GetString(config.KeyDBDriver),
+		File:          viper.GetString(config.KeyDBFile),
+		MigrationsDir: viper.GetString(config.KeyDBMigrationDir),
+		Host:          viper.GetString(config.KeyDBHost),
+		Port:          viper.GetString(config.KeyDBPort),
+		User:          viper.GetString(config.KeyDBUser),
+		Password:      viper.GetString(config.KeyDBPassword),
+		Name:          viper.GetString(config.KeyDBName),
+		SSLMode:       viper.GetString(config.KeyDBSSLMode),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
