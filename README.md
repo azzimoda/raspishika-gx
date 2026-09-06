@@ -76,8 +76,26 @@ docker compose up --build
 Для локальной разработки с демо-данными (вместо реального скрейпинга):
 
 ```sh
-docker compose -f compose-fakeapi.yaml up --build
+docker compose -f compose.fakeapi.yaml up --build
 ```
+
+### Make
+
+Ключевые цели Makefile:
+
+```sh
+make check        # fmt-check + vet + test + build
+make build-bot    # только бот (./cmd/bot, нужен CGO и Chromium)
+make build-api    # API-скрейпер (./cmd/api)
+make test         # go test ./...
+make docs         # перегенерировать Swagger-документацию (go generate ./...)
+make up           # docker compose up --build -d (реальный API)
+make up-fake      # то же, но с демо-данными (compose.fakeapi.yaml)
+make up-local     # то же, но API собирается из исходников (compose.local.yaml)
+make logs         # docker compose logs -f
+```
+
+Полный список — `make help`.
 
 ### Ручная сборка
 

@@ -36,7 +36,7 @@ SQLite at `storage/database/data.db`, accessed via GORM (`database.Open` returns
 ## Tests
 
 - `go test ./...` passes with no external services (Redis tests use miniredis, HTTP tests use httptest). Run from repo root: some tests (`internal/model`) chdir to project root via `testutil.MoveToProjectRoot()`.
-- `go build ./...` should stay clean. There is no linter/CI/Makefile.
+- `go build ./...` should stay clean. There is a repo-root `Makefile`: `make check` runs `gofmt -l` + `go vet` + `go test` + `go build`, `make docs` regenerates Swagger, `make up-fake`/`make up-local` run the demo/real stack in Docker. There is no linter or CI locally.
 
 ## Codegen
 
