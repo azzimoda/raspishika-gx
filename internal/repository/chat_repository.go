@@ -511,7 +511,13 @@ type TimeCount struct {
 }
 
 func (r *chatRepository) DeleteChat(ctx context.Context, id int64) error {
-	return r.db.WithContext(ctx).Delete(&model.Chat{}, id).Error
+	// Do not rely on SQLite's per-connection foreign_keys setting for /stop.
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("chat_id = ?", id).Delete(&model.RecentTeacher{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Chat{}, id).Error
+	})
 }
 
 func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, error) {

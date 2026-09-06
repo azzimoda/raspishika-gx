@@ -57,7 +57,11 @@ func (s *ScheduleService) GetSchedule(
 	if err != nil {
 		return
 	}
-	schedule.Config = conf
+	if schedule == nil {
+		return nil, errors.New("API returned an empty schedule")
+	}
+	copy := schedule.WithConfig(conf)
+	schedule = &copy
 	return
 }
 
@@ -94,6 +98,9 @@ func (s *ScheduleService) GetScheduleCache(ctx context.Context, key string) (raw
 
 	if scheduleCache, err := s.schedule.GetByKey(ctx, key); err == nil {
 		schedule, errUnmarshal := scheduleCache.Unmarshal()
+		if errUnmarshal != nil {
+			return nil, false
+		}
 		if scheduleCache.IsActual(viper.GetDuration(config.KeyCacheScheduleTTL)) {
 			return schedule, errUnmarshal == nil
 		}
@@ -114,6 +121,13 @@ func (s *ScheduleService) UpdateScheduleCache(
 	key := conf.ScheduleKey()
 	result, err, _ := s.sf.Do(key, func() (any, error) {
 		sch, err := s.scraper.GetSchedule(ctx, scheduleConfigToAPIParams(&conf))
+		if err == nil && sch == nil {
+			err = errors.New("API returned an empty schedule")
+		}
+		if err == nil {
+			copy := sch.WithConfig(conf)
+			sch = &copy
+		}
 		return sch, err
 	})
 	if err != nil {
@@ -150,8 +164,10 @@ func (s *ScheduleService) GetChanges(
 
 		conf := model.GroupScheduleConfig(group, false)
 
-		oldRawSchedule, ok := s.GetScheduleCache(ctx, conf.ScheduleKey())
-		if !ok || oldRawSchedule == nil {
+		// Expiration controls serving cached data, not whether it can be used
+		// as the baseline for detecting changes after a long outage.
+		oldRawSchedule, _ := s.GetScheduleCache(ctx, conf.ScheduleKey())
+		if oldRawSchedule == nil {
 			log.Warn().Err(err).Str("key", conf.ScheduleKey()).Msg("No change for the schedule config")
 			if _, err := s.UpdateScheduleCache(ctx, conf); err != nil {
 				errs = append(errs, fmt.Errorf("failed to update schedule cache: %w", err))
@@ -187,7 +203,13 @@ func (s *ScheduleService) PrepareScheduleImage(
 ) (fileName string, bytes []byte, err error) {
 	log.Trace().Msg("Preparing schedule image...")
 
-	template := getScheduleTemplate(schedule.Config.IsDark)
+	if schedule == nil {
+		return "", nil, errors.New("cannot render an empty schedule")
+	}
+	template, err := getScheduleTemplate(schedule.Config.IsDark)
+	if err != nil {
+		return "", nil, err
+	}
 	fileName, bytes, err = s.screenshot(schedule.Config, schedule.HTML(template))
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to generate schedule image: %w", err)
@@ -268,30 +290,20 @@ func (s *ScheduleService) HealthCheck() error {
 	return nil
 }
 
-func getScheduleTemplate(is_dark bool) string {
+func getScheduleTemplate(is_dark bool) (string, error) {
 	fileKey := config.KeyScheduleTemplateFile
 	if is_dark {
 		fileKey = config.KeyScheduleTemplateDarkFile
 	}
-	key := config.KeyScheduleTemplate
-	if is_dark {
-		key = config.KeyScheduleTemplateDark
-	}
-
 	templateFile := viper.GetString(fileKey)
 	bytes, err := os.ReadFile(templateFile)
-	template := ""
 	if err != nil {
-		log.Error().Err(err).Str("templateFile", templateFile).Msg("Failed to load template file")
-	} else {
-		template = string(bytes)
-		viper.Set(key, template)
+		return "", fmt.Errorf("read schedule template %s: %w", templateFile, err)
 	}
-
-	if err != nil {
-		return viper.GetString(key)
+	if len(bytes) == 0 {
+		return "", errors.New("schedule template is empty")
 	}
-	return template
+	return string(bytes), nil
 }
 
 func scheduleScreenshotFileName(conf model.ScheduleConfig) string { return conf.ImageKey() + ".png" }

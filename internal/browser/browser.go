@@ -229,7 +229,13 @@ func (b *ChromedpBrowser) ScreenshotHTML(html string) ([]byte, error) {
 
 func (b *ChromedpBrowser) runScreenshot(html string) ([]byte, error) {
 	var imageData []byte
-	if err := chromedp.Run(b.chromedpCtx, chromedp.Tasks{
+	timeout := viper.GetDuration(config.KeyBrowserTimeout)
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(b.chromedpCtx, timeout)
+	defer cancel()
+	if err := chromedp.Run(ctx, chromedp.Tasks{
 		chromedp.Navigate("about:blank"),
 		LogAction("Navigated to about:blank"),
 		chromedp.ActionFunc(func(ctx context.Context) error {

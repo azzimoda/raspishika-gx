@@ -18,16 +18,21 @@ func NewScheduleChange(old, new ScheduleData) *ScheduleChange {
 	return &ScheduleChange{old, new}
 }
 func Synchronize(old, new ScheduleData) (ScheduleData, ScheduleData) {
-	if len(old.Days) == 0 || len(new.Days) == 0 {
-		return old, new
+	// The college returns a rolling window. Dates leaving or entering that
+	// window are not lesson cancellations or additions; compare common dates.
+	// Match their identity rather than assuming exactly one day has passed.
+	newByDate := make(map[string]ScheduleDay, len(new.Days))
+	for _, day := range new.Days {
+		newByDate[day.Date] = day
 	}
-	if old.Days[0].Date != new.Days[0].Date {
-		// Shift old schedule one day forward
-		old.Days = old.Days[1:]
+	var oldDays, newDays []ScheduleDay
+	for _, oldDay := range old.Days {
+		if newDay, ok := newByDate[oldDay.Date]; ok {
+			oldDays = append(oldDays, oldDay)
+			newDays = append(newDays, newDay)
+		}
 	}
-	length := min(len(old.Days), len(new.Days))
-	old.Days = old.Days[:length]
-	new.Days = new.Days[:length]
+	old.Days, new.Days = oldDays, newDays
 	return old, new
 }
 
@@ -38,18 +43,51 @@ type ScheduleChange struct {
 
 func (s *ScheduleChange) Diffs() []Diff {
 	var absDiffs []Diff
-	for d := range s.Old.Days {
-		for p := range s.Old.Days[d].Pairs {
-			newDay := s.New.Days[d]
-			oldPair := s.Old.Days[d].Pairs[p]
-			newPair := s.New.Days[d].Pairs[p]
+	// ScheduleChange can also be decoded from JSON or constructed directly.
+	old, new := Synchronize(s.Old, s.New)
+	for d := range old.Days {
+		oldDay, newDay := old.Days[d], new.Days[d]
+		oldPairs := make(map[int]Pair, len(oldDay.Pairs))
+		newPairs := make(map[int]Pair, len(newDay.Pairs))
+		numbers := make(map[int]struct{}, len(oldDay.Pairs)+len(newDay.Pairs))
+		for _, pair := range oldDay.Pairs {
+			oldPairs[pair.Number] = pair
+			numbers[pair.Number] = struct{}{}
+		}
+		for _, pair := range newDay.Pairs {
+			newPairs[pair.Number] = pair
+			numbers[pair.Number] = struct{}{}
+		}
+		ordered := make([]int, 0, len(numbers))
+		for number := range numbers {
+			ordered = append(ordered, number)
+		}
+		sort.Ints(ordered)
+		for _, number := range ordered {
+			oldPair, hadOld := oldPairs[number]
+			newPair, hasNew := newPairs[number]
+			if !hadOld {
+				oldPair = emptyPairSlot(newPair)
+			}
+			if !hasNew {
+				newPair = emptyPairSlot(oldPair)
+			}
+			// Empty slots can differ in metadata, but neither contains a lesson.
+			// Avoid creating a Diff whose Number method has no active pair.
+			if oldPair.IsEmpty() && newPair.IsEmpty() {
+				continue
+			}
 			if !reflect.DeepEqual(oldPair, newPair) {
-				absDiffs = append(absDiffs, Diff{NewDay: &newDay, OldPair: oldPair, NewPair: newPair})
+				absDiffs = append(absDiffs, Diff{OldDay: &oldDay, NewDay: &newDay, OldPair: oldPair, NewPair: newPair})
 			}
 		}
 	}
 
 	return absDiffs
+}
+
+func emptyPairSlot(pair Pair) Pair {
+	return Pair{Kind: PairKindEmpty, Number: pair.Number, StartTime: pair.StartTime, EndTime: pair.EndTime}
 }
 
 func (s *ScheduleChange) HTML() string {
@@ -64,21 +102,27 @@ func (s *ScheduleChange) HTML() string {
 			return diffs[i].Number() < diffs[j].Number()
 		}
 
-		date1, err := time.Parse("02.01.2006", diffs[i].Day().Date)
-		if err != nil {
-			log.Warn().Err(err).Str("timeStr", diffs[i].Day().Date).Msg("Failed to parse date")
+		date1, ok1 := parseScheduleDate(diffs[i].Day().Date)
+		date2, ok2 := parseScheduleDate(diffs[j].Day().Date)
+		if ok1 && ok2 {
+			return date1.Before(date2)
 		}
-		date2, err := time.Parse("02.01.2006", diffs[j].Day().Date)
-		if err != nil {
-			log.Warn().Err(err).Str("timeStr", diffs[j].Day().Date).Msg("Failed to parse date")
+		if ok1 != ok2 {
+			return ok1
 		}
-
-		return date1.Before(date2)
+		return diffs[i].Day().Date < diffs[j].Day().Date
 	})
 
 	// Build result string
 	var text strings.Builder
-	fmt.Fprintf(&text, "Изменения в расписании группы %s:", s.New.Config.Group.GroupName)
+	switch {
+	case s.New.Config.Group != nil:
+		fmt.Fprintf(&text, "Изменения в расписании группы %s:", s.New.Config.Group.GroupName)
+	case s.New.Config.Teacher != nil:
+		fmt.Fprintf(&text, "Изменения в расписании преподавателя %s:", s.New.Config.Teacher.Name)
+	default:
+		text.WriteString("Изменения в расписании:")
+	}
 
 	var currentDate string
 	for _, diff := range diffs {
@@ -91,6 +135,15 @@ func (s *ScheduleChange) HTML() string {
 	}
 
 	return text.String()
+}
+
+func parseScheduleDate(value string) (time.Time, bool) {
+	for _, layout := range []string{"02.01.2006", "2006-01-02"} {
+		if date, err := time.Parse(layout, value); err == nil {
+			return date, true
+		}
+	}
+	return time.Time{}, false
 }
 
 type Diff struct {
@@ -122,7 +175,7 @@ func (d *Diff) Number() int {
 
 // HTML representation of the difference.
 func (d *Diff) HTML() (result string) {
-	if d.OldDay != nil && d.NewDay != nil && !d.OldDay.IsEqual(d.NewDay) {
+	if d.OldDay != nil && d.NewDay != nil && d.OldDay.Date != d.NewDay.Date {
 		// Pair moved to other day
 		log.Warn().Msg("Schedule difference case not yet implemented: Pair moved to other day")
 		// NOTE: This case not suposed to implemented.
