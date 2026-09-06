@@ -311,10 +311,16 @@ func (r *logRepository) GetUpdateLatencyStatsByPeriod(ctx context.Context, start
 }
 
 func (r *logRepository) GetRequestsCountByHour(ctx context.Context, start, end time.Time) ([]TimeCount, error) {
-	const query = `
-		SELECT strftime('%H', created_at) AS time, COUNT(*) AS count FROM update_logs
+	// SQLite and Postgres extract the hour differently.
+	hourExpr := "strftime('%H', created_at)"
+	switch r.db.Dialector.Name() {
+	case "postgres":
+		hourExpr = "to_char(created_at, 'HH24')"
+	}
+	query := `
+		SELECT ` + hourExpr + ` AS time, COUNT(*) AS count FROM update_logs
 		WHERE created_at BETWEEN ? AND ?
-		GROUP BY strftime('%H', created_at)
+		GROUP BY ` + hourExpr + `
 		ORDER BY time
 	`
 	var result []TimeCount

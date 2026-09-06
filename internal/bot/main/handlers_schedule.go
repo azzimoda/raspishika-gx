@@ -174,7 +174,7 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	text := formatDayHTML(conf.Name(), tomorrow)
 	inlineMarkup := dayMarkup(conf, schedule.Days, idx, botutil.SchedulePageURL(conf, nil))
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
-		ChatID:          chat.TgChatID,
+		ChatID:          chat.PeerID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,

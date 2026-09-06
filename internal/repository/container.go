@@ -1,10 +1,16 @@
 package repository
 
-import "gorm.io/gorm"
+import (
+	"github.com/azzimoda/raspishika-gx/internal/model"
+	"gorm.io/gorm"
+)
 
-func NewContainer(db *gorm.DB) *Container {
+// NewContainer builds a repository container scoped to the given platform.
+// Use PlatformTelegram/PlatformVK for a bot process and an empty platform for
+// admin/dashboard processes spanning all platforms.
+func NewContainer(db *gorm.DB, platform model.Platform) *Container {
 	return &Container{
-		Chat:     NewChatRepository(db),
+		Chat:     NewChatRepository(db, platform),
 		Schedule: NewScheduleRepository(db),
 		Log:      NewLogRepository(db),
 	}

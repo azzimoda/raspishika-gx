@@ -377,7 +377,7 @@ func (s *BroadcastService) sendPairNotificatins(
 
 		for _, chat := range groupedChats[groupNames[i]] {
 			msg, err := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID:          chat.TgChatID,
+				ChatID:          chat.PeerID,
 				MessageThreadID: 0,
 				Text:            text,
 				ParseMode:       models.ParseModeHTML,
@@ -593,7 +593,7 @@ func (s *BroadcastService) sendChangeReports(
 			}
 
 			if _, errReport := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID:          chat.TgChatID,
+				ChatID:          chat.PeerID,
 				MessageThreadID: 0,
 				ParseMode:       models.ParseModeHTML,
 				Text:            text,
@@ -622,7 +622,7 @@ func (s *BroadcastService) logBroadcast(ctx context.Context, taskID int64, chat 
 	}
 	if err := s.Stats.LogBroadcast(ctx, model.BroadcastLog{
 		TaskID: taskID,
-		ChatID: int64(chat.TgChatID),
+		ChatID: int64(chat.PeerID),
 		Group:  refutil.DerefOrTypeDefault(chat.GroupName),
 		Error:  errVal,
 	}); err != nil {
@@ -666,7 +666,7 @@ func (s *BroadcastService) BroadcastText(ctx context.Context, chats []*model.Cha
 			}
 			var sendErr error
 			if _, sendErr = s.Bot.SendMessage(taskCtx, &bot.SendMessageParams{
-				ChatID:          chat.TgChatID,
+				ChatID:          chat.PeerID,
 				MessageThreadID: 0,
 				Text:            htmlText,
 				ParseMode:       models.ParseModeHTML,
@@ -744,7 +744,7 @@ func (s *BroadcastService) notifyAndResetInvalidChats(ctx context.Context, inval
 		for _, chat := range chats {
 			text := fmt.Sprintf(botutil.MsgGroupRemoved, gn)
 			_, err := s.Bot.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: chat.TgChatID,
+				ChatID: chat.PeerID,
 				Text:   text,
 			})
 			if err != nil {
@@ -752,12 +752,12 @@ func (s *BroadcastService) notifyAndResetInvalidChats(ctx context.Context, inval
 					s.handleForbidden(ctx, err, chat)
 					continue
 				}
-				log.Error().Err(err).Str("group", string(gn)).Int64("chatID", int64(chat.TgChatID)).
+				log.Error().Err(err).Str("group", string(gn)).Int64("chatID", int64(chat.PeerID)).
 					Msg("Failed to notify chat about removed group")
 			}
 
 			if err := s.Chat.ResetGroupSettings(ctx, chat); err != nil {
-				log.Error().Err(err).Str("group", string(gn)).Int64("chatID", int64(chat.TgChatID)).
+				log.Error().Err(err).Str("group", string(gn)).Int64("chatID", int64(chat.PeerID)).
 					Msg("Failed to reset group settings for expired group")
 			}
 		}
@@ -787,8 +787,8 @@ func (s *BroadcastService) Stop(ctx context.Context) {
 
 func (s *BroadcastService) handleForbidden(ctx context.Context, err error, chat *model.Chat) {
 
-	s.Report().Err(err).Debug("chatID", chat.TgChatID).Msg("Bot was kicked from the chat")
+	s.Report().Err(err).Debug("chatID", chat.PeerID).Msg("Bot was kicked from the chat")
 	if err := s.Chat.DeleteChat(ctx, chat.ID); err != nil {
-		s.Report().Err(err).Debug("chatID", chat.TgChatID).Msg("Failed to delete chat")
+		s.Report().Err(err).Debug("chatID", chat.PeerID).Msg("Failed to delete chat")
 	}
 }

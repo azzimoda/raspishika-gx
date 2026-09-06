@@ -229,7 +229,7 @@ func SendWeekSchedule(
 	var errs []error
 
 	if _, err := b.SendChatAction(ctx, &bot.SendChatActionParams{
-		ChatID:          chat.TgChatID,
+		ChatID:          chat.PeerID,
 		MessageThreadID: messageThreadID,
 		Action:          models.ChatActionUploadPhoto,
 	}); err != nil {
@@ -269,9 +269,9 @@ func sendSchedulePhoto(
 	replyMarkup models.ReplyMarkup,
 	isOld bool,
 ) error {
-	log.Trace().Any("tgChatID", chat.TgChatID).Str("filename", imageFilename).Msg("Sending schedule photo...")
+	log.Trace().Any("tgChatID", chat.PeerID).Str("filename", imageFilename).Msg("Sending schedule photo...")
 	photoParams := &bot.SendPhotoParams{
-		ChatID:          chat.TgChatID,
+		ChatID:          chat.PeerID,
 		MessageThreadID: messageThreadID,
 		Photo:           &models.InputFileUpload{Filename: imageFilename, Data: bytes.NewReader(imageData)},
 		ReplyMarkup:     replyMarkup,
@@ -284,7 +284,7 @@ func sendSchedulePhoto(
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to send schedule photo")
 		err2 := SendErrorMessage(ctx, b, &bot.SendMessageParams{
-			ChatID: chat.TgChatID,
+			ChatID: chat.PeerID,
 			Text:   ErrMsgCouldNotSendSchedule,
 		})
 		return errors.Join(err, err2)

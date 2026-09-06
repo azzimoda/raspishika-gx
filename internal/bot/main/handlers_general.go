@@ -74,7 +74,7 @@ func (h *handler) offerToSetGroupOnStart(ctx context.Context, b *bot.Bot, chat *
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to send department selection menu")
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
-			ChatID:          chat.TgChatID,
+			ChatID:          chat.PeerID,
 			MessageThreadID: update.Message.MessageThreadID,
 			Text:            botutil.ErrMsgTryLater,
 		})
@@ -117,7 +117,7 @@ func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.
 		})
 		return
 	}
-	log.Trace().Int64("tgChatID", int64(chat.TgChatID)).Msg("Chat deleted from DB")
+	log.Trace().Int64("tgChatID", int64(chat.PeerID)).Msg("Chat deleted from DB")
 
 	count, err := h.Chat.CountAllChats(ctx)
 	if err != nil {

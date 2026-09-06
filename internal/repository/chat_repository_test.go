@@ -34,6 +34,7 @@ func openTestChatDBFull(t *testing.T) *gorm.DB {
 		CREATE TABLE chats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			tg_chat_id INTEGER,
+			platform TEXT DEFAULT 'telegram',
 			department TEXT,
 			"group" TEXT,
 			created_at DATETIME
@@ -69,6 +70,7 @@ func openTestChatDB(t *testing.T) *gorm.DB {
 	if err := db.Exec(`
 		CREATE TABLE chats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			platform TEXT DEFAULT 'telegram',
 			department TEXT,
 			"group" TEXT
 		)
@@ -100,6 +102,7 @@ func openTestChatDBUnique(t *testing.T) *gorm.DB {
 		CREATE TABLE chats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			tg_chat_id INTEGER NOT NULL UNIQUE,
+			platform TEXT DEFAULT 'telegram',
 			username TEXT,
 			state TEXT DEFAULT 'default',
 			department TEXT,
@@ -120,7 +123,7 @@ func openTestChatDBUnique(t *testing.T) *gorm.DB {
 
 func TestCreateOrUpdateChatConcurrentCreate(t *testing.T) {
 	db := openTestChatDBUnique(t)
-	repo := &chatRepository{db: db}
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
 
 	const baseChatID = int64(1327362040)
 	const goroutines = 16
@@ -140,7 +143,7 @@ func TestCreateOrUpdateChatConcurrentCreate(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				<-start
-				chat := &model.Chat{TgChatID: chatID, UserName: new(username)}
+				chat := &model.Chat{PeerID: chatID, UserName: new(username)}
 				created, err := repo.CreateOrUpdateChat(context.Background(), chat)
 				if err != nil {
 					t.Errorf("CreateOrUpdateChat() error: %v", err)
@@ -168,10 +171,10 @@ func TestCreateOrUpdateChatConcurrentCreate(t *testing.T) {
 
 func TestCreateOrUpdateChatExisting(t *testing.T) {
 	db := openTestChatDBUnique(t)
-	repo := &chatRepository{db: db}
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
 
 	username := "first_name"
-	chat := &model.Chat{TgChatID: model.ChatID(100), UserName: new(username)}
+	chat := &model.Chat{PeerID: model.ChatID(100), UserName: new(username)}
 	created, err := repo.CreateOrUpdateChat(context.Background(), chat)
 	if err != nil {
 		t.Fatalf("first CreateOrUpdateChat() error: %v", err)
@@ -183,7 +186,7 @@ func TestCreateOrUpdateChatExisting(t *testing.T) {
 
 	// Second call for the same chat must reuse the existing row.
 	updatedUsername := "second_name"
-	again := &model.Chat{TgChatID: model.ChatID(100), UserName: new(updatedUsername)}
+	again := &model.Chat{PeerID: model.ChatID(100), UserName: new(updatedUsername)}
 	created, err = repo.CreateOrUpdateChat(context.Background(), again)
 	if err != nil {
 		t.Fatalf("second CreateOrUpdateChat() error: %v", err)
@@ -265,7 +268,7 @@ func TestGetChatCountByDepartment(t *testing.T) {
 		}
 	}
 
-	repo := &chatRepository{db: db}
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
 	got, err := repo.GetChatCountByDepartment(context.Background())
 	if err != nil {
 		t.Fatalf("GetChatCountByDepartment() error: %v", err)
@@ -294,7 +297,7 @@ func TestGetChatsByDepartment(t *testing.T) {
 			t.Fatalf("failed to insert: %v", err)
 		}
 	}
-	repo := &chatRepository{db: db}
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
 	got, err := repo.GetChatsByDepartment(context.Background(), "АиЭС")
 	if err != nil {
 		t.Fatalf("GetChatsByDepartment() error: %v", err)
@@ -311,7 +314,7 @@ func TestGetGroupChatsAndPrivate(t *testing.T) {
 			t.Fatalf("failed to insert: %v", err)
 		}
 	}
-	repo := &chatRepository{db: db}
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
 
 	groups, err := repo.GetGroupChats(context.Background())
 	if err != nil {
@@ -343,7 +346,7 @@ func TestGetActiveChatsAndCount(t *testing.T) {
 		t.Fatalf("failed to insert update_logs: %v", err)
 	}
 
-	repo := &chatRepository{db: db}
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
 
 	active, err := repo.GetActiveChats(context.Background(), 24*time.Hour)
 	if err != nil {
@@ -374,7 +377,7 @@ func TestCountNewChatsByPeriod(t *testing.T) {
 		t.Fatalf("failed to insert chats: %v", err)
 	}
 
-	repo := &chatRepository{db: db}
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
 	got, err := repo.CountNewChatsByPeriod(context.Background(), startT, endT)
 	if err != nil {
 		t.Fatalf("CountNewChatsByPeriod() error: %v", err)
@@ -396,7 +399,7 @@ func TestGetNewChatCountByYearByPeriod(t *testing.T) {
 		t.Fatalf("failed to insert chats: %v", err)
 	}
 
-	repo := &chatRepository{db: db}
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
 	got, err := repo.GetNewChatCountByYearByPeriod(context.Background(), startT, endT)
 	if err != nil {
 		t.Fatalf("GetNewChatCountByYearByPeriod() error: %v", err)

@@ -44,7 +44,7 @@ func (h *handler) createOrUpdateChat(b *bot.Bot, update *models.Update) (*model.
 		return nil, ErrUnknownUpdateType
 	}
 
-	chat := new(model.Chat{TgChatID: chatID, UserName: new(username)})
+	chat := new(model.Chat{PeerID: chatID, Platform: model.PlatformTelegram, UserName: new(username)})
 	created, err := h.Chat.CreateOrUpdateChat(context.Background(), chat)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create or update chat: %w", err)
@@ -75,7 +75,7 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 	for range 5 {
 		time.Sleep(20 * time.Second)
 
-		if chat, err = h.Chat.GetChatByChatID(context.Background(), chat.TgChatID); err == nil && chat.GroupName != nil {
+		if chat, err = h.Chat.GetChatByChatID(context.Background(), chat.PeerID); err == nil && chat.GroupName != nil {
 			b.DeleteMessage(context.Background(), &bot.DeleteMessageParams{ChatID: msg.Chat.ID, MessageID: msg.ID})
 			h.ReportChat(chat).Msgf("Chat configured group %s", *chat.GroupName)
 			break
@@ -294,7 +294,7 @@ func (h *handler) ensureGroupConfigured(next bot.HandlerFunc) bot.HandlerFunc {
 		}
 
 		if chat.GroupName == nil {
-			log.Warn().Int64("chatID", chat.TgChatID.Int64()).Msg("Group name is not set")
+			log.Warn().Int64("chatID", chat.PeerID.Int64()).Msg("Group name is not set")
 			// Offer to set group
 			h.sendDepartmentSelectionMenu(ctx, b, chat, update)
 			return

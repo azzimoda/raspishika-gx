@@ -61,7 +61,7 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	container := repository.NewContainer(db)
+	container := repository.NewContainer(db, model.PlatformTelegram)
 
 	appReporter := new(AppReporter)
 

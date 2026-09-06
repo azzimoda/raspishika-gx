@@ -10,10 +10,31 @@ import (
 
 type ChatID int64
 
-func (i ChatID) Int64() int64    { return int64(i) }
-func (i ChatID) IsPrivate() bool { return i > 0 }
+func (i ChatID) Int64() int64 { return int64(i) }
+
+// ChatPeerOffset is the boundary between private chats and group conversations
+// for platforms that encode both in a single integer namespace (VK). Private
+// peers are less than the offset, group conversations are greater or equal.
+const ChatPeerOffset int64 = 2000000000
+
+// IsPrivate reports whether the peer is a private chat. Telegram group chats
+// are negative, VK group conversations start at ChatPeerOffset, so a positive
+// value below the offset is a private chat on both platforms.
+func (i ChatID) IsPrivate() bool {
+	v := int64(i)
+	return v > 0 && v < ChatPeerOffset
+}
 
 type ChatState string
+
+// Platform is the messenger a chat belongs to. Chats of different platforms
+// share the single chats table and are scoped by this discriminator.
+type Platform string
+
+const (
+	PlatformTelegram Platform = "telegram"
+	PlatformVK       Platform = "vk"
+)
 
 const (
 	ChatStateDefault          ChatState = "default"
@@ -36,7 +57,8 @@ const (
 
 type Chat struct {
 	ID               int64           `gorm:"primaryKey;column:id"`
-	TgChatID         ChatID          `gorm:"column:tg_chat_id"`
+	PeerID           ChatID          `gorm:"column:tg_chat_id"`
+	Platform         Platform        `gorm:"column:platform"`
 	UserName         *string         `gorm:"column:username"`
 	State            ChatState       `gorm:"column:state"`
 	DepartmentName   *string         `gorm:"column:department"`
@@ -50,7 +72,7 @@ type Chat struct {
 	UpdatedAt        time.Time       `gorm:"column:updated_at"`
 }
 
-func (c *Chat) IsPrivate() bool { return c.TgChatID.IsPrivate() }
+func (c *Chat) IsPrivate() bool { return c.PeerID.IsPrivate() }
 
 // GetState returns actual state of the chat.
 //

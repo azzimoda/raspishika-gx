@@ -185,7 +185,7 @@ func (h *handler) reportChat(chat *model.Chat) reporter.ReportBuilder {
 		return r
 	}
 	return r.
-		Debug("chatID", chat.TgChatID).
+		Debug("chatID", chat.PeerID).
 		Debug("username", refutil.DerefOrTypeDefault(chat.UserName)).
 		Debug("state", chat.State).
 		Debug("department", refutil.DerefOrTypeDefault(chat.DepartmentName)).

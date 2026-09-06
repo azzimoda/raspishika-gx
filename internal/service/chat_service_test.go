@@ -40,6 +40,7 @@ func openTestChatDB(t *testing.T) *gorm.DB {
 			update_notification BOOLEAN NOT NULL DEFAULT 0,
 			dark_mode BOOLEAN NOT NULL DEFAULT 0,
 			access INTEGER NOT NULL DEFAULT 0,
+			platform TEXT NOT NULL DEFAULT 'telegram',
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)
@@ -51,14 +52,14 @@ func openTestChatDB(t *testing.T) *gorm.DB {
 
 func TestResetGroupSettings(t *testing.T) {
 	db := openTestChatDB(t)
-	repo := repository.NewChatRepository(db)
+	repo := repository.NewChatRepository(db, model.PlatformTelegram)
 	svc := NewChatService(repo)
 
 	group := model.GroupName("ИСПт-22-(9)-2")
 	dept := "АиЭС"
 	time := "19:00"
 	chat := &model.Chat{
-		TgChatID:         12345,
+		PeerID:           12345,
 		GroupName:        &group,
 		DepartmentName:   &dept,
 		DailySendingTime: &time,
@@ -75,7 +76,7 @@ func TestResetGroupSettings(t *testing.T) {
 		t.Fatalf("ResetGroupSettings() error: %v", err)
 	}
 
-	got, err := svc.GetChatByChatID(context.Background(), chat.TgChatID)
+	got, err := svc.GetChatByChatID(context.Background(), chat.PeerID)
 	if err != nil {
 		t.Fatalf("GetChatByChatID() error: %v", err)
 	}

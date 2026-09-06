@@ -660,7 +660,7 @@ func (h *handler) sendDepartmentSelectionMenu(
 	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateSelectingGroup)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
-			ChatID:          chat.TgChatID,
+			ChatID:          chat.PeerID,
 			MessageThreadID: messageThreadID,
 			Text:            botutil.ErrMsgTryLater,
 		})
@@ -668,7 +668,7 @@ func (h *handler) sendDepartmentSelectionMenu(
 	}
 
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
-		ChatID:          chat.TgChatID,
+		ChatID:          chat.PeerID,
 		MessageThreadID: messageThreadID,
 		Text:            fmt.Sprintf(`%s\nВведите название группы, например "ИСПт 22 9 2", или выберите отделение`, currentGroup),
 		ReplyMarkup:     departmentMenuMarkup(departments),
