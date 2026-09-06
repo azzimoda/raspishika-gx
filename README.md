@@ -42,15 +42,15 @@
 Основные использованные технологии:
 
 - Go v1.26
-  - `spf13/viper`
-  - API:
-    - `gin-gonic/gin`
-    - `swaggo/swag` (Swagger-документация)
-  - Бот:
-    - `go-telegram/bot`
-    - `gorm.io/gorm` + `gorm.io/driver/sqlite` (SQLite)
-    - `pressly/goose/v3` (миграции БД)
-    - `chromedp/chromedp`
+    - `spf13/viper`
+    - API:
+        - `gin-gonic/gin`
+        - `swaggo/swag` (Swagger-документация)
+    - Бот:
+        - `go-telegram/bot`
+        - `gorm.io/gorm` + `gorm.io/driver/sqlite` (SQLite)
+        - `pressly/goose/v3` (миграции БД)
+        - `chromedp/chromedp`
 - Redis (кэш API)
 - SQLite v3.37
 
@@ -100,39 +100,55 @@ make logs         # docker compose logs -f
 ### Ручная сборка
 
 1. Клонировать репозиторий:
+   
    ```bash
    git clone https://github.com/azzimoda/raspishika-gx.git
    ```
+
 2. Установить зависимости:
+   
    ```bash
    go mod download
    ```
+
 3. Собрать API-сервис:
+   
    ```bash
    go build ./cmd/api
    ```
+
 4. Собрать бота (нужен CGO для sqlite3 и Chromium в PATH для скриншотов):
+   
    ```bash
    go build ./cmd/bot
    ```
+
 5. Запустить Redis (для кэша API):
+   
    ```bash
    docker run --rm -p 6379:6379 redis:alpine
    ```
-6. Подготовить конфигурацию, указав токен бота и другие параметры в файле `.env`, например:
+
+6. Подготовить конфигурацию: скопировать `.env.example` в `.env` и указать свои значения (минимум — токен бота). Все ключи с комментариями перечислены в `.env.example`:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Например, все необходимые ключи выглядят так:
+
    ```bash
    # Required
    BOT_TOKEN=your_bot_token_here
-
+   
    # Optional
    ADMIN_BOT_TOKEN=your_admin_bot_token_here
    ADMIN_ID=admin_user_id_here
    REDIS_PASSWORD=your_redis_password_here
-   HANDLE_VACATION=true
-   BROWSER_SCALE=1
-   LOG_LEVEL=debug
    ```
+
 7. Запустить API-сервис и бота:
+   
    ```bash
    ./api
    ./bot
@@ -156,5 +172,5 @@ make logs         # docker compose logs -f
 
 - [DonationAlerts](https://www.donationalerts.com/r/azzimoda)
 - [YooMoney](https://yoomoney.ru/to/4100119212250883)
-- Toncoin: `UQCFh_yK4yLHwfRWrn-inUNYqw5boabRLmDtm5SEZf8SbDO1`
+- Gram: `UQCFh_yK4yLHwfRWrn-inUNYqw5boabRLmDtm5SEZf8SbDO1`
 - Звёздами в [ТГК](https://mazzaLLM.t.me)
