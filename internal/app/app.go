@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/azzimoda/go-tg-proxy/botservice"
+	"github.com/azzimoda/go-tg-proxy/proxyutil"
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
@@ -169,14 +170,47 @@ func (a *App) runBots(ctx context.Context, cancel context.CancelFunc) error {
 		return g.Wait()
 	}
 
-	if viper.GetInt64(config.KeyAdminID) != 0 {
-		a.AppReporter.Reporter = reporter.NewReporter(a.MainBot.Bot, viper.GetInt64(config.KeyAdminID))
+	// Operational reports go to ADMIN_ID from the admin bot's account: the
+	// reporter below is a send-only ADMIN_BOT_TOKEN bot (no polling) running
+	// through the same SOCKS5 stack as the main bot. Without the token or a
+	// usable proxy reports fall back to logs only.
+	rep, err := a.adminTokenReporter(gctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("Admin reporter unavailable; operational reports go to logs only")
+	} else if rep != nil {
+		a.AppReporter.Reporter = rep
 		a.Report().Msg("Started on bot @" + mainbot.GetMe(a.MainBot.Bot).Username)
 	}
 
 	<-gctx.Done()
 	cancel()
 	return g.Wait()
+}
+
+// adminTokenReporter builds the reporter that delivers operational reports to
+// ADMIN_ID through ADMIN_BOT_TOKEN. The bot is never started: it only sends
+// messages, so no getUpdates polling runs. Returns nil, nil when reporting is
+// not configured (no ADMIN_BOT_TOKEN or ADMIN_ID).
+func (a *App) adminTokenReporter(ctx context.Context) (reporter.Reporter, error) {
+	token := viper.GetString(config.KeyAdminBotToken)
+	adminID := viper.GetInt64(config.KeyAdminID)
+	if token == "" || adminID == 0 {
+		return nil, nil
+	}
+
+	proxyAddr, err := a.Services.Proxy.FirstAvailable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	httpClient, err := proxyutil.NewHTTPProxyClient(proxyAddr)
+	if err != nil {
+		return nil, err
+	}
+	adminBot, err := bot.New(token, bot.WithHTTPClient(10*time.Second, httpClient))
+	if err != nil {
+		return nil, err
+	}
+	return reporter.NewReporter(adminBot, adminID), nil
 }
 
 // waitForMainBotReady blocks until the main bot is built. Returns false if the

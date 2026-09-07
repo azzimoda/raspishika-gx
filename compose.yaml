@@ -41,6 +41,7 @@ services:
     shm_size: 2g
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
       - ADMIN_ID=${ADMIN_ID}
       - SCRAPER_HOST=api
       - SCRAPER_PORT=8080
