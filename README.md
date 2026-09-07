@@ -48,7 +48,7 @@
         - `swaggo/swag` (Swagger-документация)
     - Бот:
         - `go-telegram/bot`
-        - `gorm.io/gorm` + `gorm.io/driver/sqlite` (SQLite)
+        - `gorm.io/gorm` + `gorm.io/driver/sqlite` (SQLite) / `gorm.io/driver/postgres` (PostgreSQL)
         - `pressly/goose/v3` (миграции БД)
         - `chromedp/chromedp`
 - Redis (кэш API)
@@ -56,9 +56,10 @@
 
 ## Архитектура
 
-Проект состоит из двух сервисов:
+Проект состоит из трёх сервисов:
 
-- `cmd/bot` — Telegram-бот. Хранит данные в SQLite (доступ через GORM, миграции применяются автоматически при запуске через goose), рендерит скриншоты расписания через собственный браузер Chromium (`chromedp`), расписания получает по HTTP от API.
+- `cmd/bot` — Telegram-бот. Хранит данные в SQLite или PostgreSQL (доступ через GORM, миграции применяются автоматически при запуске через goose), рендерит скриншоты расписания через собственный браузер Chromium (`chromedp`), расписания получает по HTTP от API.
+- `cmd/adminbot` — отдельный админ-бот для мониторинга, статистики и ручных рассылок (`ADMIN_BOT_TOKEN`/`ADMIN_ID`). Работает как отдельный процесс, ручные рассылки отдаёт в очередь `broadcast_jobs`, которую разбирает основной бот.
 - `cmd/api` — HTTP-сервис скрейпинга. Собирает расписание с `coworking.tyuiu.ru` напрямую по HTTP (`internal/api/scraper`), кэширует результаты в Redis и отдаёт по `/api/v1/*` (Swagger-документация доступна по адресам `/swagger/index.html` (UI) и `/swagger/doc.json`). Бот обращается к нему через `internal/apiclient` по `SCRAPER_HOST`/`SCRAPER_PORT`.
 
 Для локальной разработки с демо-данными (без реального скрейпинга) есть `cmd/fakeapi` и `cmd/fakebot`.
@@ -159,6 +160,39 @@ make logs         # docker compose logs -f
 ## Развёртывание
 
 При push в ветку `main` GitHub Actions (`.github/workflows/deploy.yaml`) собирает и публикует образы `raspishika-api` и `raspishika-bot` в Docker Hub, после чего по SSH перезапускает сервисы на VPS (`docker compose pull && docker compose up -d`).
+
+---
+
+## Роадмап
+
+План интеграции VK-версии бота (`raspishika-vk`) в этот репозиторий.
+
+### Уже сделано
+
+- **Фаза 1** — платформенный дискриминатор `platform` в таблице `chats` (Telegram/VK могут иметь одинаковые peer id), рантайм на PostgreSQL и миграции в `migrations/postgres/`.
+- **Фаза 2a** — мессенджер-нейтральный слой `internal/messenger` (Telegram-адаптер) и общий `BroadcastService`; рассылки больше не привязаны к конкретной платформе.
+- **Фаза 2b** — сервис БД в Docker-стеке, полная совместимость SQLite/PostgreSQL (миграционный тест на живом PostgreSQL).
+- **Фаза 2c** — ручные рассылки через очередь `broadcast_jobs` (по одной задаче на платформу, воркер в каждом процессе забирает только свои), админ-бот вынесен в отдельный бинарник `cmd/adminbot` (report-only, без браузера). Прод остаётся на SQLite.
+
+### Впереди
+
+**Фаза 2d — VK-бот:**
+
+- `internal/vk` — клиент VK API (порт из `raspishika-vk`).
+- `internal/vkbot` — обработчики VK-бота без админ-функций + адаптер `messenger.Messenger` → VK (простые тексты, без inline-клавиатур).
+- `cmd/vkbot` — отдельный бинарник: `NewContainer(db, PlatformVK)`, свой `BroadcastJobPoller` для `platform=vk`; включить `PlatformVK` в список платформ рассылок.
+- `cmd/fakevkbot` — демо-режим без реального VK API.
+- Верификация: `make check`, валидация compose-файлов.
+
+**Фаза 3 — полный стек:**
+
+- Сервисы `vkbot`/`fakevkbot` в compose-файлах, единая сборка образов.
+- Принятие решения о переезде прода с SQLite на PostgreSQL (на текущий момент прод работает на SQLite).
+
+**Фаза 4 — финализация:**
+
+- Smoke-проверка всего стека (Telegram-бот + VK-бот + админ-бот), исправления по итогам.
+- Обновление README/SCRAPER под готовую архитектуру.
 
 ---
 

@@ -75,7 +75,7 @@ func openSQLite(cfg Config) (*gorm.DB, error) {
 		}
 	}
 
-	db, err := gorm.Open(sqlite.Open(cfg.File), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open(sqliteDSN(cfg.File)), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
@@ -115,4 +115,15 @@ func migrate(db *sql.DB, migrationsDir, dialect string) error {
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
 	return nil
+}
+
+// sqliteDSN appends connection pragmas to a sqlite file path so a second
+// process (e.g. the admin bot) waits for the migration lock instead of failing
+// with an immediate SQLITE_BUSY, and both processes read more smoothly under
+// WAL. Paths that already carry query parameters are used as-is.
+func sqliteDSN(file string) string {
+	if strings.Contains(file, "?") {
+		return file
+	}
+	return file + "?_busy_timeout=10000&_journal_mode=WAL"
 }

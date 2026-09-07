@@ -16,25 +16,6 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-secret}
     restart: unless-stopped
 
-  db:
-    image: postgres:16-alpine
-    container_name: raspishika-db
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-raspishika}
-      - POSTGRES_DB=raspishika
-      - TZ=Asia/Yekaterinburg
-    volumes:
-      - pg-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d raspishika"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - raspishika-network
-    restart: unless-stopped
-
   api:
     image: azzimoda/raspishika-api:latest
     container_name: raspishika-api
@@ -60,7 +41,6 @@ services:
     shm_size: 2g
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
-      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
       - ADMIN_ID=${ADMIN_ID}
       - SCRAPER_HOST=api
       - SCRAPER_PORT=8080
@@ -68,18 +48,37 @@ services:
       - TZ=Asia/Yekaterinburg
       - BROWSER_SCALE=${BROWSER_SCALE:-1}
       - HANDLE_VACATION=${HANDLE_VACATION:-true}
-      - DB_DRIVER=postgres
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=${DB_PASSWORD:-raspishika}
-      - DB_NAME=raspishika
-      - DB_SSLMODE=disable
+      - DB_DRIVER=sqlite3
+      - DB_FILE=/app/storage/database/data.db
+      - DB_MIGRATION_DIR=migrations
     depends_on:
       api:
         condition: service_started
-      db:
-        condition: service_healthy
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - raspishika-network
+    restart: unless-stopped
+
+  adminbot:
+    image: azzimoda/raspishika-bot:latest
+    container_name: raspishika-adminbot
+    entrypoint: /app/adminbot
+    environment:
+      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+      - SCRAPER_HOST=api
+      - SCRAPER_PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - TZ=Asia/Yekaterinburg
+      - DB_DRIVER=sqlite3
+      - DB_FILE=/app/storage/database/data.db
+      - DB_MIGRATION_DIR=migrations
+    depends_on:
+      api:
+        condition: service_started
+      bot:
+        condition: service_started
     volumes:
       - ./storage:/app/storage
     networks:
@@ -92,4 +91,3 @@ networks:
 
 volumes:
   redis-data:
-  pg-data:
