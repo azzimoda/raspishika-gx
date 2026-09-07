@@ -76,9 +76,9 @@ func TestWeekScheduleMarkup(t *testing.T) {
 	}
 	teacherMarkup := WeekScheduleMarkup(teacherConf, testLinkURL, days)
 
-	// Keyboard has one row for the day buttons (up to 6 per row) plus the
-	// bottom link/update row.
-	dayRows := (len(days) + 5) / 6
+	// Keyboard has one row for the day buttons (up to daysPerRow per row) plus
+	// the bottom link/update row.
+	dayRows := (len(days) + daysPerRow - 1) / daysPerRow
 	if len(markup.InlineKeyboard) != dayRows+1 {
 		t.Errorf("group keyboard rows = %d, want %d", len(markup.InlineKeyboard), dayRows+1)
 	}
@@ -192,15 +192,15 @@ func TestDayScheduleMarkupChunks(t *testing.T) {
 		t.Fatalf("rows = %d, want 4 (2 day rows + back + bottom)", len(markup.InlineKeyboard))
 	}
 	first, second := markup.InlineKeyboard[0], markup.InlineKeyboard[1]
-	if len(first) != 6 || len(second) != 2 {
-		t.Fatalf("day rows = %d and %d buttons, want 6 and 2", len(first), len(second))
+	if len(first) != daysPerRow || len(second) != len(days)-daysPerRow {
+		t.Fatalf("day rows = %d and %d buttons, want %d and %d", len(first), len(second), daysPerRow, len(days)-daysPerRow)
 	}
-	if second[0].Text != "[Пн]" {
-		t.Errorf("chunked current day label = %q, want %q", second[0].Text, "[Пн]")
+	if first[daysPerRow-1].Text != "[Пн]" {
+		t.Errorf("chunked current day label = %q, want %q", first[daysPerRow-1].Text, "[Пн]")
 	}
-	wantFirst := fmt.Sprintf("update_day\n205\n5\n")
-	if !strings.HasPrefix(first[5].CallbackData, wantFirst) {
-		t.Errorf("first chunk last callback = %q, want prefix %q", first[5].CallbackData, wantFirst)
+	wantFirst := fmt.Sprintf("update_day\n205\n%d\n", daysPerRow-1)
+	if !strings.HasPrefix(first[daysPerRow-1].CallbackData, wantFirst) {
+		t.Errorf("first chunk last callback = %q, want prefix %q", first[daysPerRow-1].CallbackData, wantFirst)
 	}
 }
 

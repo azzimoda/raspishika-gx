@@ -318,7 +318,7 @@ func TeacherSchedulePageURL(ctx context.Context, deps DepartmentsGetter, teacher
 
 // daysPerRow is the maximum number of short day buttons Telegram renders on a
 // single keyboard row.
-const daysPerRow = 6
+const daysPerRow = 7
 
 // dayJumpRows returns keyboard rows of day-jump buttons, one button per
 // schedule day split into rows of daysPerRow. When markCurrent is set, the
