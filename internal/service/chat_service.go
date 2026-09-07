@@ -103,6 +103,43 @@ func (s *ChatService) AddChatRecentTeacher(ctx context.Context, recentTeacher *m
 	return s.repo.AddRecentTeacher(ctx, recentTeacher)
 }
 
+// activeAudiencePeriod is the window in which a chat must have sent an update
+// to count as "active" for the job audience filter.
+const activeAudiencePeriod = 90 * 24 * time.Hour // 3 months
+
+// ResolveAudience returns the chats matching a broadcast job audience filter.
+// The repository is scoped to the calling process platform, so a schedule bot
+// re-resolves recipients for its own platform while the admin resolves across
+// all platforms for the preview count.
+func (s *ChatService) ResolveAudience(ctx context.Context, audience string, spec *string) ([]*model.Chat, error) {
+	jobSpec, err := model.UnmarshalJobSpec(spec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse broadcast audience spec: %w", err)
+	}
+	switch audience {
+	case model.AudienceAll:
+		return s.repo.GetAllChats(ctx)
+	case model.AudiencePrivate:
+		return s.repo.GetPrivateChats(ctx)
+	case model.AudienceGroups:
+		return s.repo.GetGroupChats(ctx)
+	case model.AudienceActive:
+		return s.repo.GetActiveChats(ctx, activeAudiencePeriod)
+	case model.AudienceByGroup:
+		if jobSpec.Group == "" {
+			return nil, fmt.Errorf("group audience requires a group name")
+		}
+		return s.repo.GetChatsByGroup(ctx, model.GroupName(jobSpec.Group))
+	case model.AudienceByDepartment:
+		if jobSpec.Department == "" {
+			return nil, fmt.Errorf("department audience requires a department name")
+		}
+		return s.repo.GetChatsByDepartment(ctx, jobSpec.Department)
+	default:
+		return nil, fmt.Errorf("unknown broadcast audience %q", audience)
+	}
+}
+
 func (s *ChatService) HealthCheck() error {
 	if _, err := s.GetAllChats(context.Background()); err != nil {
 		return fmt.Errorf("failed to get all chats: %w", err)

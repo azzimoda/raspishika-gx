@@ -20,14 +20,14 @@ import (
 	"gorm.io/gorm"
 )
 
-func newHandler(s *service.Services, reporter reporter.Reporter, broadcast *service.BroadcastService) *handler {
+func newHandler(s *service.Services, reporter reporter.Reporter, broadcast service.MassBroadcastEnqueuer) *handler {
 	return &handler{Services: s, Reporter: reporter, broadcast: broadcast}
 }
 
 type handler struct {
 	*service.Services
 	reporter.Reporter
-	broadcast *service.BroadcastService
+	broadcast service.MassBroadcastEnqueuer
 	flowMu    sync.Mutex
 	flow      *broadcastFlow
 }

@@ -594,7 +594,8 @@ func broadcastLogContext(ctx context.Context) (context.Context, context.CancelFu
 
 // BroadcastText starts an explicitly requested administrator broadcast. The
 // given HTML text is delivered to every recipient through the messenger, which
-// renders it for its platform.
+// renders it for its platform. The send runs in a background job tracked by the
+// broadcast service; the returned error only reports failures to start it.
 func (s *BroadcastService) BroadcastText(ctx context.Context, chats []*model.Chat, htmlText string) error {
 	if s.Messenger == nil {
 		return errors.New("messenger is not initialized")
@@ -632,6 +633,37 @@ func (s *BroadcastService) BroadcastText(ctx context.Context, chats []*model.Cha
 		return err
 	}
 	// Callers may reuse the input slice after this asynchronous method returns.
+	recipients := copyChats(chats)
+	go func() {
+		defer s.jobs.done()
+		defer cleanup()
+		s.massSend(taskCtx, &task, recipients, htmlText)
+	}()
+	return nil
+}
+
+// SendMassText delivers an explicitly requested broadcast synchronously,
+// auditing every recipient like BroadcastText. It is used by the broadcast job
+// worker so a job can be marked finished only after the send pass completes.
+func (s *BroadcastService) SendMassText(ctx context.Context, chats []*model.Chat, htmlText string) error {
+	if s.Messenger == nil {
+		return errors.New("messenger is not initialized")
+	}
+	if s.Services == nil || s.Stats == nil || s.Chat == nil {
+		return errors.New("broadcast services are not initialized")
+	}
+	if len(chats) == 0 {
+		return nil
+	}
+	task := model.BroadcastTaskLog{Kind: model.BMass, Groups: 1}
+	if err := s.Stats.LogBroadcastTask(ctx, &task); err != nil {
+		return err
+	}
+	s.massSend(ctx, &task, copyChats(chats), htmlText)
+	return nil
+}
+
+func copyChats(chats []*model.Chat) []*model.Chat {
 	recipients := make([]*model.Chat, 0, len(chats))
 	for _, chat := range chats {
 		if chat != nil {
@@ -639,35 +671,36 @@ func (s *BroadcastService) BroadcastText(ctx context.Context, chats []*model.Cha
 			recipients = append(recipients, &copy)
 		}
 	}
+	return recipients
+}
+
+// massSend performs the per-recipient delivery pass of a mass broadcast,
+// rechecking every recipient against the database right before the send.
+func (s *BroadcastService) massSend(ctx context.Context, task *model.BroadcastTaskLog, recipients []*model.Chat, htmlText string) {
 	start := time.Now()
-	go func() {
-		defer s.jobs.done()
-		defer cleanup()
-		success := 0
-		for _, queued := range recipients {
-			if taskCtx.Err() != nil {
-				break
-			}
-			chat, checkErr := s.currentRecipient(taskCtx, queued, model.BMass)
-			if checkErr != nil {
-				log.Error().Err(checkErr).Msg("Broadcast recipient recheck failed; skipping send")
-				continue
-			}
-			if chat == nil {
-				continue
-			}
-			err := s.Messenger.SendMessagePeer(taskCtx, int64(chat.PeerID), htmlText)
-			s.recordSend(taskCtx, task.ID, chat, err)
-			if err != nil {
-				log.Error().Err(err).Int64("peerID", int64(chat.PeerID)).Msg("Broadcast send failed")
-			} else {
-				success++
-			}
+	success := 0
+	for _, queued := range recipients {
+		if ctx.Err() != nil {
+			break
 		}
-		s.finishTask(taskCtx, &task, start)
-		log.Info().Int("success", success).Int("total", len(recipients)).Msg("Mass broadcast finished")
-	}()
-	return nil
+		chat, checkErr := s.currentRecipient(ctx, queued, model.BMass)
+		if checkErr != nil {
+			log.Error().Err(checkErr).Msg("Broadcast recipient recheck failed; skipping send")
+			continue
+		}
+		if chat == nil {
+			continue
+		}
+		err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), htmlText)
+		s.recordSend(ctx, task.ID, chat, err)
+		if err != nil {
+			log.Error().Err(err).Int64("peerID", int64(chat.PeerID)).Msg("Broadcast send failed")
+		} else {
+			success++
+		}
+	}
+	s.finishTask(ctx, task, start)
+	log.Info().Int("success", success).Int("total", len(recipients)).Msg("Mass broadcast finished")
 }
 
 func (s *BroadcastService) prepareBroadcast(ctx context.Context, chats []*model.Chat) (map[model.GroupName][]*model.Chat, []model.GroupName, []model.ScheduleConfig, map[model.GroupName][]*model.Chat, bool) {

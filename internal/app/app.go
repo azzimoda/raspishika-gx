@@ -15,7 +15,6 @@ import (
 
 	"github.com/azzimoda/go-tg-proxy/botservice"
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
-	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/messenger"
@@ -64,7 +63,7 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 	}
 	container := repository.NewContainer(db, model.PlatformTelegram)
 
-	appReporter := new(AppReporter)
+	appReporter := &AppReporter{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -79,6 +78,7 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 		cancel()
 		return nil, fmt.Errorf("failed to create services: %w", err)
 	}
+	appReporter.Services = services
 
 	mainBot := botservice.NewBotService(
 		func(p string, onActivity func()) (*bot.Bot, error) {
@@ -86,13 +86,9 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 		},
 		services.Proxy,
 	)
+	appReporter.getBot = func() *bot.Bot { return mainBot.Bot }
 	broadcast := service.NewBroadcastService(messenger.NewTelegram(func() *bot.Bot { return mainBot.Bot }), services, appReporter)
-	adminBot := botservice.NewBotService(
-		func(p string, onActivity func()) (*bot.Bot, error) {
-			return adminbot.New(services, p, appReporter, broadcast, onActivity)
-		},
-		services.Proxy,
-	)
+	jobPoller := service.NewBroadcastJobPoller(broadcast, container.Job, model.PlatformTelegram)
 
 	a := &App{
 		Ctx:         ctx,
@@ -100,14 +96,12 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 		DB:          db,
 		Services:    services,
 		Broadcast:   broadcast,
+		JobPoller:   jobPoller,
 		MainBot:     mainBot,
-		AdminBot:    adminBot,
 		AppReporter: appReporter,
 	}
-	appReporter.App = a
 
 	mainBot.OnRestart(a.OnMainBotRestart)
-	adminBot.OnRestart(a.OnAdminBotRestart)
 
 	return a, nil
 }
@@ -118,8 +112,8 @@ type App struct {
 	DB        *gorm.DB
 	Services  *service.Services
 	Broadcast *service.BroadcastService
+	JobPoller *service.BroadcastJobPoller
 	MainBot   *botservice.BotService
-	AdminBot  *botservice.BotService
 	*AppReporter
 }
 
@@ -155,8 +149,9 @@ func (a *App) Run() error {
 	return errors.Join(runErr, a.Stop())
 }
 
-// runBots starts the bots, waits for the shutdown signal and joins the bot
-// goroutines. It returns nil unless a bot goroutine fails.
+// runBots starts the main bot and the broadcast job worker, waits for the
+// shutdown signal and joins the bot goroutines. Returns nil unless a bot
+// goroutine fails.
 func (a *App) runBots(ctx context.Context, cancel context.CancelFunc) error {
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -164,55 +159,42 @@ func (a *App) runBots(ctx context.Context, cancel context.CancelFunc) error {
 		a.MainBot.Start(gctx)
 		return nil
 	})
+	g.Go(func() error {
+		a.JobPoller.Run(gctx)
+		return nil
+	})
 
-	adminEnabled := viper.GetInt("admin_id") != 0
-	if adminEnabled {
-		if err := a.AdminBot.HealthCheck(); err != nil {
-			log.Error().Err(err).Msg("Admin bot health check failed")
-			adminEnabled = false
-		} else {
-			g.Go(func() error {
-				a.AdminBot.Start(gctx)
-				return nil
-			})
-		}
-	} else {
-		log.Debug().Msg("Admin bot is disabled")
-	}
-
-	if adminEnabled {
-		if !a.waitForBotsReady(gctx) {
-			cancel()
-		} else {
-			a.AppReporter.Reporter = reporter.NewReporter(a.AdminBot.Bot, viper.GetInt64(config.KeyAdminID))
-			a.Report().Msg("Started on bot @" + mainbot.GetMe(a.MainBot.Bot).Username)
-			<-gctx.Done()
-			cancel()
-		}
-	} else {
-		<-gctx.Done()
+	if !a.waitForMainBotReady(gctx) {
 		cancel()
+		return g.Wait()
 	}
 
+	if viper.GetInt64(config.KeyAdminID) != 0 {
+		a.AppReporter.Reporter = reporter.NewReporter(a.MainBot.Bot, viper.GetInt64(config.KeyAdminID))
+		a.Report().Msg("Started on bot @" + mainbot.GetMe(a.MainBot.Bot).Username)
+	}
+
+	<-gctx.Done()
+	cancel()
 	return g.Wait()
 }
 
-// waitForBotsReady blocks until both bots are built. Returns false if the
+// waitForMainBotReady blocks until the main bot is built. Returns false if the
 // context is cancelled while waiting.
-func (a *App) waitForBotsReady(ctx context.Context) bool {
+func (a *App) waitForMainBotReady(ctx context.Context) bool {
 
-	for a.AdminBot.Bot == nil || a.MainBot.Bot == nil {
+	for a.MainBot.Bot == nil {
 		select {
 		case <-ctx.Done():
 			log.Warn().Msg("Context cancelled!")
 			return false
 		default:
 		}
-		log.Debug().Msg("Waiting for bots...")
+		log.Debug().Msg("Waiting for main bot...")
 		time.Sleep(5 * time.Second)
 	}
 	time.Sleep(1 * time.Second)
-	log.Info().Msg("All bots started")
+	log.Info().Msg("Main bot started")
 	return true
 }
 
@@ -224,9 +206,6 @@ func (a *App) Stop() error {
 	a.Broadcast.Stop(shutdownCtx)
 
 	a.MainBot.Stop()
-	if a.AdminBot != nil {
-		a.AdminBot.Stop()
-	}
 
 	errServices := a.Services.Stop()
 	sqlDB, err := a.DB.DB()
@@ -248,113 +227,119 @@ func (a *App) OnMainBotRestart(ctx context.Context) {
 			return
 		default:
 		}
-		log.Debug().Msg("Wating for main bot...")
+		log.Debug().Msg("Waiting for main bot...")
 		time.Sleep(5 * time.Second)
 	}
 
 	a.Report().Msg("Main bot has just restarted")
 }
 
-func (a *App) OnAdminBotRestart(ctx context.Context) {
-
-	if a.AdminBot.Bot != nil {
-		a.Report().Msg("Admin bot is restarting...")
-		time.Sleep(3 * time.Second)
-	}
-
-	for a.AdminBot.Bot == nil {
-		select {
-		case <-ctx.Done():
-			log.Warn().Msg("Context cancelled!")
-			return
-		default:
-		}
-		log.Debug().Msg("Wating for admin bot...")
-		time.Sleep(5 * time.Second)
-	}
-
-	a.Report().Msg("Admin bot has just restarted")
-}
-
 type AppReporter struct {
-	App *App
 	reporter.Reporter
+	Services *service.Services
+	getBot   func() *bot.Bot
 }
 
+// NewAppReporter builds a lazy reporter for a non-main app process (currently
+// the admin bot). It formats reports like the main app, but stays quiet until
+// the bot connects.
+func NewAppReporter(services *service.Services, getBot func() *bot.Bot) *AppReporter {
+	return &AppReporter{Services: services, getBot: getBot}
+}
+
+// Report returns a report builder that stays quiet until the bot connects —
+// before that there is nothing to deliver the report through. Once connected,
+// reports go to the configured recipient.
 func (r *AppReporter) Report() reporter.ReportBuilder {
 
+	format := NewFormatter(r.getBot, r.Services)
 	if r.Reporter == nil {
-		return reporter.EmptyReportBuilder().WithFormatFunc(r.App.formatReport)
+		return reporter.EmptyReportBuilder().WithFormatFunc(format)
 	}
-	return r.Reporter.Report().WithFormatFunc(r.App.formatReport)
+	return r.Reporter.Report().WithFormatFunc(format)
 }
-func (a *App) formatReport(msg string, debugValues map[string]any, err error) *bot.SendRichMessageParams {
 
-	log.Trace().Str("msg", msg).Any("debugValues", debugValues).Msg("formatReport called")
+// NewFormatter builds the rich HTML formatter that renders bot reports (debug
+// values, errors, the message and chat/group context). getBot returns the
+// connected bot once it exists, so the formatter also serves the deep links
+// that point back to the bot.
+func NewFormatter(getBot func() *bot.Bot, services *service.Services) reporter.FormatFunc {
 
-	debugValues = maps.Clone(debugValues)
+	return func(msg string, debugValues map[string]any, err error) *bot.SendRichMessageParams {
 
-	ctx := context.Background()
+		log.Trace().Str("msg", msg).Any("debugValues", debugValues).Msg("formatReport called")
 
-	var html strings.Builder
-	var buttons [][]models.InlineKeyboardButton
+		debugValues = maps.Clone(debugValues)
 
-	// Chat
-	chatID := extract[model.ChatID]("chatID", debugValues)
-	delete(debugValues, "chatID")
-	fullName := extract[string]("fullName", debugValues) // TODO: Set it in App.Report()
-	delete(debugValues, "fullName")
-	username := extract[string]("username", debugValues)
-	delete(debugValues, "username")
-	if chatID != 0 && a.AdminBot.Username() != "" {
-		fmt.Fprintf(&html, "<p><b>Chat:</b> %s / @%s / <code>%d</code></p>\n", fullName, username, chatID)
+		var html strings.Builder
+		var buttons [][]models.InlineKeyboardButton
 
-		cmd := botutil.NewStartCommand("chat", strconv.FormatInt(int64(chatID), 10))
-		url := MakeStartURL(a.AdminBot.Username(), cmd)
-		buttons = append(buttons, []models.InlineKeyboardButton{{Text: "Get chat", URL: url}})
-	}
+		var botUsername string
+		if getBot != nil {
+			if b := getBot(); b != nil {
+				if me := mainbot.GetMe(b); me != nil {
+					botUsername = me.Username
+				}
+			}
+		}
 
-	// Group
-	groupName := extract[model.GroupName]("group", debugValues)
-	delete(debugValues, "group")
-	if groupName != "" {
-		groupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		group, err := a.Services.Schedule.GetGroupByName(groupCtx, model.GroupName(groupName))
+		// Chat
+		chatID := extract[model.ChatID]("chatID", debugValues)
+		delete(debugValues, "chatID")
+		fullName := extract[string]("fullName", debugValues) // TODO: Set it in App.Report()
+		delete(debugValues, "fullName")
+		username := extract[string]("username", debugValues)
+		delete(debugValues, "username")
+		if chatID != 0 && botUsername != "" {
+			fmt.Fprintf(&html, "<p><b>Chat:</b> %s / @%s / <code>%d</code></p>\n", fullName, username, chatID)
+
+			cmd := botutil.NewStartCommand("chat", strconv.FormatInt(int64(chatID), 10))
+			url := MakeStartURL(botUsername, cmd)
+			buttons = append(buttons, []models.InlineKeyboardButton{{Text: "Get chat", URL: url}})
+		}
+
+		// Group
+		groupName := extract[model.GroupName]("group", debugValues)
+		delete(debugValues, "group")
+		if groupName != "" && services != nil && services.Schedule != nil {
+			groupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			group, err := services.Schedule.GetGroupByName(groupCtx, model.GroupName(groupName))
+			if err != nil {
+				log.Warn().Err(err).Msg("failed to get group by name")
+			} else {
+				fmt.Fprintf(&html, "<p><b>Group:</b> %s — %s</p>\n", group.GroupName, group.DepartmentName)
+			}
+		}
+
+		// Other debug
+		if len(debugValues) > 0 {
+			keys := make([]string, 0, len(debugValues))
+			for k := range debugValues {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			html.WriteString("<table border striped><caption>Debug</caption>")
+			for _, k := range keys {
+				fmt.Fprintf(&html, "<tr><td><b>%s:</b></td><td><code>%v</code></td></tr>", k, debugValues[k])
+			}
+			html.WriteString("</table>\n")
+		}
+
+		// Error
 		if err != nil {
-			log.Warn().Err(err).Msg("failed to get group by name")
-		} else {
-			fmt.Fprintf(&html, "<p><b>Group:</b> %s — %s</p>\n", group.GroupName, group.DepartmentName)
+			fmt.Fprintf(&html, "<blockquote><b>Error:</b><br><code>%s</code></blockquote>\n", err.Error())
 		}
-	}
 
-	// Other debug
-	if len(debugValues) > 0 {
-		keys := make([]string, 0, len(debugValues))
-		for k := range debugValues {
-			keys = append(keys, k)
+		// Message text
+		fmt.Fprintf(&html, "<p>%s</p>", msg)
+
+		params := bot.SendRichMessageParams{RichMessage: models.InputRichMessage{HTML: html.String()}}
+		if len(buttons) > 0 {
+			params.ReplyMarkup = models.InlineKeyboardMarkup{InlineKeyboard: buttons}
 		}
-		sort.Strings(keys)
-		html.WriteString("<table border striped><caption>Debug</caption>")
-		for _, k := range keys {
-			fmt.Fprintf(&html, "<tr><td><b>%s:</b></td><td><code>%v</code></td></tr>", k, debugValues[k])
-		}
-		html.WriteString("</table>\n")
+		return &params
 	}
-
-	// Error
-	if err != nil {
-		fmt.Fprintf(&html, "<blockquote><b>Error:</b><br><code>%s</code></blockquote>\n", err.Error())
-	}
-
-	// Message text
-	fmt.Fprintf(&html, "<p>%s</p>", msg)
-
-	params := bot.SendRichMessageParams{RichMessage: models.InputRichMessage{HTML: html.String()}}
-	if len(buttons) > 0 {
-		params.ReplyMarkup = models.InlineKeyboardMarkup{InlineKeyboard: buttons}
-	}
-	return &params
 }
 
 func extract[T any](key string, values map[string]any) T {

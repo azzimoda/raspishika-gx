@@ -13,6 +13,7 @@ func NewContainer(db *gorm.DB, platform model.Platform) *Container {
 		Chat:     NewChatRepository(db, platform),
 		Schedule: NewScheduleRepository(db),
 		Log:      NewLogRepository(db),
+		Job:      NewBroadcastJobRepository(db),
 	}
 }
 
@@ -20,4 +21,5 @@ type Container struct {
 	Chat     ChatRepository
 	Schedule ScheduleRepository
 	Log      LogRepository
+	Job      BroadcastJobRepository
 }

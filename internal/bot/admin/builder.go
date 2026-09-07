@@ -19,7 +19,7 @@ import (
 //go:embed commands.yaml
 var myCommandsBytes []byte
 
-func New(s *service.Services, proxy string, reporter reporter.Reporter, broadcast *service.BroadcastService, onActivity func()) (*bot.Bot, error) {
+func New(s *service.Services, proxy string, reporter reporter.Reporter, broadcast service.MassBroadcastEnqueuer, onActivity func()) (*bot.Bot, error) {
 	h := newHandler(s, reporter, broadcast)
 
 	httpClient, err := proxyutil.NewHTTPProxyClient(proxy)

@@ -12,22 +12,25 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
 )
 
 var ErrNoChatContext error = errors.New("failed to get chat from context")
 
 func newHandler(s *service.Services, reporter reporter.Reporter) *handler {
-	return &handler{Services: s, Reporter: reporter}
+	return &handler{Services: s, Reporter: reporter, adminID: viper.GetInt64(config.KeyAdminID)}
 }
 
 type handler struct {
 	*service.Services
 	reporter.Reporter
+	adminID int64
 }
 
 func (h *handler) registerHandlers(b *bot.Bot) {

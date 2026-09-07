@@ -31,6 +31,20 @@ func NewServices(ctx context.Context, container *repository.Container, scraperAP
 	}, nil
 }
 
+// NewAdminServices builds the services the admin bot needs (proxy, chat,
+// schedule lookups, statistics) without the screenshot browser.
+func NewAdminServices(ctx context.Context, container *repository.Container, scraperAPI APIClient) (*Services, error) {
+	proxySource := proxy.NewProxiflySource(viper.GetString(config.KeyProxySourceURL))
+	proxyService := proxy.NewService(proxySource)
+
+	return &Services{
+		Proxy:    proxyService,
+		Chat:     NewChatService(container.Chat),
+		Schedule: NewScheduleService(scraperAPI, nil, container.Schedule),
+		Stats:    NewStatsService(container.Log, container.Chat),
+	}, nil
+}
+
 type Services struct {
 	Browser  *browser.ChromedpBrowser
 	Proxy    *proxy.Service
@@ -41,12 +55,17 @@ type Services struct {
 
 func (s *Services) Stop() error {
 	s.Proxy.Stop()
-	return s.Browser.Close()
+	if s.Browser != nil {
+		return s.Browser.Close()
+	}
+	return nil
 }
 
 func (s *Services) HealthCheck() error {
-	if err := s.Browser.HealthCheck(); err != nil {
-		return fmt.Errorf("browser: %w", err)
+	if s.Browser != nil {
+		if err := s.Browser.HealthCheck(); err != nil {
+			return fmt.Errorf("browser: %w", err)
+		}
 	}
 	if err := s.Proxy.HealthCheck(); err != nil {
 		return fmt.Errorf("proxy: %w", err)

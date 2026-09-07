@@ -2,7 +2,7 @@ GO       ?= go
 COMPOSE  ?= docker compose
 VERSION  ?=
 
-.PHONY: all help deps fmt fmt-check vet build build-bot build-api build-fakeapi build-fakebot test test-race docs check run-api run-fakeapi run-fakebot bump-proxy up up-fake up-local down logs clean
+.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot test test-race docs check run-api run-fakeapi run-fakebot run-adminbot bump-proxy up up-fake up-local down logs clean
 
 all: check
 
@@ -14,6 +14,7 @@ help:
 	@echo "  vet          go vet ./..."
 	@echo "  build        go build ./..."
 	@echo "  build-bot    build only the bot (./cmd/bot, needs CGO and Chromium)"
+	@echo "  build-adminbot  build the admin bot (./cmd/adminbot)"
 	@echo "  build-api    build the scraper API (./cmd/api)"
 	@echo "  build-fakeapi  build the demo API (./cmd/fakeapi)"
 	@echo "  build-fakebot  build the API-less demo bot (./cmd/fakebot)"
@@ -24,6 +25,7 @@ help:
 	@echo "  run-api      go run ./cmd/api (needs Redis)"
 	@echo "  run-fakeapi  go run ./cmd/fakeapi"
 	@echo "  run-fakebot  go run ./cmd/fakebot"
+	@echo "  run-adminbot go run ./cmd/adminbot (needs the stack: DB, API, ADMIN_ID)"
 	@echo "  bump-proxy VERSION=v0.x.y  update github.com/azzimoda/go-tg-proxy"
 	@echo "  up           docker compose up --build -d"
 	@echo "  up-fake      docker compose -f compose.fakeapi.yaml up --build -d"
@@ -49,6 +51,9 @@ build:
 
 build-bot:
 	$(GO) build ./cmd/bot
+
+build-adminbot:
+	$(GO) build ./cmd/adminbot
 
 build-api:
 	$(GO) build ./cmd/api
@@ -78,6 +83,9 @@ run-fakeapi:
 
 run-fakebot:
 	$(GO) run ./cmd/fakebot
+
+run-adminbot:
+	$(GO) run ./cmd/adminbot
 
 bump-proxy:
 	@test -n "$(VERSION)" || { echo "Usage: make bump-proxy VERSION=v0.x.y"; exit 1; }

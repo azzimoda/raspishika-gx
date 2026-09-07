@@ -5,17 +5,12 @@ import (
 	"fmt"
 	"html"
 	"strings"
-	"time"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
-
-// activeAudiencePeriod is the window in which a chat must have sent an update
-// to count as "active" for the active audience filter.
-const activeAudiencePeriod = 90 * 24 * time.Hour // 3 months
 
 // broadcastStep identifies the current stage of the broadcast wizard.
 type broadcastStep int
@@ -223,24 +218,47 @@ func (h *handler) sendConfirm(ctx context.Context, b *bot.Bot, flow *broadcastFl
 	})
 }
 
-// resolveAudience returns the chats matching the flow's chosen audience.
-func (h *handler) resolveAudience(ctx context.Context, flow *broadcastFlow) ([]*model.Chat, error) {
+// audienceCode returns the model.Audience value for the flow's selection.
+func (flow *broadcastFlow) audienceCode() string {
 	switch flow.audience {
 	case audienceAll:
-		return h.Chat.GetAllChats(ctx)
+		return model.AudienceAll
 	case audiencePrivate:
-		return h.Chat.GetPrivateChats(ctx)
+		return model.AudiencePrivate
 	case audienceGroupChats:
-		return h.Chat.GetGroupChats(ctx)
+		return model.AudienceGroups
 	case audienceByGroup:
-		return h.Chat.GetChatsByGroup(ctx, model.GroupName(flow.spec))
+		return model.AudienceByGroup
 	case audienceByDepartment:
-		return h.Chat.GetChatsByDepartment(ctx, flow.spec)
+		return model.AudienceByDepartment
 	case audienceActive:
-		return h.Chat.GetActiveChats(ctx, activeAudiencePeriod)
+		return model.AudienceActive
 	default:
-		return nil, fmt.Errorf("unknown audience")
+		return ""
 	}
+}
+
+// specJSON returns the serialized BroadcastJobSpec for flows that carry a
+// group/department name, and nil otherwise.
+func (flow *broadcastFlow) specJSON() *string {
+	var spec model.BroadcastJobSpec
+	switch flow.audience {
+	case audienceByGroup:
+		spec = model.BroadcastJobSpec{Group: flow.spec}
+	case audienceByDepartment:
+		spec = model.BroadcastJobSpec{Department: flow.spec}
+	default:
+		return nil
+	}
+	if serialized, err := model.MarshalJobSpec(spec); err == nil {
+		return &serialized
+	}
+	return nil
+}
+
+// resolveAudience returns the chats matching the flow's chosen audience.
+func (h *handler) resolveAudience(ctx context.Context, flow *broadcastFlow) ([]*model.Chat, error) {
+	return h.Chat.ResolveAudience(ctx, flow.audienceCode(), flow.specJSON())
 }
 
 func (flow *broadcastFlow) audienceLabel() string {
@@ -298,17 +316,23 @@ func (h *handler) handleBroadcastConfirm(ctx context.Context, b *bot.Bot, update
 
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: flow.adminChatID,
-		Text:   fmt.Sprintf("Starting broadcast to %d chats...", len(chats)),
+		Text:   fmt.Sprintf("Enqueuing broadcast for %d recipients...", len(chats)),
 	})
+	spec := ""
+	if flow.specJSON() != nil {
+		spec = *flow.specJSON()
+	}
 	html := flow.html
 	adminChatID := flow.adminChatID
+	audience := flow.audienceCode()
 	h.flow = nil
 	h.flowMu.Unlock()
 
-	// BroadcastText runs the send in a service-tracked background job and
-	// reports completion via the service reporter, so it never blocks here.
-	if err := h.broadcast.BroadcastText(ctx, chats, html); err != nil {
-		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: adminChatID, Text: fmt.Sprintf("Failed to start broadcast: %v", err)})
+	// EnqueueMassBroadcast stores one broadcast_jobs row per target platform.
+	// The per-platform schedule-bot workers pick the rows up and deliver them,
+	// so the admin bot stays a report-only process here.
+	if err := h.broadcast.EnqueueMassBroadcast(ctx, audience, spec, html, adminChatID); err != nil {
+		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: adminChatID, Text: fmt.Sprintf("Failed to enqueue broadcast: %v", err)})
 	}
 }
 
