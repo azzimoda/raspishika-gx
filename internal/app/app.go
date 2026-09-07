@@ -18,6 +18,7 @@ import (
 	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
 	mainbot "github.com/azzimoda/raspishika-gx/internal/bot/main"
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
+	"github.com/azzimoda/raspishika-gx/internal/messenger"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
@@ -85,7 +86,7 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 		},
 		services.Proxy,
 	)
-	broadcast := service.NewBroadcastService(mainBot, services, appReporter)
+	broadcast := service.NewBroadcastService(messenger.NewTelegram(func() *bot.Bot { return mainBot.Bot }), services, appReporter)
 	adminBot := botservice.NewBotService(
 		func(p string, onActivity func()) (*bot.Bot, error) {
 			return adminbot.New(services, p, appReporter, broadcast, onActivity)
