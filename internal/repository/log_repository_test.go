@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/internal/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -28,6 +29,7 @@ func openTestLogDB(t *testing.T) *gorm.DB {
 	if err := db.Exec(`
 		CREATE TABLE chats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			platform TEXT,
 			"group" TEXT,
 			daily_sending_time TEXT,
 			pair_sending BOOLEAN NOT NULL DEFAULT 0,
@@ -148,6 +150,50 @@ func TestCountChatActivitiesByPeriod(t *testing.T) {
 		t.Fatalf("CountChatActivitiesByPeriod() error: %v", err)
 	}
 	want := ChatActivityCounts{Active: 1, Semiactive: 1, Inactive: 1}
+	if got != want {
+		t.Fatalf("CountChatActivitiesByPeriod() = %+v, want %+v", got, want)
+	}
+}
+
+func TestCountChatActivitiesByPeriodPlatformScoped(t *testing.T) {
+	db := openTestLogDB(t)
+
+	insertPlatformChat := func(id int, platform string, group string, pair bool) {
+		t.Helper()
+		var groupOrNull any
+		if group != "" {
+			groupOrNull = group
+		}
+		if err := db.Exec(`
+			INSERT INTO chats (id, platform, "group", daily_sending_time, pair_sending, update_notification)
+			VALUES (?, ?, ?, NULL, ?, 0)
+		`, id, platform, groupOrNull, pair).Error; err != nil {
+			t.Fatalf("failed to insert platform chat %d: %v", id, err)
+		}
+	}
+
+	// Telegram chats: one active (has a log), one semiactive (group + broadcast).
+	insertPlatformChat(1, "telegram", "Б-123", false)
+	insertPlatformChat(2, "telegram", "Б-456", true)
+	// VK chat with the same shape that must NOT leak into the Telegram scope.
+	insertPlatformChat(3, "vk", "Б-456", true)
+
+	now := time.Now()
+	start := now.Add(-24 * time.Hour)
+	end := now.Add(time.Minute)
+	if err := db.Exec(`
+		INSERT INTO update_logs (chat_id, group_or_teacher, created_at)
+		VALUES (1, 'Б-123', ?)
+	`, now.Add(-time.Hour)).Error; err != nil {
+		t.Fatalf("failed to insert update_log: %v", err)
+	}
+
+	repo := &chatRepository{db: db, platform: model.PlatformTelegram}
+	got, err := repo.CountChatActivitiesByPeriod(context.Background(), start, end)
+	if err != nil {
+		t.Fatalf("CountChatActivitiesByPeriod() error: %v", err)
+	}
+	want := ChatActivityCounts{Active: 1, Semiactive: 1, Inactive: 0}
 	if got != want {
 		t.Fatalf("CountChatActivitiesByPeriod() = %+v, want %+v", got, want)
 	}

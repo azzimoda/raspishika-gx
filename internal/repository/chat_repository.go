@@ -365,7 +365,7 @@ type ChatActivityCounts struct {
 //   - inactive: no logs within the period and otherwise (no group or no
 //     broadcast enabled).
 func (r *chatRepository) CountChatActivitiesByPeriod(ctx context.Context, start, end time.Time) (ChatActivityCounts, error) {
-	const query = `
+	query := `
 		SELECT
 			COALESCE(SUM(CASE WHEN cnt > 0 THEN 1 ELSE 0 END), 0) AS active,
 			COALESCE(SUM(CASE WHEN cnt = 0 AND has_group AND has_broadcast THEN 1 ELSE 0 END), 0) AS semiactive,
@@ -378,18 +378,19 @@ func (r *chatRepository) CountChatActivitiesByPeriod(ctx context.Context, start,
 			FROM chats c
 			LEFT JOIN update_logs ul
 				ON ul.chat_id = c.id AND ul.created_at BETWEEN ? AND ?
+			%s
 			GROUP BY c.id
 		)
 	`
-	var counts ChatActivityCounts
-	top := r.scoped()
-	scopedQuery := query
+	filter := ""
+	args := []any{start, end}
 	if r.platform != "" {
-		scopedQuery = strings.Replace(scopedQuery, "FROM chats c", "FROM chats c WHERE platform = ?", 1)
-		err := top.WithContext(ctx).Raw(scopedQuery, string(r.platform), start, end).Scan(&counts).Error
-		return counts, err
+		filter = "WHERE c.platform = ?"
+		args = append(args, r.platform)
 	}
-	err := top.WithContext(ctx).Raw(scopedQuery, start, end).Scan(&counts).Error
+	query = fmt.Sprintf(query, filter)
+	var counts ChatActivityCounts
+	err := r.scoped().WithContext(ctx).Raw(query, args...).Scan(&counts).Error
 	return counts, err
 }
 
