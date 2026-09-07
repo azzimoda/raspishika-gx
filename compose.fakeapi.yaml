@@ -19,6 +19,27 @@ services:
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-secret}
 
+  db:
+    image: postgres:16-alpine
+    container_name: raspishika-db
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-raspishika}
+      - POSTGRES_DB=raspishika
+      - TZ=Asia/Yekaterinburg
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d raspishika"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - raspishika-network
+    restart: unless-stopped
+
   api:
     build:
       context: .
@@ -57,9 +78,18 @@ services:
       - TZ=Asia/Yekaterinburg
       - BROWSER_SCALE=${BROWSER_SCALE:-1}
       - HANDLE_VACATION=${HANDLE_VACATION:-false}
+      - DB_DRIVER=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-raspishika}
+      - DB_NAME=raspishika
+      - DB_SSLMODE=disable
     depends_on:
       api:
         condition: service_started
+      db:
+        condition: service_healthy
     volumes:
       - ./storage:/app/storage
     networks:
@@ -72,3 +102,4 @@ networks:
 
 volumes:
   redis-data:
+  pg-data:
