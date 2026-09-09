@@ -380,6 +380,7 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 func (s *BroadcastService) sendPairNotificatins(ctx context.Context, taskID int64, schedules []*model.ScheduleData, grouped map[model.GroupName][]*model.Chat, _ []model.GroupName, t time.Time) error {
 	var errs []error
 	success := 0
+	pendingDeletes := make([]messageRef, 0)
 	for _, schedule := range schedules {
 		if ctx.Err() != nil {
 			return errors.Join(append(errs, ctx.Err())...)
@@ -419,7 +420,10 @@ func (s *BroadcastService) sendPairNotificatins(ctx context.Context, taskID int6
 			if chat == nil {
 				continue
 			}
-			err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), text)
+			messageID, err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), text)
+			if err == nil {
+				pendingDeletes = append(pendingDeletes, messageRef{peerID: int64(chat.PeerID), messageID: messageID})
+			}
 			s.recordSend(ctx, taskID, chat, err)
 			if err != nil {
 				errs = append(errs, err)
@@ -428,8 +432,39 @@ func (s *BroadcastService) sendPairNotificatins(ctx context.Context, taskID int6
 			}
 		}
 	}
+	s.schedulePairNotificationDeletes(pendingDeletes)
 	log.Info().Int("success", success).Msg("Pair notifications sent")
 	return errors.Join(errs...)
+}
+
+// messageRef identifies a previously sent message for later deletion.
+type messageRef struct {
+	peerID    int64
+	messageID int
+}
+
+// schedulePairNotificationDeletes removes pair-reminder messages shortly after
+// the lesson they announce starts, so they do not linger in the chat.
+func (s *BroadcastService) schedulePairNotificationDeletes(messages []messageRef) {
+	if len(messages) == 0 {
+		return
+	}
+	ttl := viper.GetDuration(config.KeyPairNotificationTTL)
+	if s.runJob(func() {
+		select {
+		case <-time.After(ttl):
+		case <-s.ctx.Done():
+			return
+		}
+		for _, m := range messages {
+			if err := s.Messenger.DeleteMessage(s.ctx, m.peerID, m.messageID); err != nil {
+				log.Error().Err(err).Int64("peerID", m.peerID).Int("messageID", m.messageID).
+					Msg("Failed to delete pair notification message")
+			}
+		}
+	}) {
+		log.Debug().Int("messages", len(messages)).Dur("ttl", ttl).Msg("Pair notifications scheduled for deletion")
+	}
 }
 
 func (s *BroadcastService) runChangeNotifier(ctx context.Context) {
@@ -553,7 +588,8 @@ func (s *BroadcastService) sendChangeReports(ctx context.Context, taskID int64, 
 				if checkErr != nil {
 					err = errors.Join(err, checkErr)
 				} else if current != nil {
-					err = errors.Join(err, s.Messenger.SendMessagePeer(ctx, int64(current.PeerID), text))
+					_, sendErr := s.Messenger.SendMessagePeer(ctx, int64(current.PeerID), text)
+					err = errors.Join(err, sendErr)
 				}
 			}
 			s.recordSend(ctx, taskID, chat, err)
@@ -708,7 +744,7 @@ func (s *BroadcastService) massSend(ctx context.Context, task *model.BroadcastTa
 		if chat == nil {
 			continue
 		}
-		err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), htmlText)
+		_, err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), htmlText)
 		s.recordSend(ctx, task.ID, chat, err)
 		if err != nil {
 			log.Error().Err(err).Int64("peerID", int64(chat.PeerID)).Msg("Broadcast send failed")
@@ -758,7 +794,7 @@ func (s *BroadcastService) notifyAndResetInvalidChats(ctx context.Context, inval
 				continue
 			}
 			text := fmt.Sprintf("Группа %s больше не существует на сайте колледжа.\nНастройки сброшены. Выберите новую группу через /settings.", group)
-			err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), text)
+			_, err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), text)
 			if s.Messenger.IsForbidden(err) {
 				s.handleForbidden(ctx, err, chat)
 			} else if err != nil {

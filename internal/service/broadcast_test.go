@@ -12,6 +12,8 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/messenger"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
 
@@ -28,16 +30,26 @@ type broadcastDelivery struct {
 	buttons  *messenger.ScheduleButtons
 }
 
+type broadcastDeletion struct {
+	peerID    int64
+	messageID int
+}
+
 type broadcastMessengerStub struct {
+	mu                  sync.Mutex
 	deliveries          []broadcastDelivery
+	deleted             []broadcastDeletion
 	sendError           error
 	started             chan struct{}
 	release             chan struct{}
 	waitForCancellation bool
 }
 
-func (m *broadcastMessengerStub) SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...messenger.SendOptions) error {
+func (m *broadcastMessengerStub) SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...messenger.SendOptions) (int, error) {
+	m.mu.Lock()
 	m.deliveries = append(m.deliveries, broadcastDelivery{peerID: peerID, text: text, buttons: firstButtons(opts)})
+	messageID := len(m.deliveries)
+	m.mu.Unlock()
 	if m.started != nil {
 		m.started <- struct{}{}
 	}
@@ -45,14 +57,14 @@ func (m *broadcastMessengerStub) SendMessagePeer(ctx context.Context, peerID int
 		select {
 		case <-m.release:
 		case <-ctx.Done():
-			return ctx.Err()
+			return 0, ctx.Err()
 		}
 	}
 	if m.waitForCancellation {
 		<-ctx.Done()
-		return ctx.Err()
+		return 0, ctx.Err()
 	}
-	return m.sendError
+	return messageID, m.sendError
 }
 
 func (m *broadcastMessengerStub) SendPhotoPeer(_ context.Context, peerID int64, filename string, data []byte, caption string, opts ...messenger.SendOptions) error {
@@ -70,7 +82,12 @@ func firstButtons(opts []messenger.SendOptions) *messenger.ScheduleButtons {
 	return nil
 }
 
-func (m *broadcastMessengerStub) DeleteMessage(_ context.Context, _ int64, _ int) error { return nil }
+func (m *broadcastMessengerStub) DeleteMessage(_ context.Context, peerID int64, messageID int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deleted = append(m.deleted, broadcastDeletion{peerID: peerID, messageID: messageID})
+	return nil
+}
 
 func (m *broadcastMessengerStub) IsForbidden(err error) bool { return errors.Is(err, errTestForbidden) }
 
@@ -466,6 +483,51 @@ func TestBroadcastQueuedPairOptOutIsHonored(t *testing.T) {
 	}
 	if len(messenger.deliveries) != 1 {
 		t.Fatalf("opted-out recipient received a queued reminder: %+v", messenger.deliveries)
+	}
+}
+
+func TestBroadcastPairNotificationAutoDelete(t *testing.T) {
+	prev := viper.Get(config.KeyPairNotificationTTL)
+	viper.Set(config.KeyPairNotificationTTL, 150*time.Millisecond)
+	t.Cleanup(func() {
+		if prev == nil {
+			viper.Set(config.KeyPairNotificationTTL, nil)
+		} else {
+			viper.Set(config.KeyPairNotificationTTL, prev)
+		}
+	})
+
+	messenger := &broadcastMessengerStub{}
+	service, chats, _ := newBroadcastFixture(t, messenger)
+	group := model.GroupName("ИСПт-22-(9)-2")
+	chat := &model.Chat{ID: 21, PeerID: 2000000011, GroupName: &group, PairSending: true}
+	chats.put(chat)
+	pair := model.Pair{Kind: model.PairKindSubject, Number: 1, StartTime: "08:00", EndTime: "09:30", Discipline: "Математика", Classroom: "215"}
+	schedule := &model.ScheduleData{
+		Config: model.GroupScheduleConfig(&model.Group{GroupName: group}, false),
+		Days:   []model.ScheduleDay{{Date: "01.09.2026", Pairs: []model.Pair{pair}}},
+	}
+	now := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	if err := service.sendPairNotificatins(context.Background(), 7, []*model.ScheduleData{schedule},
+		map[model.GroupName][]*model.Chat{group: {chat}}, nil, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(messenger.deliveries) != 1 || len(messenger.deliveries[0].text) == 0 {
+		t.Fatalf("pair reminder not delivered: %+v", messenger.deliveries)
+	}
+	if len(messenger.deleted) != 0 {
+		t.Fatal("pair message deleted before the TTL elapsed")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for len(messenger.deleted) != 1 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(messenger.deleted) != 1 {
+		t.Fatal("pair message was not auto-deleted after the TTL")
+	}
+	got := messenger.deleted[0]
+	if got.peerID != int64(chat.PeerID) || got.messageID != 1 {
+		t.Fatalf("auto-deleted %+v, want peerID %d messageID 1", got, chat.PeerID)
 	}
 }
 

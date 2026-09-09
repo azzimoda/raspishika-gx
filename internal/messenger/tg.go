@@ -33,10 +33,10 @@ func (t *Telegram) client() (*bot.Bot, error) {
 	return nil, errors.New("telegram bot is not connected")
 }
 
-func (t *Telegram) SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...SendOptions) error {
+func (t *Telegram) SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...SendOptions) (int, error) {
 	b, err := t.client()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	params := &bot.SendMessageParams{
 		ChatID:    peerID,
@@ -46,8 +46,11 @@ func (t *Telegram) SendMessagePeer(ctx context.Context, peerID int64, text strin
 	if markup, ok := scheduleMarkupFromOpts(opts); ok {
 		params.ReplyMarkup = markup
 	}
-	_, err = b.SendMessage(ctx, params)
-	return err
+	msg, err := b.SendMessage(ctx, params)
+	if err != nil {
+		return 0, err
+	}
+	return msg.ID, nil
 }
 
 func (t *Telegram) SendPhotoPeer(ctx context.Context, peerID int64, filename string, data []byte, caption string, opts ...SendOptions) error {

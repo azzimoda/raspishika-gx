@@ -38,8 +38,9 @@ type ScheduleButtons struct {
 // form their own native buttons and keyboards, so the interface carries no
 // messenger-specific markup.
 type Messenger interface {
-	// SendMessagePeer sends an HTML message to the given peer.
-	SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...SendOptions) error
+	// SendMessagePeer sends an HTML message to the given peer and returns its
+	// platform message ID so the caller can later DeleteMessage it.
+	SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...SendOptions) (int, error)
 	// SendPhotoPeer sends a photo with an HTML caption to the given peer.
 	SendPhotoPeer(ctx context.Context, peerID int64, filename string, data []byte, caption string, opts ...SendOptions) error
 	// DeleteMessage deletes a previously sent message.
