@@ -91,12 +91,17 @@ func (s *ChatService) DeleteChat(ctx context.Context, id int64) error {
 }
 
 func (s *ChatService) ResetGroupSettings(ctx context.Context, chat *model.Chat) error {
-	chat.GroupName = nil
-	chat.DepartmentName = nil
-	chat.PairSending = false
-	chat.ChangeAlert = false
-	chat.DailySendingTime = nil
-	return s.repo.UpdateChat(ctx, chat.WithState(model.ChatStateDefault))
+	if chat.GroupName == nil {
+		return nil
+	}
+	if _, err := s.repo.RemoveUnavailableGroup(ctx, chat.ID, *chat.GroupName); err != nil {
+		return err
+	}
+	current, err := s.repo.GetChat(ctx, chat.ID)
+	if err == nil {
+		*chat = *current
+	}
+	return err
 }
 
 func (s *ChatService) AddChatRecentTeacher(ctx context.Context, recentTeacher *model.RecentTeacher) error {

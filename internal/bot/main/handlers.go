@@ -60,6 +60,7 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 	// States
 	{
 		h.registerChatStateHandler(b, model.ChatStateSelectingGroup, h.handleTextGroup, h.checkConfigAccess)
+		h.registerChatStateHandler(b, model.ChatStateAddingGroup, h.handleTextGroup, h.checkConfigAccess)
 		h.registerChatStateHandler(b, model.ChatStateSelectingTime, h.handleTextTime, h.checkConfigAccess)
 		h.registerChatStateHandler(b, model.ChatStateSelectingTeacher, h.handleTextTeacherName, h.checkRegularAccess)
 	}
@@ -75,7 +76,7 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 			log.Error().Err(err).Msg("Failed to get chat by chat ID")
 			return false
 		}
-		if state, _ := chat.GetState(); state == model.ChatStateSelectingGroup {
+		if state, _ := chat.GetState(); state == model.ChatStateSelectingGroup || state == model.ChatStateAddingGroup {
 			return false
 		}
 
@@ -116,6 +117,11 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 		registerConfigCallbackHandler(botutil.CallbackCommandDeleteConfig, h.handleCQDelete)
 		registerConfigCallbackHandler(botutil.CallbackCommandSelectDepartment, h.handleCQSelectDepartment)
 		registerConfigCallbackHandler(botutil.CallbackCommandConfigGroup, h.handleCQConfigGroup)
+		registerConfigCallbackHandler(botutil.CallbackCommandConfigSubscriptions, h.handleCQSubscriptions)
+		registerConfigCallbackHandler(botutil.CallbackCommandAddGroup, h.handleCQAddGroup)
+		registerConfigCallbackHandler(botutil.CallbackCommandRemoveSubscription, h.handleCQRemoveSubscription)
+		registerConfigCallbackHandler(botutil.CallbackCommandSubscriptionDepartment, h.handleCQSelectDepartment)
+		registerConfigCallbackHandler(botutil.CallbackCommandSettings, h.handleCQSettings)
 		registerConfigCallbackHandler(botutil.CallbackCommandConfigDailyTime, h.handleCQConfigDailyTime)
 		registerConfigCallbackHandler(botutil.CallbackCommandDailyOff, h.handleCQDailyOff)
 		registerConfigCallbackHandler(botutil.CallbackCommandConfigReminder, h.handleCQConfigReminder)

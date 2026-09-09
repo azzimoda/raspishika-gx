@@ -39,6 +39,7 @@ const (
 const (
 	ChatStateDefault          ChatState = "default"
 	ChatStateSelectingGroup   ChatState = "selecting_group"
+	ChatStateAddingGroup      ChatState = "adding_group"
 	ChatStateSelectingTeacher ChatState = "selecting_teacher"
 	ChatStateSelectingTime    ChatState = "selecting_time"
 )

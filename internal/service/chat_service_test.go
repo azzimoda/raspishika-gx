@@ -24,6 +24,10 @@ func openTestChatDB(t *testing.T) *gorm.DB {
 		t.Fatalf("failed to get sql handle: %v", err)
 	}
 	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { sqlDB.Close() })
+	if err := db.AutoMigrate(&model.ScheduleSubscription{}, &model.RecentTeacher{}); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Exec(`DROP TABLE IF EXISTS chats`).Error; err != nil {
 		t.Fatalf("failed to drop chats table: %v", err)
 	}

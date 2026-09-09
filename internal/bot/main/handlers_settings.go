@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
@@ -106,7 +107,7 @@ func (h *handler) handleCQConfigDailyTime(ctx context.Context, b *bot.Bot, updat
 	if chat.DailySendingTime != nil {
 		time = "Установленное время: <u>" + *chat.DailySendingTime + "</u>"
 	}
-	text := fmt.Sprintf("%s\n\nПришлите желаемое время рассылки, например <code>19:00</code>", time)
+	text := fmt.Sprintf("%s\n\nПришлите желаемое время рассылки, например <code>08:00</code>. Время общее для всех выбранных групп, по Екатеринбургу.", time)
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          message.Chat.ID,
 		MessageThreadID: message.MessageThreadID,
@@ -330,7 +331,7 @@ func settingsMenuText(chat *model.Chat) string {
 
 	text := fmt.Sprintf(`<b>Настройки</b>
 
-Группа: <u>%s</u>
+Основная группа: <u>%s</u>
 Ежедневная рассылка: <u>%s</u>
 Напоминания перед парами: <u>%s</u>
 Уведомления об изменениях: <u>%s</u>
@@ -344,6 +345,7 @@ func settingsMenuText(chat *model.Chat) string {
 	if !chat.IsPrivate() {
 		text += fmt.Sprintf("\nУровень доступа: <u>%d</u>", chat.Access)
 	}
+	text += "\n\nЕжедневная рассылка — для всех подключённых групп.\nКоманды, напоминания перед парами и уведомления об изменениях — для основной группы."
 
 	return text
 }
@@ -351,7 +353,8 @@ func settingsMenuMarkup(chat *model.Chat) models.InlineKeyboardMarkup {
 	keyboard := make([][]models.InlineKeyboardButton, 0)
 
 	// Student group
-	keyboard = append(keyboard, []models.InlineKeyboardButton{{Text: "Изменить группу", CallbackData: botutil.CallbackCommandConfigGroup}})
+	keyboard = append(keyboard, []models.InlineKeyboardButton{{Text: "Изменить основную группу", CallbackData: botutil.CallbackCommandConfigGroup}})
+	keyboard = append(keyboard, []models.InlineKeyboardButton{{Text: "Группы для рассылки", CallbackData: botutil.CallbackCommandConfigSubscriptions}})
 
 	// Daily sending
 	if chat.DailySendingTime == nil {
@@ -450,7 +453,11 @@ func (h *handler) handleCQSelectDepartment(ctx context.Context, b *bot.Bot, upda
 		return
 	}
 
-	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateSelectingGroup)); err != nil {
+	state := model.ChatStateSelectingGroup
+	if strings.HasPrefix(update.CallbackQuery.Data, botutil.CallbackCommandSubscriptionDepartment+"\n") {
+		state = model.ChatStateAddingGroup
+	}
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(state)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          message.Chat.ID,
@@ -463,7 +470,7 @@ func (h *handler) handleCQSelectDepartment(ctx context.Context, b *bot.Bot, upda
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          message.Chat.ID,
 		MessageThreadID: message.MessageThreadID,
-		Text:            `Выберите группы на клавиатуре или введите название в верном формате, например: "ИСПт 22 9 2"`,
+		Text:            `Выберите группу на клавиатуре или введите название, например: "ИСПт 22 9 2"`,
 		ReplyMarkup:     groupMenuMarkup(groups),
 	})
 	addHandlerCtxErr(ctx, err)
@@ -506,10 +513,27 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 		return
 	}
 
-	chat.GroupName = &group.GroupName
-	chat.DepartmentName = &group.DepartmentName
-
-	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateDefault)); err != nil {
+	state, _ := chat.GetState()
+	if state != model.ChatStateSelectingGroup && state != model.ChatStateAddingGroup {
+		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.Message.Chat.ID, MessageThreadID: update.Message.MessageThreadID,
+			Text: "Время выбора группы истекло. Откройте /settings и повторите выбор.",
+		})
+		addHandlerCtxErr(ctx, err)
+		return
+	}
+	adding := state == model.ChatStateAddingGroup
+	added := false
+	if adding {
+		added, err = h.Chat.AddScheduleSubscription(ctx, chat.ID, *group)
+	} else {
+		var current *model.Chat
+		current, err = h.Chat.SetPrimaryGroup(ctx, chat.ID, *group)
+		if err == nil {
+			chat = current
+		}
+	}
+	if err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          update.Message.Chat.ID,
@@ -520,13 +544,23 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 		return
 	}
 
+	text := fmt.Sprintf("Теперь ваша основная группа — %s", group.GroupName)
+	if adding {
+		text = fmt.Sprintf("Группа %s уже подключена к рассылке", group.GroupName)
+		if added {
+			text = fmt.Sprintf("Группа %s добавлена в рассылку", group.GroupName)
+		}
+	}
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
-		Text:            fmt.Sprintf("Теперь вы в группе %s", group.GroupName),
+		Text:            text,
 		ReplyMarkup:     botutil.MainMenuMarkup(chat.IsPrivate()),
 	})
 	addHandlerCtxErr(ctx, err)
+	if adding {
+		addHandlerCtxErr(ctx, h.sendSubscriptionsMenu(ctx, b, chat.ID, update.Message.MessageThreadID))
+	}
 
 	log.Info().Msg("Handled text group")
 }
@@ -627,7 +661,7 @@ func accessMenuText(chat *model.Chat) string {
 }
 
 func (h *handler) sendDepartmentSelectionMenu(
-	ctx context.Context, b *bot.Bot, chat *model.Chat, update *models.Update,
+	ctx context.Context, b *bot.Bot, chat *model.Chat, update *models.Update, addGroup ...bool,
 ) error {
 	messageThreadID := 0
 	if m := update.Message; m != nil {
@@ -657,7 +691,22 @@ func (h *handler) sendDepartmentSelectionMenu(
 		currentGroup = fmt.Sprintf("Текущая группа: %s", *chat.GroupName)
 	}
 
-	if err := h.Chat.UpdateChat(ctx, chat.WithState(model.ChatStateSelectingGroup)); err != nil {
+	state := model.ChatStateSelectingGroup
+	markup := departmentMenuMarkup(departments)
+	if len(addGroup) > 0 && addGroup[0] {
+		state = model.ChatStateAddingGroup
+		currentGroup = "Добавление группы в ежедневную рассылку"
+		for i := range markup.InlineKeyboard {
+			for j := range markup.InlineKeyboard[i] {
+				button := &markup.InlineKeyboard[i][j]
+				button.CallbackData = strings.Replace(button.CallbackData, botutil.CallbackCommandSelectDepartment+"\n", botutil.CallbackCommandSubscriptionDepartment+"\n", 1)
+				if button.CallbackData == botutil.CallbackCommandDeleteConfig {
+					button.CallbackData = botutil.CallbackCommandConfigSubscriptions
+				}
+			}
+		}
+	}
+	if err := h.Chat.UpdateChat(ctx, chat.WithState(state)); err != nil {
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
 			ChatID:          chat.PeerID,
@@ -671,7 +720,7 @@ func (h *handler) sendDepartmentSelectionMenu(
 		ChatID:          chat.PeerID,
 		MessageThreadID: messageThreadID,
 		Text:            fmt.Sprintf(`%s\nВведите название группы, например "ИСПт 22 9 2", или выберите отделение`, currentGroup),
-		ReplyMarkup:     departmentMenuMarkup(departments),
+		ReplyMarkup:     markup,
 	})
 	return err
 }

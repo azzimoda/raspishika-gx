@@ -44,7 +44,7 @@ func NewScheduleService(
 
 type ScheduleService struct {
 	scraper  APIClient
-	browser  *browser.ChromedpBrowser
+	browser  interface{ ScreenshotHTML(string) ([]byte, error) }
 	schedule repository.ScheduleRepository
 	sf       *singleflight.Group
 }
