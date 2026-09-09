@@ -225,10 +225,27 @@ func (s *BroadcastService) sendSchedule(ctx context.Context, chat *model.Chat, i
 	if img.schedule.IsOld {
 		caption += "\nНе удалось обновить расписание: информация может быть неактуальной."
 	}
-	if url := model.ScheduleURL(img.schedule.Config, nil); url != "" {
+	url := model.ScheduleURL(img.schedule.Config, nil)
+	if url != "" {
 		caption += fmt.Sprintf("\n<a href=\"%s\">Открыть на сайте</a>", html.EscapeString(url))
 	}
-	return s.Messenger.SendPhotoPeer(ctx, int64(chat.PeerID), img.filename, img.data, caption)
+	var value string
+	switch {
+	case img.schedule.Config.Group != nil:
+		value = string(img.schedule.Config.Group.GroupName)
+	case img.schedule.Config.Teacher != nil:
+		value = img.schedule.Config.Teacher.TeacherID
+	}
+	var opts []messenger.SendOptions
+	if value != "" {
+		opts = []messenger.SendOptions{{Buttons: &messenger.ScheduleButtons{
+			Value:      value,
+			Days:       img.schedule.Days,
+			CurrentIdx: -1,
+			LinkURL:    url,
+		}}}
+	}
+	return s.Messenger.SendPhotoPeer(ctx, int64(chat.PeerID), img.filename, img.data, caption, opts...)
 }
 
 // currentRecipient resolves queued recipients by database identity immediately

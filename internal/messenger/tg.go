@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
@@ -32,31 +33,58 @@ func (t *Telegram) client() (*bot.Bot, error) {
 	return nil, errors.New("telegram bot is not connected")
 }
 
-func (t *Telegram) SendMessagePeer(ctx context.Context, peerID int64, text string) error {
+func (t *Telegram) SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...SendOptions) error {
 	b, err := t.client()
 	if err != nil {
 		return err
 	}
-	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+	params := &bot.SendMessageParams{
 		ChatID:    peerID,
 		Text:      text,
 		ParseMode: models.ParseModeHTML,
-	})
+	}
+	if markup, ok := scheduleMarkupFromOpts(opts); ok {
+		params.ReplyMarkup = markup
+	}
+	_, err = b.SendMessage(ctx, params)
 	return err
 }
 
-func (t *Telegram) SendPhotoPeer(ctx context.Context, peerID int64, filename string, data []byte, caption string) error {
+func (t *Telegram) SendPhotoPeer(ctx context.Context, peerID int64, filename string, data []byte, caption string, opts ...SendOptions) error {
 	b, err := t.client()
 	if err != nil {
 		return err
 	}
-	_, err = b.SendPhoto(ctx, &bot.SendPhotoParams{
+	params := &bot.SendPhotoParams{
 		ChatID:    peerID,
 		Photo:     &models.InputFileUpload{Filename: filename, Data: bytes.NewReader(data)},
 		Caption:   caption,
 		ParseMode: models.ParseModeHTML,
-	})
+	}
+	if markup, ok := scheduleMarkupFromOpts(opts); ok {
+		params.ReplyMarkup = markup
+	}
+	_, err = b.SendPhoto(ctx, params)
 	return err
+}
+
+func scheduleMarkupFromOpts(opts []SendOptions) (models.InlineKeyboardMarkup, bool) {
+	for _, o := range opts {
+		if o.Buttons != nil {
+			return scheduleMarkup(o.Buttons), true
+		}
+	}
+	return models.InlineKeyboardMarkup{}, false
+}
+
+// scheduleMarkup renders ScheduleButtons as the same inline keyboard used by
+// the interactive views: the week photo layout (day-jump buttons + link +
+// refresh) when no day is highlighted, or the day-text layout otherwise.
+func scheduleMarkup(b *ScheduleButtons) models.InlineKeyboardMarkup {
+	if b.CurrentIdx >= 0 {
+		return botutil.DayScheduleMarkup(b.Value, b.Days, b.CurrentIdx, b.LinkURL)
+	}
+	return botutil.WeekScheduleMarkupFromValue(b.Value, b.Days, b.LinkURL)
 }
 
 func (t *Telegram) DeleteMessage(ctx context.Context, chatID int64, messageID int) error {

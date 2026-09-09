@@ -3,6 +3,7 @@ package botutil
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -111,6 +112,32 @@ func TestWeekScheduleMarkupNoConfig(t *testing.T) {
 	markup := WeekScheduleMarkup(model.ScheduleConfig{}, testLinkURL, nil)
 	if markup.InlineKeyboard != nil {
 		t.Fatalf("want empty keyboard for config without group or teacher, got %+v", markup.InlineKeyboard)
+	}
+}
+
+func TestWeekScheduleMarkupFromValue(t *testing.T) {
+	days := []model.ScheduleDay{
+		{Date: "2026-09-01", Weekday: "вторник"},
+		{Date: "2026-09-02", Weekday: "среда"},
+		{Date: "2026-09-03", Weekday: "четверг"},
+	}
+	groupConf := model.ScheduleConfig{Group: &model.Group{GroupID: "205", GroupName: "ИСПт-22-(9)-2", DepartmentID: "15", Year: 2026}}
+
+	fromValue := WeekScheduleMarkupFromValue("ИСПт-22-(9)-2", days, testLinkURL)
+	fromConf := WeekScheduleMarkup(groupConf, testLinkURL, days)
+	if !reflect.DeepEqual(fromValue, fromConf) {
+		t.Fatalf("WeekScheduleMarkupFromValue = %+v, want %+v", fromValue, fromConf)
+	}
+
+	// Day jump buttons plus the link/update bottom row.
+	if len(fromValue.InlineKeyboard) != 2 {
+		t.Fatalf("rows = %d, want 2", len(fromValue.InlineKeyboard))
+	}
+	if len(fromValue.InlineKeyboard[0]) != len(days) {
+		t.Fatalf("day row = %d buttons, want %d", len(fromValue.InlineKeyboard[0]), len(days))
+	}
+	if !strings.HasPrefix(fromValue.InlineKeyboard[0][0].CallbackData, "update_day\nИСПт-22-(9)-2\n0\n") {
+		t.Fatalf("day callback = %q", fromValue.InlineKeyboard[0][0].CallbackData)
 	}
 }
 

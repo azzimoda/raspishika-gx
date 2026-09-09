@@ -356,7 +356,13 @@ func WeekScheduleMarkup(conf model.ScheduleConfig, linkURL string, days []model.
 	default:
 		return models.InlineKeyboardMarkup{}
 	}
+	return WeekScheduleMarkupFromValue(value, days, linkURL)
+}
 
+// WeekScheduleMarkupFromValue is WeekScheduleMarkup for an already-known
+// callback value. It lets non-interactive senders (messenger adapters) reuse
+// the exact same keyboard as the interactive week photo.
+func WeekScheduleMarkupFromValue(value string, days []model.ScheduleDay, linkURL string) models.InlineKeyboardMarkup {
 	keyboard := dayJumpRows(value, days, 0, false)
 
 	bottomRow := make([]models.InlineKeyboardButton, 0, 2)

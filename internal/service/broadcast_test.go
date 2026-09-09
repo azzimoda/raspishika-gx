@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
+	"github.com/azzimoda/raspishika-gx/internal/messenger"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
 	"gorm.io/gorm"
@@ -24,6 +25,7 @@ type broadcastDelivery struct {
 	text     string
 	filename string
 	data     []byte
+	buttons  *messenger.ScheduleButtons
 }
 
 type broadcastMessengerStub struct {
@@ -34,8 +36,8 @@ type broadcastMessengerStub struct {
 	waitForCancellation bool
 }
 
-func (m *broadcastMessengerStub) SendMessagePeer(ctx context.Context, peerID int64, text string) error {
-	m.deliveries = append(m.deliveries, broadcastDelivery{peerID: peerID, text: text})
+func (m *broadcastMessengerStub) SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...messenger.SendOptions) error {
+	m.deliveries = append(m.deliveries, broadcastDelivery{peerID: peerID, text: text, buttons: firstButtons(opts)})
 	if m.started != nil {
 		m.started <- struct{}{}
 	}
@@ -53,9 +55,19 @@ func (m *broadcastMessengerStub) SendMessagePeer(ctx context.Context, peerID int
 	return m.sendError
 }
 
-func (m *broadcastMessengerStub) SendPhotoPeer(_ context.Context, peerID int64, filename string, data []byte, caption string) error {
-	m.deliveries = append(m.deliveries, broadcastDelivery{peerID: peerID, text: caption, filename: filename, data: data})
+func (m *broadcastMessengerStub) SendPhotoPeer(_ context.Context, peerID int64, filename string, data []byte, caption string, opts ...messenger.SendOptions) error {
+	m.deliveries = append(m.deliveries, broadcastDelivery{peerID: peerID, text: caption, filename: filename, data: data, buttons: firstButtons(opts)})
 	return m.sendError
+}
+
+// firstButtons returns the first non-nil schedule buttons from the send options.
+func firstButtons(opts []messenger.SendOptions) *messenger.ScheduleButtons {
+	for _, o := range opts {
+		if o.Buttons != nil {
+			return o.Buttons
+		}
+	}
+	return nil
 }
 
 func (m *broadcastMessengerStub) DeleteMessage(_ context.Context, _ int64, _ int) error { return nil }
@@ -252,6 +264,12 @@ func TestBroadcastSchedulePhotoCaptionKeepsHTMLAndStaleWarning(t *testing.T) {
 	}
 	if !strings.Contains(got.text, "href=\"") || !strings.Contains(got.text, "Открыть на сайте") {
 		t.Fatalf("caption must contain the schedule link: %s", got.text)
+	}
+	if got.buttons == nil {
+		t.Fatal("schedule photo must carry navigation buttons")
+	}
+	if got.buttons.Value != "ИСПт-22-(9)-2" || got.buttons.CurrentIdx != -1 || got.buttons.LinkURL == "" {
+		t.Fatalf("navigation buttons = %+v", got.buttons)
 	}
 }
 
