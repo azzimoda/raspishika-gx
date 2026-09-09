@@ -177,14 +177,13 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 		return
 	}
 	start := time.Now()
-	chats, err := s.Chat.GetChatsByDailyTime(ctx, t.Format("15:04"))
+	recipients, err := s.Chat.GetDailyRecipients(ctx, t.Format("15:04"))
 	if err != nil {
 		s.reportError(err, "Failed to get chats for daily broadcast")
 		return
 	}
-	grouped, groups, confs, invalid, stop := s.prepareBroadcast(ctx, chats)
-	s.notifyAndResetInvalidChats(ctx, invalid)
-	if stop {
+	grouped, confs := s.prepareDailyBroadcast(ctx, recipients)
+	if len(confs) == 0 {
 		return
 	}
 	schedules, err := s.Schedule.GetSchedules(ctx, confs)
@@ -194,7 +193,7 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 	if len(schedules) == 0 {
 		return
 	}
-	task := model.BroadcastTaskLog{Kind: model.BDaily, Groups: len(groups)}
+	task := model.BroadcastTaskLog{Kind: model.BDaily, Groups: len(confs)}
 	if err := s.Stats.LogBroadcastTask(ctx, &task); err != nil {
 		s.reportError(err, "Failed to log daily broadcast task")
 		return
@@ -289,8 +288,9 @@ func (s *BroadcastService) currentRecipient(ctx context.Context, queued *model.C
 	return current, nil
 }
 
-func (s *BroadcastService) sendDaily(ctx context.Context, taskID int64, schedules []*model.ScheduleData, grouped map[model.GroupName][]*model.Chat) error {
+func (s *BroadcastService) sendDaily(ctx context.Context, taskID int64, schedules []*model.ScheduleData, grouped map[model.GroupName][]model.DailyRecipient) error {
 	var errs []error
+	lastSend := make(map[int64]time.Time)
 	for _, schedule := range schedules {
 		if ctx.Err() != nil {
 			return errors.Join(append(errs, ctx.Err())...)
@@ -301,7 +301,7 @@ func (s *BroadcastService) sendDaily(ctx context.Context, taskID int64, schedule
 		images := make(map[bool]*broadcastImage)
 		imageErrors := make(map[bool]error)
 		for _, queued := range grouped[schedule.Config.Group.GroupName] {
-			chat, checkErr := s.currentRecipient(ctx, queued, model.BDaily)
+			chat, checkErr := s.currentDailyRecipient(ctx, queued)
 			if checkErr != nil {
 				errs = append(errs, checkErr)
 				continue
@@ -316,7 +316,11 @@ func (s *BroadcastService) sendDaily(ctx context.Context, taskID int64, schedule
 			}
 			err := imageErrors[chat.DarkMode]
 			if err == nil {
-				chat, err = s.currentRecipient(ctx, queued, model.BDaily)
+				// Несколько расписаний одному чату отправляем с интервалом.
+				if delay := time.Until(lastSend[chat.ID].Add(time.Second)); delay > 0 && !sleepContext(ctx, delay) {
+					return errors.Join(append(errs, ctx.Err())...)
+				}
+				chat, err = s.currentDailyRecipient(ctx, queued)
 				if err != nil {
 					errs = append(errs, err)
 					continue
@@ -325,8 +329,9 @@ func (s *BroadcastService) sendDaily(ctx context.Context, taskID int64, schedule
 					continue
 				}
 				err = s.sendSchedule(ctx, chat, img)
+				lastSend[chat.ID] = time.Now()
 			}
-			s.recordSend(ctx, taskID, chat, err)
+			s.recordSend(ctx, taskID, chat, err, schedule.Config.Group.GroupName)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -603,14 +608,14 @@ func (s *BroadcastService) sendChangeReports(ctx context.Context, taskID int64, 
 	return success, errors.Join(errs...)
 }
 
-func (s *BroadcastService) recordSend(ctx context.Context, taskID int64, chat *model.Chat, err error) {
+func (s *BroadcastService) recordSend(ctx context.Context, taskID int64, chat *model.Chat, err error, group ...model.GroupName) {
 	if s.Messenger.IsForbidden(err) {
 		s.handleForbidden(ctx, err, chat)
 	}
-	s.logBroadcast(ctx, taskID, chat, err)
+	s.logBroadcast(ctx, taskID, chat, err, group...)
 }
 
-func (s *BroadcastService) logBroadcast(ctx context.Context, taskID int64, chat *model.Chat, sendErr error) {
+func (s *BroadcastService) logBroadcast(ctx context.Context, taskID int64, chat *model.Chat, sendErr error, group ...model.GroupName) {
 	logCtx, cancel := broadcastLogContext(ctx)
 	defer cancel()
 	var errValue *string
@@ -618,9 +623,13 @@ func (s *BroadcastService) logBroadcast(ctx context.Context, taskID int64, chat 
 		value := sendErr.Error()
 		errValue = &value
 	}
+	groupName := refutil.DerefOrTypeDefault(chat.GroupName)
+	if len(group) > 0 {
+		groupName = group[0]
+	}
 	if err := s.Stats.LogBroadcast(logCtx, model.BroadcastLog{
 		TaskID: taskID, ChatID: chat.ID,
-		Group: refutil.DerefOrTypeDefault(chat.GroupName), Error: errValue,
+		Group: groupName, Error: errValue,
 	}); err != nil {
 		s.reportError(err, "Failed to log broadcast delivery")
 	}
@@ -793,7 +802,7 @@ func (s *BroadcastService) notifyAndResetInvalidChats(ctx context.Context, inval
 			if chat.DailySendingTime == nil && !chat.PairSending && !chat.ChangeAlert {
 				continue
 			}
-			text := fmt.Sprintf("Группа %s больше не существует на сайте колледжа.\nНастройки сброшены. Выберите новую группу через /settings.", group)
+			text := fmt.Sprintf("Группа %s больше не существует на сайте колледжа.\nВыберите новую основную группу через /settings. Рассылка дополнительных групп сохранится.", group)
 			_, err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), text)
 			if s.Messenger.IsForbidden(err) {
 				s.handleForbidden(ctx, err, chat)

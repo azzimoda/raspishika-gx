@@ -17,6 +17,7 @@ import (
 )
 
 type ChatRepository interface {
+	ScheduleSubscriptionRepository
 	CreateChat(context.Context, *model.Chat) error
 	CreateOrUpdateChat(context.Context, *model.Chat) (created bool, err error)
 
@@ -571,6 +572,12 @@ type TimeCount struct {
 func (r *chatRepository) DeleteChat(ctx context.Context, id int64) error {
 	// Do not rely on SQLite's per-connection foreign_keys setting for /stop.
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if _, err := r.lockSubscriptionChat(tx, id); err != nil {
+			return err
+		}
+		if err := tx.Where("chat_id = ?", id).Delete(&model.ScheduleSubscription{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("chat_id = ?", id).Delete(&model.RecentTeacher{}).Error; err != nil {
 			return err
 		}

@@ -55,8 +55,8 @@ func TestPostgresMigrateUp(t *testing.T) {
 	if err := db.Raw("SELECT MAX(version_id) AS version FROM goose_db_version").Scan(&version).Error; err != nil {
 		t.Fatalf("failed to read goose version: %v", err)
 	}
-	if version.Version != 5 {
-		t.Fatalf("expected 5 postgres migrations to be applied, got version %d", version.Version)
+	if version.Version != 6 {
+		t.Fatalf("expected 6 postgres migrations to be applied, got version %d", version.Version)
 	}
 
 	var hasPlatform int

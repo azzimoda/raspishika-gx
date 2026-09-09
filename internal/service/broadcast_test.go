@@ -144,6 +144,17 @@ func (r *broadcastChatsStub) UpdateChat(_ context.Context, chat *model.Chat) err
 	return nil
 }
 
+func (r *broadcastChatsStub) RemoveUnavailableGroup(ctx context.Context, id int64, group model.GroupName) (bool, error) {
+	chat, err := r.GetChat(ctx, id)
+	if err != nil || chat.GroupName == nil || *chat.GroupName != group {
+		return false, err
+	}
+	chat.GroupName, chat.DepartmentName, chat.DailySendingTime = nil, nil, nil
+	chat.PairSending, chat.ChangeAlert = false, false
+	chat.State = model.ChatStateDefault
+	return true, r.UpdateChat(ctx, chat)
+}
+
 func (r *broadcastChatsStub) GetChat(_ context.Context, id int64) (*model.Chat, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

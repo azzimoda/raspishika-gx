@@ -23,7 +23,7 @@ const (
 	ErrMsgCouldNotSendSchedule = "Не удалось отправить расписание, попробуте позже"
 	ErrMsgSelectGroupAgain     = "Не удалось найти группу, выберите группу ещё раз"
 
-	MsgGroupRemoved = "Группа %s больше не существует на сайте колледжа.\n\nНастройки сброшены — выберите новую группу через /settings"
+	MsgGroupRemoved = "Группа %s больше не существует на сайте колледжа.\n\nВыберите другую группу через /settings. Подписки на остальные группы сохраняются."
 )
 
 // ScheduleLinkLabel is the text of the inline link button opening the college
