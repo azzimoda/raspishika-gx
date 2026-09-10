@@ -96,6 +96,38 @@ services:
       - raspishika-network
     restart: unless-stopped
 
+  adminbot:
+    build:
+      context: .
+      dockerfile: bot.Dockerfile
+    container_name: raspishika-adminbot
+    entrypoint: /app/adminbot
+    environment:
+      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID:-0}
+      - SCRAPER_HOST=api
+      - SCRAPER_PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - DB_DRIVER=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-raspishika}
+      - DB_NAME=raspishika
+      - DB_SSLMODE=disable
+    depends_on:
+      api:
+        condition: service_started
+      bot:
+        condition: service_started
+      db:
+        condition: service_healthy
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - raspishika-network
+    restart: unless-stopped
+
 networks:
   raspishika-network:
     driver: bridge

@@ -77,6 +77,8 @@ func (*handler) handleDefault(ctx context.Context, b *bot.Bot, update *models.Up
 }
 
 func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models.Update) {
+	log.Debug().Msg("Handling command start...")
+
 	_, argsStr := botutil.ParseCommand(update.Message.Text)
 	if argsStr == "" {
 		b.SendMessage(ctx, &bot.SendMessageParams{ChatID: update.Message.Chat.ID, Text: "Welcome back, Master!"})

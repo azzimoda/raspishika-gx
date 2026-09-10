@@ -36,7 +36,6 @@ import (
 
 // New creates the app with the default API client from configuration.
 func New() (*App, error) {
-
 	return NewWithScraper(nil)
 }
 
@@ -87,19 +86,35 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 		},
 		services.Proxy,
 	)
-	appReporter.getBot = func() *bot.Bot { return mainBot.Bot }
 	broadcast := service.NewBroadcastService(messenger.NewTelegram(func() *bot.Bot { return mainBot.Bot }), services, appReporter)
 	jobPoller := service.NewBroadcastJobPoller(broadcast, container.Job, model.PlatformTelegram)
 
+	adminReporterBot := botservice.NewBotService(
+		func(p string, _ func()) (*bot.Bot, error) {
+			httpClient, err := proxyutil.NewHTTPProxyClient(p)
+			if err != nil {
+				return nil, err
+			}
+			return bot.New(viper.GetString(config.KeyAdminBotToken),
+				bot.WithHTTPClient(10*time.Second, httpClient),
+				bot.WithCheckInitTimeout(10*time.Second),
+			)
+		},
+		services.Proxy,
+		botservice.WithSendOnly(),
+	)
+	appReporter.getBotUsername = func() string { return adminReporterBot.Username() }
+
 	a := &App{
-		Ctx:         ctx,
-		Cancel:      cancel,
-		DB:          db,
-		Services:    services,
-		Broadcast:   broadcast,
-		JobPoller:   jobPoller,
-		MainBot:     mainBot,
-		AppReporter: appReporter,
+		Ctx:              ctx,
+		Cancel:           cancel,
+		DB:               db,
+		Services:         services,
+		Broadcast:        broadcast,
+		JobPoller:        jobPoller,
+		MainBot:          mainBot,
+		AdminReporterBot: adminReporterBot,
+		AppReporter:      appReporter,
 	}
 
 	mainBot.OnRestart(a.OnMainBotRestart)
@@ -108,13 +123,14 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 }
 
 type App struct {
-	Ctx       context.Context
-	Cancel    context.CancelFunc
-	DB        *gorm.DB
-	Services  *service.Services
-	Broadcast *service.BroadcastService
-	JobPoller *service.BroadcastJobPoller
-	MainBot   *botservice.BotService
+	Ctx              context.Context
+	Cancel           context.CancelFunc
+	DB               *gorm.DB
+	Services         *service.Services
+	Broadcast        *service.BroadcastService
+	JobPoller        *service.BroadcastJobPoller
+	MainBot          *botservice.BotService
+	AdminReporterBot *botservice.BotService
 	*AppReporter
 }
 
@@ -161,6 +177,10 @@ func (a *App) runBots(ctx context.Context, cancel context.CancelFunc) error {
 		return nil
 	})
 	g.Go(func() error {
+		a.AdminReporterBot.Start(gctx)
+		return nil
+	})
+	g.Go(func() error {
 		a.JobPoller.Run(gctx)
 		return nil
 	})
@@ -170,47 +190,18 @@ func (a *App) runBots(ctx context.Context, cancel context.CancelFunc) error {
 		return g.Wait()
 	}
 
-	// Operational reports go to ADMIN_ID from the admin bot's account: the
-	// reporter below is a send-only ADMIN_BOT_TOKEN bot (no polling) running
-	// through the same SOCKS5 stack as the main bot. Without the token or a
-	// usable proxy reports fall back to logs only.
-	rep, err := a.adminTokenReporter(gctx)
-	if err != nil {
-		log.Warn().Err(err).Msg("Admin reporter unavailable; operational reports go to logs only")
-	} else if rep != nil {
-		a.AppReporter.Reporter = rep
+	if a.AdminReporterBot.Bot != nil {
+		adminID := viper.GetInt64(config.KeyAdminID)
+		a.AppReporter.Reporter = reporter.NewReporter(a.AdminReporterBot.Bot, adminID)
+		a.Report().Msg("Started on bot @" + mainbot.GetMe(a.MainBot.Bot).Username)
+	} else {
+		log.Warn().Msg("Admin reporter bot unavailable; operational reports go to logs only")
 		a.Report().Msg("Started on bot @" + mainbot.GetMe(a.MainBot.Bot).Username)
 	}
 
 	<-gctx.Done()
 	cancel()
 	return g.Wait()
-}
-
-// adminTokenReporter builds the reporter that delivers operational reports to
-// ADMIN_ID through ADMIN_BOT_TOKEN. The bot is never started: it only sends
-// messages, so no getUpdates polling runs. Returns nil, nil when reporting is
-// not configured (no ADMIN_BOT_TOKEN or ADMIN_ID).
-func (a *App) adminTokenReporter(ctx context.Context) (reporter.Reporter, error) {
-	token := viper.GetString(config.KeyAdminBotToken)
-	adminID := viper.GetInt64(config.KeyAdminID)
-	if token == "" || adminID == 0 {
-		return nil, nil
-	}
-
-	proxyAddr, err := a.Services.Proxy.FirstAvailable(ctx)
-	if err != nil {
-		return nil, err
-	}
-	httpClient, err := proxyutil.NewHTTPProxyClient(proxyAddr)
-	if err != nil {
-		return nil, err
-	}
-	adminBot, err := bot.New(token, bot.WithHTTPClient(10*time.Second, httpClient))
-	if err != nil {
-		return nil, err
-	}
-	return reporter.NewReporter(adminBot, adminID), nil
 }
 
 // waitForMainBotReady blocks until the main bot is built. Returns false if the
@@ -240,6 +231,7 @@ func (a *App) Stop() error {
 	a.Broadcast.Stop(shutdownCtx)
 
 	a.MainBot.Stop()
+	a.AdminReporterBot.Stop()
 
 	errServices := a.Services.Stop()
 	sqlDB, err := a.DB.DB()
@@ -270,15 +262,15 @@ func (a *App) OnMainBotRestart(ctx context.Context) {
 
 type AppReporter struct {
 	reporter.Reporter
-	Services *service.Services
-	getBot   func() *bot.Bot
+	Services       *service.Services
+	getBotUsername func() string
 }
 
 // NewAppReporter builds a lazy reporter for a non-main app process (currently
 // the admin bot). It formats reports like the main app, but stays quiet until
 // the bot connects.
-func NewAppReporter(services *service.Services, getBot func() *bot.Bot) *AppReporter {
-	return &AppReporter{Services: services, getBot: getBot}
+func NewAppReporter(services *service.Services, getBotUsername func() string) *AppReporter {
+	return &AppReporter{Services: services, getBotUsername: getBotUsername}
 }
 
 // Report returns a report builder that stays quiet until the bot connects —
@@ -286,7 +278,7 @@ func NewAppReporter(services *service.Services, getBot func() *bot.Bot) *AppRepo
 // reports go to the configured recipient.
 func (r *AppReporter) Report() reporter.ReportBuilder {
 
-	format := NewFormatter(r.getBot, r.Services)
+	format := NewFormatter(r.getBotUsername, r.Services)
 	if r.Reporter == nil {
 		return reporter.EmptyReportBuilder().WithFormatFunc(format)
 	}
@@ -294,10 +286,10 @@ func (r *AppReporter) Report() reporter.ReportBuilder {
 }
 
 // NewFormatter builds the rich HTML formatter that renders bot reports (debug
-// values, errors, the message and chat/group context). getBot returns the
-// connected bot once it exists, so the formatter also serves the deep links
-// that point back to the bot.
-func NewFormatter(getBot func() *bot.Bot, services *service.Services) reporter.FormatFunc {
+// values, errors, the message and chat/group context). getBotUsername returns
+// the username of the bot that serves the admin deep links (the admin bot) once
+// it is connected, so the formatter points the "Get chat" buttons back at it.
+func NewFormatter(getBotUsername func() string, services *service.Services) reporter.FormatFunc {
 
 	return func(msg string, debugValues map[string]any, err error) *bot.SendRichMessageParams {
 
@@ -309,12 +301,8 @@ func NewFormatter(getBot func() *bot.Bot, services *service.Services) reporter.F
 		var buttons [][]models.InlineKeyboardButton
 
 		var botUsername string
-		if getBot != nil {
-			if b := getBot(); b != nil {
-				if me := mainbot.GetMe(b); me != nil {
-					botUsername = me.Username
-				}
-			}
+		if getBotUsername != nil {
+			botUsername = getBotUsername()
 		}
 
 		// Chat

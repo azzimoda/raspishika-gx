@@ -2,7 +2,6 @@ package mainbot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 )
 
 const (
@@ -52,17 +50,6 @@ const (
 func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models.Update) {
 	log.Debug().Msg("Handling command start...")
 
-	// The admin deep links ("Get chat"/"Get group" buttons in admin reports)
-	// point at this bot and must only ever serve ADMIN_ID.
-	if _, argsStr := botutil.ParseCommand(update.Message.Text); argsStr != "" {
-		if update.Message.From != nil && update.Message.From.ID == h.adminID {
-			h.handleAdminStart(ctx, b, update, argsStr)
-			return
-		}
-		log.Warn().Int64("userID", update.Message.From.ID).Msg("Ignored admin deep link from a non-admin user")
-		return
-	}
-
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:          update.Message.Chat.ID,
 		MessageThreadID: update.Message.MessageThreadID,
@@ -83,33 +70,6 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 	log.Info().Msg("Handled start")
 }
 
-// handleAdminStart responds to the admin deep links in the report messages:
-// /start chat=<chatIDOrUsername> and /start group=<groupName>.
-func (h *handler) handleAdminStart(ctx context.Context, _ *bot.Bot, update *models.Update, argsStr string) {
-	args := botutil.ParseStartCommand(argsStr)
-	switch args.Arg(0) {
-	case "chat":
-		chat, err := h.Chat.GetChatByUsernameOrChatID(ctx, args.Arg(1))
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				h.Report().Msg("Chat not found")
-			} else {
-				h.Report().Err(err).Msg("Error getting chat")
-			}
-			return
-		}
-		h.ReportChat(chat).Msg("Chat found")
-	case "group":
-		group, err := h.Schedule.GetGroupByName(ctx, model.GroupName(args.Arg(1)))
-		if err != nil {
-			h.Report().Err(err).Msg("Error getting group")
-			return
-		}
-		h.Report().Debug("name", group.GroupName).Debug("department", group.DepartmentName).
-			Debug("gr", group.GroupID).Debug("sid", group.DepartmentID).
-			Msg("Group found")
-	}
-}
 func (h *handler) offerToSetGroupOnStart(ctx context.Context, b *bot.Bot, chat *model.Chat, update *models.Update) {
 	err := h.sendDepartmentSelectionMenu(ctx, b, chat, update)
 	addHandlerCtxErr(ctx, err)

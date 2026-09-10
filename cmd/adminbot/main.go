@@ -72,7 +72,7 @@ func main() {
 	jobs := service.NewBroadcastJobs(container.Job, nil)
 
 	var adminBot *bot.Bot
-	appReporter := app.NewAppReporter(services, func() *bot.Bot { return adminBot })
+	var appReporter *app.AppReporter
 	botService := botservice.NewBotService(
 		func(proxy string, onActivity func()) (*bot.Bot, error) {
 			adminBot, err = adminbot.New(services, proxy, appReporter, jobs, onActivity)
@@ -80,6 +80,7 @@ func main() {
 		},
 		services.Proxy,
 	)
+	appReporter = app.NewAppReporter(services, func() string { return botService.Username() })
 	botService.OnRestart(func(context.Context) {
 		if adminBot != nil {
 			appReporter.Reporter = reporter.NewReporter(adminBot, adminID)
