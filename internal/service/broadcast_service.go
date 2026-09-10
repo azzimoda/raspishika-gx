@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html"
 	"sync"
 	"time"
 
@@ -23,7 +22,9 @@ import (
 // NewBroadcastService returns a messenger-neutral broadcast service. Text
 // passed to the messenger is Telegram HTML; the messenger adapter renders it
 // for a specific platform.
-func NewBroadcastService(messenger messenger.Messenger, services *Services, report reporter.Reporter) *BroadcastService {
+func NewBroadcastService(
+	messenger messenger.Messenger, services *Services, report reporter.Reporter,
+) *BroadcastService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &BroadcastService{
 		Messenger: messenger, Services: services, Reporter: report,
@@ -213,7 +214,9 @@ type broadcastImage struct {
 
 // Each variant owns its config value; preparing one must not switch another
 // recipient's theme or mutate the schedule fetched from the shared cache.
-func (s *BroadcastService) prepareImage(ctx context.Context, schedule *model.ScheduleData, dark bool) (*broadcastImage, error) {
+func (s *BroadcastService) prepareImage(
+	ctx context.Context, schedule *model.ScheduleData, dark bool,
+) (*broadcastImage, error) {
 	result := &broadcastImage{schedule: schedule.WithConfig(schedule.Config.WithDarkMode(dark))}
 	var err error
 	result.filename, result.data, err = s.Schedule.PrepareScheduleImage(ctx, &result.schedule)
@@ -226,9 +229,6 @@ func (s *BroadcastService) sendSchedule(ctx context.Context, chat *model.Chat, i
 		caption += "\nНе удалось обновить расписание: информация может быть неактуальной."
 	}
 	url := model.ScheduleURL(img.schedule.Config, nil)
-	if url != "" {
-		caption += fmt.Sprintf("\n<a href=\"%s\">Открыть на сайте</a>", html.EscapeString(url))
-	}
 	var value string
 	switch {
 	case img.schedule.Config.Group != nil:
@@ -252,7 +252,9 @@ func (s *BroadcastService) sendSchedule(ctx context.Context, chat *model.Chat, i
 // before a send. A queue snapshot must not revive a chat removed by /stop or
 // an opt-in which was changed while another recipient or a screenshot was being
 // processed.
-func (s *BroadcastService) currentRecipient(ctx context.Context, queued *model.Chat, kind model.BroadcastKind) (*model.Chat, error) {
+func (s *BroadcastService) currentRecipient(
+	ctx context.Context, queued *model.Chat, kind model.BroadcastKind,
+) (*model.Chat, error) {
 	if queued == nil || ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -274,7 +276,10 @@ func (s *BroadcastService) currentRecipient(ctx context.Context, queued *model.C
 	}
 	switch kind {
 	case model.BDaily:
-		if current.DailySendingTime == nil || queued.DailySendingTime == nil || *current.DailySendingTime != *queued.DailySendingTime {
+		if current.DailySendingTime == nil ||
+			queued.DailySendingTime == nil ||
+			*current.DailySendingTime != *queued.DailySendingTime {
+
 			return nil, nil
 		}
 	case model.BPair:
@@ -289,7 +294,12 @@ func (s *BroadcastService) currentRecipient(ctx context.Context, queued *model.C
 	return current, nil
 }
 
-func (s *BroadcastService) sendDaily(ctx context.Context, taskID int64, schedules []*model.ScheduleData, grouped map[model.GroupName][]*model.Chat) error {
+func (s *BroadcastService) sendDaily(
+	ctx context.Context,
+	taskID int64,
+	schedules []*model.ScheduleData,
+	grouped map[model.GroupName][]*model.Chat,
+) error {
 	var errs []error
 	for _, schedule := range schedules {
 		if ctx.Err() != nil {
@@ -377,7 +387,14 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 	s.finishTask(ctx, &task, start)
 }
 
-func (s *BroadcastService) sendPairNotificatins(ctx context.Context, taskID int64, schedules []*model.ScheduleData, grouped map[model.GroupName][]*model.Chat, _ []model.GroupName, t time.Time) error {
+func (s *BroadcastService) sendPairNotificatins(
+	ctx context.Context,
+	taskID int64,
+	schedules []*model.ScheduleData,
+	grouped map[model.GroupName][]*model.Chat,
+	_ []model.GroupName, // TODO: Remove this parameter.
+	t time.Time,
+) error {
 	var errs []error
 	success := 0
 	pendingDeletes := make([]messageRef, 0)
@@ -390,7 +407,9 @@ func (s *BroadcastService) sendPairNotificatins(ctx context.Context, taskID int6
 		}
 		var today *model.ScheduleDay
 		for i := range schedule.Days {
-			if schedule.Days[i].Date == t.Format("02.01.2006") || schedule.Days[i].Date == t.Format("2006-01-02") {
+			if schedule.Days[i].Date == t.Format("02.01.2006") ||
+				schedule.Days[i].Date == t.Format("2006-01-02") {
+
 				today = &schedule.Days[i]
 				break
 			}
@@ -407,10 +426,13 @@ func (s *BroadcastService) sendPairNotificatins(ctx context.Context, taskID int6
 			continue
 		}
 		switch pair.Kind {
-		case model.PairKindEmpty, model.PairKindEvent, model.PairKindIGA, model.PairKindVacation, model.PairKindPractice:
+		case model.PairKindEmpty, model.PairKindEvent, model.PairKindIGA,
+			model.PairKindVacation, model.PairKindPractice:
+
 			continue
 		}
-		text := fmt.Sprintf("Следующая пара в %s, кабинет %s:\n%s\n%s", pair.StartTime, pair.Classroom, pair.Discipline, pair.Teacher)
+		text := fmt.Sprintf("Следующая пара в %s, кабинет %s:\n%s\n%s",
+			pair.StartTime, pair.Classroom, pair.Discipline, pair.Teacher)
 		for _, queued := range grouped[schedule.Config.Group.GroupName] {
 			chat, checkErr := s.currentRecipient(ctx, queued, model.BPair)
 			if checkErr != nil {
@@ -422,7 +444,8 @@ func (s *BroadcastService) sendPairNotificatins(ctx context.Context, taskID int6
 			}
 			messageID, err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), text)
 			if err == nil {
-				pendingDeletes = append(pendingDeletes, messageRef{peerID: int64(chat.PeerID), messageID: messageID})
+				pendingDeletes = append(pendingDeletes,
+					messageRef{peerID: int64(chat.PeerID), messageID: messageID})
 			}
 			s.recordSend(ctx, taskID, chat, err)
 			if err != nil {
@@ -463,7 +486,8 @@ func (s *BroadcastService) schedulePairNotificationDeletes(messages []messageRef
 			}
 		}
 	}) {
-		log.Debug().Int("messages", len(messages)).Dur("ttl", ttl).Msg("Pair notifications scheduled for deletion")
+		log.Debug().Int("messages", len(messages)).Dur("ttl", ttl).
+			Msg("Pair notifications scheduled for deletion")
 	}
 }
 
@@ -539,7 +563,13 @@ func (s *BroadcastService) handleChangeAlert(ctx context.Context) {
 	s.finishTask(ctx, &task, start)
 }
 
-func (s *BroadcastService) sendChangeReports(ctx context.Context, taskID int64, schedules []*model.ScheduleData, grouped map[model.GroupName][]*model.Chat, changes map[model.GroupName]*model.ScheduleChange) (int, error) {
+func (s *BroadcastService) sendChangeReports(
+	ctx context.Context,
+	taskID int64,
+	schedules []*model.ScheduleData,
+	grouped map[model.GroupName][]*model.Chat,
+	changes map[model.GroupName]*model.ScheduleChange,
+) (int, error) {
 	var errs []error
 	success := 0
 	for _, schedule := range schedules {
@@ -729,7 +759,12 @@ func copyChats(chats []*model.Chat) []*model.Chat {
 
 // massSend performs the per-recipient delivery pass of a mass broadcast,
 // rechecking every recipient against the database right before the send.
-func (s *BroadcastService) massSend(ctx context.Context, task *model.BroadcastTaskLog, recipients []*model.Chat, htmlText string) {
+func (s *BroadcastService) massSend(
+	ctx context.Context,
+	task *model.BroadcastTaskLog,
+	recipients []*model.Chat,
+	htmlText string,
+) {
 	start := time.Now()
 	success := 0
 	for _, queued := range recipients {
@@ -756,7 +791,15 @@ func (s *BroadcastService) massSend(ctx context.Context, task *model.BroadcastTa
 	log.Info().Int("success", success).Int("total", len(recipients)).Msg("Mass broadcast finished")
 }
 
-func (s *BroadcastService) prepareBroadcast(ctx context.Context, chats []*model.Chat) (map[model.GroupName][]*model.Chat, []model.GroupName, []model.ScheduleConfig, map[model.GroupName][]*model.Chat, bool) {
+func (s *BroadcastService) prepareBroadcast(
+	ctx context.Context, chats []*model.Chat,
+) (
+	map[model.GroupName][]*model.Chat,
+	[]model.GroupName,
+	[]model.ScheduleConfig,
+	map[model.GroupName][]*model.Chat,
+	bool,
+) {
 	grouped := groupChats(chats)
 	groups := make([]model.GroupName, 0, len(grouped))
 	confs := make([]model.ScheduleConfig, 0, len(grouped))
@@ -793,7 +836,10 @@ func (s *BroadcastService) notifyAndResetInvalidChats(ctx context.Context, inval
 			if chat.DailySendingTime == nil && !chat.PairSending && !chat.ChangeAlert {
 				continue
 			}
-			text := fmt.Sprintf("Группа %s больше не существует на сайте колледжа.\nНастройки сброшены. Выберите новую группу через /settings.", group)
+			text := fmt.Sprintf(
+				"Группа %s больше не существует на сайте колледжа.\nНастройки сброшены. Выберите новую группу через /settings.",
+				group,
+			)
 			_, err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), text)
 			if s.Messenger.IsForbidden(err) {
 				s.handleForbidden(ctx, err, chat)
@@ -857,7 +903,8 @@ func (s *BroadcastService) handleForbidden(ctx context.Context, sendErr error, c
 		return
 	}
 	chat = current
-	log.Warn().Err(sendErr).Int64("peerID", int64(chat.PeerID)).Msg("Messaging unavailable; disabling subscriptions")
+	log.Warn().Err(sendErr).Int64("peerID", int64(chat.PeerID)).
+		Msg("Messaging unavailable; disabling subscriptions")
 	chat.DailySendingTime = nil
 	chat.PairSending = false
 	chat.ChangeAlert = false

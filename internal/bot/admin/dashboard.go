@@ -55,7 +55,7 @@ func exportStatsPayload(general *service.GeneralStatsData, config *service.Confi
 func dashboardExportMarkup(period string) models.ReplyMarkup {
 	return models.InlineKeyboardMarkup{
 		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{{Text: "Экспорт JSON", CallbackData: botutil.CallbackCommandExportStats + "\n" + period}},
+			{{Text: "Export JSON", CallbackData: botutil.CallbackCommandExportStats + "\n" + period}},
 		},
 	}
 }

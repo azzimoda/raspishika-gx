@@ -34,7 +34,13 @@ func NewBroadcastJobs(repo repository.BroadcastJobRepository, platforms []model.
 	return &BroadcastJobs{repo: repo, platforms: platforms}
 }
 
-func (s *BroadcastJobs) EnqueueMassBroadcast(ctx context.Context, audience string, spec string, htmlText string, createdBy int64) error {
+func (s *BroadcastJobs) EnqueueMassBroadcast(
+	ctx context.Context,
+	audience string,
+	spec string,
+	htmlText string,
+	createdBy int64,
+) error {
 	var specPtr *string
 	if spec != "" {
 		specPtr = &spec
@@ -70,7 +76,9 @@ type BroadcastJobPoller struct {
 	platform model.Platform
 }
 
-func NewBroadcastJobPoller(bc *BroadcastService, repo repository.BroadcastJobRepository, platform model.Platform) *BroadcastJobPoller {
+func NewBroadcastJobPoller(
+	bc *BroadcastService, repo repository.BroadcastJobRepository, platform model.Platform,
+) *BroadcastJobPoller {
 	return &BroadcastJobPoller{bc: bc, repo: repo, platform: platform}
 }
 

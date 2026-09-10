@@ -45,7 +45,12 @@ type broadcastMessengerStub struct {
 	waitForCancellation bool
 }
 
-func (m *broadcastMessengerStub) SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...messenger.SendOptions) (int, error) {
+func (m *broadcastMessengerStub) SendMessagePeer(
+	ctx context.Context,
+	peerID int64,
+	text string,
+	opts ...messenger.SendOptions,
+) (int, error) {
 	m.mu.Lock()
 	m.deliveries = append(m.deliveries, broadcastDelivery{peerID: peerID, text: text, buttons: firstButtons(opts)})
 	messageID := len(m.deliveries)
@@ -67,8 +72,21 @@ func (m *broadcastMessengerStub) SendMessagePeer(ctx context.Context, peerID int
 	return messageID, m.sendError
 }
 
-func (m *broadcastMessengerStub) SendPhotoPeer(_ context.Context, peerID int64, filename string, data []byte, caption string, opts ...messenger.SendOptions) error {
-	m.deliveries = append(m.deliveries, broadcastDelivery{peerID: peerID, text: caption, filename: filename, data: data, buttons: firstButtons(opts)})
+func (m *broadcastMessengerStub) SendPhotoPeer(
+	_ context.Context,
+	peerID int64,
+	filename string,
+	data []byte,
+	caption string,
+	opts ...messenger.SendOptions,
+) error {
+	m.deliveries = append(m.deliveries, broadcastDelivery{
+		peerID:   peerID,
+		text:     caption,
+		filename: filename,
+		data:     data,
+		buttons:  firstButtons(opts),
+	})
 	return m.sendError
 }
 
@@ -172,7 +190,11 @@ func (r *broadcastChatsStub) remove(id int64) {
 	delete(r.records, id)
 }
 
-func newBroadcastFixture(t *testing.T, messenger *broadcastMessengerStub) (*BroadcastService, *broadcastChatsStub, *broadcastLogsStub) {
+func newBroadcastFixture(
+	t *testing.T, messenger *broadcastMessengerStub,
+) (
+	*BroadcastService, *broadcastChatsStub, *broadcastLogsStub,
+) {
 	t.Helper()
 	chats, logs := &broadcastChatsStub{}, &broadcastLogsStub{}
 	service := NewBroadcastService(messenger, &Services{
@@ -194,10 +216,21 @@ func TestBroadcastPairUsesScheduleGroupAndActualDate(t *testing.T) {
 			group := model.GroupName("ИСПт-22-(9)-2")
 			chat := &model.Chat{ID: 17, PeerID: 2000000009, GroupName: &group, PairSending: true}
 			chats.put(chat)
-			pair := model.Pair{Kind: model.PairKindSubject, Number: 1, StartTime: "08:00", EndTime: "09:30", Discipline: "Математика", Classroom: "215", Teacher: "Иванов"}
+			pair := model.Pair{
+				Kind:       model.PairKindSubject,
+				Number:     1,
+				StartTime:  "08:00",
+				EndTime:    "09:30",
+				Discipline: "Математика",
+				Classroom:  "215",
+				Teacher:    "Иванов",
+			}
 			schedule := &model.ScheduleData{
 				Config: model.GroupScheduleConfig(&model.Group{GroupName: group}, false),
-				Days:   []model.ScheduleDay{{Date: "31.08.2026"}, {Date: date, Pairs: []model.Pair{pair}}},
+				Days: []model.ScheduleDay{
+					{Date: "31.08.2026"},
+					{Date: date, Pairs: []model.Pair{pair}},
+				},
 			}
 			now := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
 			err := service.sendPairNotificatins(context.Background(), 3,
@@ -217,8 +250,14 @@ func TestBroadcastPairUsesScheduleGroupAndActualDate(t *testing.T) {
 				t.Fatalf("delivery log must reference database chat ID: %+v", logs.logs)
 			}
 			// A stale or future schedule must not produce a reminder today.
-			if err := service.sendPairNotificatins(context.Background(), 4, []*model.ScheduleData{schedule},
-				map[model.GroupName][]*model.Chat{group: {chat}}, nil, now.AddDate(0, 0, 1)); err != nil {
+			if err := service.sendPairNotificatins(
+				context.Background(),
+				4,
+				[]*model.ScheduleData{schedule},
+				map[model.GroupName][]*model.Chat{group: {chat}},
+				nil,
+				now.AddDate(0, 0, 1),
+			); err != nil {
 				t.Fatal(err)
 			}
 			if len(messenger.deliveries) != 1 {
@@ -233,7 +272,15 @@ func TestBroadcastForbiddenDisablesSubscriptionsAndPreservesChat(t *testing.T) {
 		t.Run(err.Error(), func(t *testing.T) {
 			service, chats, logs := newBroadcastFixture(t, &broadcastMessengerStub{})
 			group, daily := model.GroupName("ИСПт-22-(9)-2"), "19:00"
-			chat := &model.Chat{ID: 18, PeerID: 101, GroupName: &group, DailySendingTime: &daily, PairSending: true, ChangeAlert: true, DarkMode: true}
+			chat := &model.Chat{
+				ID:               18,
+				PeerID:           101,
+				GroupName:        &group,
+				DailySendingTime: &daily,
+				PairSending:      true,
+				ChangeAlert:      true,
+				DarkMode:         true,
+			}
 			chats.put(chat)
 			service.recordSend(context.Background(), 9, chat, err)
 			if errors.Is(err, errTestTransient) {
@@ -266,7 +313,14 @@ func TestBroadcastSchedulePhotoCaptionKeepsHTMLAndStaleWarning(t *testing.T) {
 	messenger := &broadcastMessengerStub{}
 	service, _, _ := newBroadcastFixture(t, messenger)
 	image := &broadcastImage{
-		schedule: model.ScheduleData{Config: model.GroupScheduleConfig(&model.Group{GroupName: "ИСПт-22-(9)-2", GroupID: "205", DepartmentID: "15"}, true), IsOld: true},
+		schedule: model.ScheduleData{
+			Config: model.GroupScheduleConfig(&model.Group{
+				GroupName:    "ИСПт-22-(9)-2",
+				GroupID:      "205",
+				DepartmentID: "15",
+			}, true),
+			IsOld: true,
+		},
 		filename: "schedule.png", data: []byte("image"),
 	}
 	if err := service.sendSchedule(context.Background(), &model.Chat{PeerID: 123}, image); err != nil {
@@ -278,9 +332,6 @@ func TestBroadcastSchedulePhotoCaptionKeepsHTMLAndStaleWarning(t *testing.T) {
 	}
 	if !strings.Contains(got.text, "<i>") || !strings.Contains(got.text, "неактуальной") {
 		t.Fatalf("caption = %s", got.text)
-	}
-	if !strings.Contains(got.text, "href=\"") || !strings.Contains(got.text, "Открыть на сайте") {
-		t.Fatalf("caption must contain the schedule link: %s", got.text)
 	}
 	if got.buttons == nil {
 		t.Fatal("schedule photo must carry navigation buttons")
@@ -295,7 +346,9 @@ func TestBroadcastMassShutdownCancelsSendAndRejectsNewJobs(t *testing.T) {
 	service, chats, logs := newBroadcastFixture(t, messenger)
 	chat := &model.Chat{ID: 31, PeerID: 900}
 	chats.put(chat)
-	if err := service.BroadcastText(context.Background(), []*model.Chat{nil, chat, chat}, "<b>Привет</b> &amp; мир"); err != nil {
+	if err := service.BroadcastText(
+		context.Background(), []*model.Chat{nil, chat, chat}, "<b>Привет</b> &amp; мир",
+	); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -341,7 +394,8 @@ func TestBroadcastResetsRemovedGroupAlongsideValidRecipients(t *testing.T) {
 	service.Schedule = NewScheduleService(broadcastAPIStub{}, nil, nil)
 	valid, removed, daily := model.GroupName("valid"), model.GroupName("removed"), "19:00"
 	good := &model.Chat{ID: 1, PeerID: 11, GroupName: &valid}
-	bad := &model.Chat{ID: 2, PeerID: 12, GroupName: &removed, PairSending: true, ChangeAlert: true, DailySendingTime: &daily}
+	bad := &model.Chat{ID: 2, PeerID: 12, GroupName: &removed,
+		PairSending: true, ChangeAlert: true, DailySendingTime: &daily}
 	chats.put(good)
 	chats.put(bad)
 	_, groups, _, invalid, stop := service.prepareBroadcast(context.Background(), []*model.Chat{nil, good, bad})
@@ -457,12 +511,27 @@ func TestBroadcastQueuedPairOptOutIsHonored(t *testing.T) {
 	chats.put(second)
 	schedule := &model.ScheduleData{
 		Config: model.GroupScheduleConfig(&model.Group{GroupName: group}, false),
-		Days:   []model.ScheduleDay{{Date: "01.09.2026", Pairs: []model.Pair{{Kind: model.PairKindSubject, Number: 1, StartTime: "08:00", EndTime: "09:30", Discipline: "Математика"}}}},
+		Days: []model.ScheduleDay{{
+			Date: "01.09.2026",
+			Pairs: []model.Pair{{
+				Kind:       model.PairKindSubject,
+				Number:     1,
+				StartTime:  "08:00",
+				EndTime:    "09:30",
+				Discipline: "Математика",
+			}},
+		}},
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- service.sendPairNotificatins(context.Background(), 1, []*model.ScheduleData{schedule},
-			map[model.GroupName][]*model.Chat{group: {first, second}}, nil, time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC))
+		done <- service.sendPairNotificatins(
+			context.Background(),
+			1,
+			[]*model.ScheduleData{schedule},
+			map[model.GroupName][]*model.Chat{group: {first, second}},
+			nil,
+			time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC),
+		)
 	}()
 	select {
 	case <-messenger.started:
@@ -502,7 +571,14 @@ func TestBroadcastPairNotificationAutoDelete(t *testing.T) {
 	group := model.GroupName("ИСПт-22-(9)-2")
 	chat := &model.Chat{ID: 21, PeerID: 2000000011, GroupName: &group, PairSending: true}
 	chats.put(chat)
-	pair := model.Pair{Kind: model.PairKindSubject, Number: 1, StartTime: "08:00", EndTime: "09:30", Discipline: "Математика", Classroom: "215"}
+	pair := model.Pair{
+		Kind:       model.PairKindSubject,
+		Number:     1,
+		StartTime:  "08:00",
+		EndTime:    "09:30",
+		Discipline: "Математика",
+		Classroom:  "215",
+	}
 	schedule := &model.ScheduleData{
 		Config: model.GroupScheduleConfig(&model.Group{GroupName: group}, false),
 		Days:   []model.ScheduleDay{{Date: "01.09.2026", Pairs: []model.Pair{pair}}},
@@ -533,7 +609,14 @@ func TestBroadcastPairNotificationAutoDelete(t *testing.T) {
 
 func TestBroadcastRejectsStaleDailyTimeGroupAndOptIns(t *testing.T) {
 	group, other, daily, changedTime := model.GroupName("A"), model.GroupName("B"), "07:30", "08:00"
-	queued := &model.Chat{ID: 1, PeerID: 101, GroupName: &group, DailySendingTime: &daily, PairSending: true, ChangeAlert: true}
+	queued := &model.Chat{
+		ID:               1,
+		PeerID:           101,
+		GroupName:        &group,
+		DailySendingTime: &daily,
+		PairSending:      true,
+		ChangeAlert:      true,
+	}
 	cases := []struct {
 		name   string
 		kind   model.BroadcastKind
@@ -565,7 +648,9 @@ func TestBroadcastRecipientLookupFailureDoesNotSend(t *testing.T) {
 	messenger := &broadcastMessengerStub{}
 	service, chats, logs := newBroadcastFixture(t, messenger)
 	chats.lookupError = errors.New("database unavailable")
-	if err := service.BroadcastText(context.Background(), []*model.Chat{{ID: 1, PeerID: 101}}, "Текст"); err != nil {
+	if err := service.BroadcastText(
+		context.Background(), []*model.Chat{{ID: 1, PeerID: 101}}, "Текст",
+	); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

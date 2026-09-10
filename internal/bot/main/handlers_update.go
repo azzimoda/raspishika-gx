@@ -15,9 +15,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const MsgScheduleUpdated = "Расписание обновлено"
-
 func (h *handler) handleCQUpdateWeek(ctx context.Context, b *bot.Bot, update *models.Update) {
+
+	callbackQueryID := update.CallbackQuery.ID
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	darkMode := false
@@ -28,7 +28,6 @@ func (h *handler) handleCQUpdateWeek(ctx context.Context, b *bot.Bot, update *mo
 		addHandlerCtxErr(ctx, ErrNoChatContext)
 	}
 
-	callbackQueryID := update.CallbackQuery.ID
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	value := command.Arg(0)
 
@@ -107,6 +106,7 @@ func (h *handler) handleCQUpdateWeek(ctx context.Context, b *bot.Bot, update *mo
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ShowAlert:       true,
 		})
 		return
 	}
@@ -126,16 +126,12 @@ func (h *handler) handleCQUpdateWeek(ctx context.Context, b *bot.Bot, update *mo
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
 			Text:            botutil.ErrMsgCouldNotSendSchedule,
+			ShowAlert:       true,
 		})
 		return
 	}
 
-	_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: callbackQueryID,
-		Text:            MsgScheduleUpdated,
-	})
-	addHandlerCtxErr(ctx, err)
-
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 	log.Info().Msg("Handled CQ update week")
 }
 
@@ -157,6 +153,7 @@ func isTeacherID(s string) bool {
 func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 	callbackQueryID := update.CallbackQuery.ID
+
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	groupName := model.GroupName(command.Arg(0))
 
@@ -217,7 +214,7 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 	})
 	if err != nil {
 		if botutil.IsMessageNotModified(err) {
-			_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
+			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 			addHandlerCtxErr(ctx, err)
 			return
 		}
@@ -225,22 +222,19 @@ func (h *handler) handleCQUpdateTomorrow(ctx context.Context, b *bot.Bot, update
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
 			Text:            botutil.ErrMsgCouldNotSendSchedule,
+			ShowAlert:       true,
 		})
 		return
 	}
 
-	_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: callbackQueryID,
-		Text:            MsgScheduleUpdated,
-	})
-	addHandlerCtxErr(ctx, err)
-
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 	log.Info().Msg("Handled CQ update tomorrow")
 }
 
 func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *models.Update) {
 
 	callbackQueryID := update.CallbackQuery.ID
+
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	groupName := model.GroupName(command.Arg(0))
 
@@ -256,7 +250,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		})
 		if err != nil {
 			if botutil.IsMessageNotModified(err) {
-				_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
+				b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 				addHandlerCtxErr(ctx, err)
 				return
 			}
@@ -264,15 +258,13 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 				CallbackQueryID: callbackQueryID,
 				Text:            botutil.ErrMsgCouldNotSendSchedule,
+				ShowAlert:       true,
 			})
 			return
 		}
 
-		_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-			CallbackQueryID: callbackQueryID,
-			Text:            MsgScheduleUpdated,
-		})
-		addHandlerCtxErr(ctx, err)
+		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
+		log.Info().Msg("Handled CQ update today (Sunday)")
 		return
 	}
 	// Otherwise, send today's schedule
@@ -328,7 +320,7 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 	})
 	if err != nil {
 		if botutil.IsMessageNotModified(err) {
-			_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
+			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 			addHandlerCtxErr(ctx, err)
 			return
 		}
@@ -336,15 +328,11 @@ func (h *handler) handleCQUpdateToday(ctx context.Context, b *bot.Bot, update *m
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
 			Text:            botutil.ErrMsgCouldNotSendSchedule,
+			ShowAlert:       true,
 		})
 		return
 	}
 
-	_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: callbackQueryID,
-		Text:            MsgScheduleUpdated,
-	})
-	addHandlerCtxErr(ctx, err)
-
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 	log.Info().Msg("Handled CQ update today")
 }

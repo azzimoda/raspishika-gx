@@ -53,6 +53,7 @@ func (h *handler) chatDarkMode(ctx context.Context) bool {
 // edits that message in place.
 func (h *handler) handleCQUpdateDay(ctx context.Context, b *bot.Bot, update *models.Update) {
 	callbackQueryID := update.CallbackQuery.ID
+
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	value := command.Arg(0)
 
@@ -148,7 +149,7 @@ func (h *handler) handleCQUpdateDay(ctx context.Context, b *bot.Bot, update *mod
 	if err != nil {
 		if botutil.IsMessageNotModified(err) {
 			// The tapped day is already shown; treat it as a no-op.
-			_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
+			b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 			addHandlerCtxErr(ctx, err)
 			return
 		}
@@ -156,6 +157,7 @@ func (h *handler) handleCQUpdateDay(ctx context.Context, b *bot.Bot, update *mod
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
 			Text:            botutil.ErrMsgCouldNotSendSchedule,
+			ShowAlert:       true,
 		})
 		return
 	}
@@ -169,6 +171,7 @@ func (h *handler) handleCQUpdateDay(ctx context.Context, b *bot.Bot, update *mod
 // message so that the formats do not accumulate.
 func (h *handler) handleCQOpenWeek(ctx context.Context, b *bot.Bot, update *models.Update) {
 	callbackQueryID := update.CallbackQuery.ID
+
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	value := command.Arg(0)
 
@@ -215,6 +218,7 @@ func (h *handler) handleCQOpenWeek(ctx context.Context, b *bot.Bot, update *mode
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
 			Text:            botutil.ErrMsgCouldNotLoadSchedule,
+			ShowAlert:       true,
 		})
 		return
 	}
@@ -235,13 +239,11 @@ func (h *handler) handleCQOpenWeek(ctx context.Context, b *bot.Bot, update *mode
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: callbackQueryID,
 			Text:            botutil.ErrMsgCouldNotSendSchedule,
+			ShowAlert:       true,
 		})
 		return
 	}
 
-	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: callbackQueryID,
-		Text:            MsgScheduleUpdated,
-	})
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: callbackQueryID})
 	log.Info().Msg("Handled CQ open week")
 }

@@ -220,6 +220,8 @@ func (h *handler) handleCQDelete(ctx context.Context, b *bot.Bot, update *models
 		return
 	}
 
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	if deleted, err := botutil.DeleteMessage(ctx, b, msg); err != nil {
 		log.Warn().Err(err).Any("update", update).Msg("Failed to delete message")
 		addHandlerCtxErr(ctx, err)

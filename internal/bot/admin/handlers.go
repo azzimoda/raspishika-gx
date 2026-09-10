@@ -146,7 +146,7 @@ func (h *handler) handleCmdDashboard(ctx context.Context, b *bot.Bot, update *mo
 }
 
 // handleExportStats sends the dashboard statistics as a JSON file in response
-// to pressing the "Экспорт JSON" button on the dashboard message.
+// to pressing the "Export JSON" button on the dashboard message.
 func (h *handler) handleExportStats(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if update.CallbackQuery == nil || update.CallbackQuery.Message.Message == nil {
 		return

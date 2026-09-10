@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
+	"golang.org/x/sync/singleflight"
 )
 
 func New(ctx context.Context) (*ChromedpBrowser, error) {
@@ -43,8 +45,9 @@ type ChromedpBrowser struct {
 	chromedpCtx    context.Context
 	chromedpCancel context.CancelFunc
 
-	chromedpMu  sync.RWMutex
-	restarterMu sync.Mutex
+	chromedpMu   sync.RWMutex
+	restarterMu  sync.Mutex
+	screenshotSF singleflight.Group
 
 	restartInterval time.Duration
 	stopRestarter   chan struct{}
@@ -192,39 +195,47 @@ func (b *ChromedpBrowser) restart() error {
 }
 
 func (b *ChromedpBrowser) ScreenshotHTML(html string) ([]byte, error) {
-	b.chromedpMu.Lock()
-	defer b.chromedpMu.Unlock()
+	key := fmt.Sprintf("%x", sha256.Sum256([]byte(html)))
 
-	if b.parentContext.Err() != nil {
-		return nil, fmt.Errorf("browser shutting down: %w", b.parentContext.Err())
-	}
+	v, err, _ := b.screenshotSF.Do(key, func() (any, error) {
+		b.chromedpMu.Lock()
+		defer b.chromedpMu.Unlock()
 
-	// The previous browser may have crashed (e.g. it lost connection), which
-	// cancels its context. Re-initialize it so screenshots keep working.
-	if b.chromedpCtx == nil || b.chromedpCtx.Err() != nil {
-		if err := b.reinit(b.parentContext); err != nil {
-			return nil, fmt.Errorf("failed to re-initialize browser: %w", err)
+		if b.parentContext.Err() != nil {
+			return nil, fmt.Errorf("browser shutting down: %w", b.parentContext.Err())
 		}
-		log.Warn().Msg("Browser context was cancelled; re-initialized Chromedp")
-	}
 
-	log.Debug().Msg("Taking screenshot...")
-
-	imageData, err := b.runScreenshot(html)
-	if err != nil && errors.Is(err, context.Canceled) && b.chromedpCtx.Err() != nil {
-		// The browser died mid-screenshot; re-initialize and retry once.
-		log.Warn().Err(err).Msg("Browser died during screenshot, re-initializing and retrying...")
-		if rerr := b.reinit(b.parentContext); rerr != nil {
-			return nil, fmt.Errorf("failed to re-initialize browser after crash: %w", rerr)
+		// The previous browser may have crashed (e.g. it lost connection), which
+		// cancels its context. Re-initialize it so screenshots keep working.
+		if b.chromedpCtx == nil || b.chromedpCtx.Err() != nil {
+			if err := b.reinit(b.parentContext); err != nil {
+				return nil, fmt.Errorf("failed to re-initialize browser: %w", err)
+			}
+			log.Warn().Msg("Browser context was cancelled; re-initialized Chromedp")
 		}
-		imageData, err = b.runScreenshot(html)
-	}
+
+		log.Debug().Msg("Taking screenshot...")
+
+		imageData, err := b.runScreenshot(html)
+		if err != nil && errors.Is(err, context.Canceled) && b.chromedpCtx.Err() != nil {
+			// The browser died mid-screenshot; re-initialize and retry once.
+			log.Warn().Err(err).Msg("Browser died during screenshot, re-initializing and retrying...")
+			if rerr := b.reinit(b.parentContext); rerr != nil {
+				return nil, fmt.Errorf("failed to re-initialize browser after crash: %w", rerr)
+			}
+			imageData, err = b.runScreenshot(html)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to take screenshot: %w", err)
+		}
+		log.Trace().Msg("Taken screenshot")
+
+		return imageData, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to take screenshot: %w", err)
+		return nil, err
 	}
-	log.Trace().Msg("Taken screenshot")
-
-	return imageData, nil
+	return v.([]byte), nil
 }
 
 func (b *ChromedpBrowser) runScreenshot(html string) ([]byte, error) {

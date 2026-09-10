@@ -134,6 +134,9 @@ func (h *handler) handleCQTeacher(ctx context.Context, b *bot.Bot, update *model
 
 	log.Debug().Msg("Handling CQ teacher...")
 
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	message := update.CallbackQuery.Message.Message
 	_, err := botutil.DeleteMessage(ctx, b, message)
 	addHandlerCtxErr(ctx, err)

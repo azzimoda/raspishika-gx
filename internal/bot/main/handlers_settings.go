@@ -52,6 +52,9 @@ func (h *handler) handleCmdSettings(ctx context.Context, b *bot.Bot, update *mod
 func (h *handler) handleCQConfigGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
 	log.Debug().Msg("Handling CQ config group...")
 
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	message := update.CallbackQuery.Message.Message
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
@@ -76,6 +79,9 @@ func (h *handler) handleCQConfigGroup(ctx context.Context, b *bot.Bot, update *m
 
 func (h *handler) handleCQConfigDailyTime(ctx context.Context, b *bot.Bot, update *models.Update) {
 	log.Debug().Msg("Handling CQ config daily time...")
+
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
 
 	message := update.CallbackQuery.Message.Message
 
@@ -173,6 +179,9 @@ func (h *handler) handleTextTime(ctx context.Context, b *bot.Bot, update *models
 func (h *handler) handleCQDailyOff(ctx context.Context, b *bot.Bot, update *models.Update) {
 	log.Debug().Msg("Handling CQ daily off...")
 
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	message := update.CallbackQuery.Message.Message
 
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
@@ -203,6 +212,9 @@ func (h *handler) handleCQDailyOff(ctx context.Context, b *bot.Bot, update *mode
 }
 
 func (h *handler) handleCQConfigReminder(ctx context.Context, b *bot.Bot, update *models.Update) {
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	message := update.CallbackQuery.Message.Message
 	chatID := message.Chat.ID
 	threadID := message.MessageThreadID
@@ -236,6 +248,9 @@ func (h *handler) handleCQConfigReminder(ctx context.Context, b *bot.Bot, update
 }
 
 func (h *handler) handleCQConfigChange(ctx context.Context, b *bot.Bot, update *models.Update) {
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	message := update.CallbackQuery.Message.Message
 	chatID := message.Chat.ID
 	threadID := message.MessageThreadID
@@ -269,6 +284,9 @@ func (h *handler) handleCQConfigChange(ctx context.Context, b *bot.Bot, update *
 }
 
 func (h *handler) handleCQConfigDarkMode(ctx context.Context, b *bot.Bot, update *models.Update) {
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	message := update.CallbackQuery.Message.Message
 	chatID := message.Chat.ID
 	threadID := message.MessageThreadID
@@ -422,6 +440,9 @@ func settingsMenuMarkup(chat *model.Chat) models.InlineKeyboardMarkup {
 }
 
 func (h *handler) handleCQSelectDepartment(ctx context.Context, b *bot.Bot, update *models.Update) {
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	command := botutil.ParseCallbackData(update.CallbackQuery.Data)
 	message := update.CallbackQuery.Message.Message
 
@@ -564,6 +585,9 @@ func (h *handler) handleCmdAccess(ctx context.Context, b *bot.Bot, update *model
 	log.Info().Msg("Handled command access")
 }
 func (h *handler) handleCQSetAccess(ctx context.Context, b *bot.Bot, update *models.Update) {
+	// Acknowledge immediately to stop the button spinner.
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: update.CallbackQuery.ID})
+
 	message := update.CallbackQuery.Message.Message
 	chatID := message.Chat.ID
 	threadID := message.MessageThreadID
