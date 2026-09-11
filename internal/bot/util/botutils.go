@@ -42,8 +42,6 @@ func SendErrorMessage(ctx context.Context, b *bot.Bot, params *bot.SendMessagePa
 	return err
 }
 
-const sendRetryAttempts = 3
-
 // IsNetworkError reports whether err is a transport-level error (proxy/network),
 // as opposed to a Telegram business error that should not be retried.
 func IsNetworkError(err error) bool {
@@ -71,27 +69,12 @@ func IsMessageNotModified(err error) bool {
 		strings.Contains(strings.ToLower(err.Error()), "message is not modified")
 }
 
-// SendMessageWithRetry sends a message, retrying on network errors so replies are not
-// lost when a proxy dies mid-flight.
+// SendMessageWithRetry sends a message, retrying on network errors so replies
+// are not lost when a proxy dies mid-flight.
 func SendMessageWithRetry(ctx context.Context, b *bot.Bot, params *bot.SendMessageParams) (*models.Message, error) {
-	var lastErr error
-	for attempt := range sendRetryAttempts {
-		msg, err := b.SendMessage(ctx, params)
-		if err == nil {
-			return msg, nil
-		}
-		lastErr = err
-		if !IsNetworkError(err) {
-			return nil, err
-		}
-		log.Warn().Err(err).Int("attempt", attempt+1).Msg("Network error sending message, retrying...")
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(time.Duration(attempt+1) * time.Second):
-		}
-	}
-	return nil, lastErr
+	return RetryNetwork(ctx, nil, func() (*models.Message, error) {
+		return b.SendMessage(ctx, params)
+	})
 }
 
 // SendTempMessage sends a temporary message that will be automatically deleted after the specified duration.

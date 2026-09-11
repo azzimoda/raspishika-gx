@@ -8,9 +8,22 @@ import (
 
 	"github.com/azzimoda/go-tg-proxy/proxy"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
+	"github.com/azzimoda/raspishika-gx/internal/proxyfail"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 )
+
+func newProxyService() (*proxy.Service, *proxyfail.FailTracker) {
+	tracker := proxyfail.NewFailTracker(viper.GetDuration(config.KeyProxyBanCooldown))
+	service := proxy.NewService(
+		proxy.NewProxiflySource(viper.GetString(config.KeyProxySourceURL)),
+		proxy.WithChecker(proxyfail.BanChecker{
+			Checker: proxy.TelegramChecker{},
+			Tracker: tracker,
+		}),
+	)
+	return service, tracker
+}
 
 func NewServices(ctx context.Context, container *repository.Container, scraperAPI APIClient) (*Services, error) {
 
@@ -19,38 +32,39 @@ func NewServices(ctx context.Context, container *repository.Container, scraperAP
 		return nil, fmt.Errorf("browser: %w", err)
 	}
 
-	proxySource := proxy.NewProxiflySource(viper.GetString(config.KeyProxySourceURL))
-	proxyService := proxy.NewService(proxySource)
+	proxyService, proxyTracker := newProxyService()
 
 	return &Services{
-		Browser:  browser,
-		Proxy:    proxyService,
-		Chat:     NewChatService(container.Chat),
-		Schedule: NewScheduleService(scraperAPI, browser, container.Schedule),
-		Stats:    NewStatsService(container.Log, container.Chat),
+		Browser:          browser,
+		Proxy:            proxyService,
+		ProxyFailTracker: proxyTracker,
+		Chat:             NewChatService(container.Chat),
+		Schedule:         NewScheduleService(scraperAPI, browser, container.Schedule),
+		Stats:            NewStatsService(container.Log, container.Chat),
 	}, nil
 }
 
 // NewAdminServices builds the services the admin bot needs (proxy, chat,
 // schedule lookups, statistics) without the screenshot browser.
 func NewAdminServices(ctx context.Context, container *repository.Container, scraperAPI APIClient) (*Services, error) {
-	proxySource := proxy.NewProxiflySource(viper.GetString(config.KeyProxySourceURL))
-	proxyService := proxy.NewService(proxySource)
+	proxyService, proxyTracker := newProxyService()
 
 	return &Services{
-		Proxy:    proxyService,
-		Chat:     NewChatService(container.Chat),
-		Schedule: NewScheduleService(scraperAPI, nil, container.Schedule),
-		Stats:    NewStatsService(container.Log, container.Chat),
+		Proxy:            proxyService,
+		ProxyFailTracker: proxyTracker,
+		Chat:             NewChatService(container.Chat),
+		Schedule:         NewScheduleService(scraperAPI, nil, container.Schedule),
+		Stats:            NewStatsService(container.Log, container.Chat),
 	}, nil
 }
 
 type Services struct {
-	Browser  *browser.ChromedpBrowser
-	Proxy    *proxy.Service
-	Chat     *ChatService
-	Schedule *ScheduleService
-	Stats    *StatsService
+	Browser          *browser.ChromedpBrowser
+	Proxy            *proxy.Service
+	ProxyFailTracker *proxyfail.FailTracker
+	Chat             *ChatService
+	Schedule         *ScheduleService
+	Stats            *StatsService
 }
 
 func (s *Services) Stop() error {

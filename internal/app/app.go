@@ -82,11 +82,25 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 
 	mainBot := botservice.NewBotService(
 		func(p string, onActivity func()) (*bot.Bot, error) {
+			services.ProxyFailTracker.SetActive(p)
 			return mainbot.New(services, p, appReporter, onActivity)
 		},
 		services.Proxy,
 	)
-	broadcast := service.NewBroadcastService(messenger.NewTelegram(func() *bot.Bot { return mainBot.Bot }), services, appReporter)
+	broadcast := service.NewBroadcastService(
+		messenger.NewTelegram(
+			func() *bot.Bot { return mainBot.Bot },
+			messenger.WithProxyAccessor(func() string { return services.ProxyFailTracker.Active() }),
+			messenger.WithNetworkFailureHook(func(err error, proxyAddr string) {
+				if proxyAddr != "" && services.ProxyFailTracker.Ban(proxyAddr) {
+					log.Warn().Str("proxy", proxyAddr).Err(err).Msg("Proxy banned after repeated send failures")
+				}
+				mainBot.Restart()
+			}),
+		),
+		services,
+		appReporter,
+	)
 	jobPoller := service.NewBroadcastJobPoller(broadcast, container.Job, model.PlatformTelegram)
 
 	adminReporterBot := botservice.NewBotService(
