@@ -1,6 +1,6 @@
-# Телеграм бот Распиши-ка
+# Бот Распиши-ка (Telegram + VK)
 
-Телеграм-бот для удобного доступа к расписанию студентов и преподавателей МПК ТИУ.
+Бот для удобного доступа к расписанию студентов и преподавателей МПК ТИУ. Работает в двух мессенджерах: Telegram (`cmd/bot`) и VK (`cmd/vkbot`), используя общую базу данных и очереди рассылок.
 
 > [!important]
 > Этот бот **не имеет прямого отношения к Многопрофильному колледжу** и является **моим личным проектом**. По всем вопросам следует обращатся [ко мне лично](#ссылки).
@@ -37,6 +37,14 @@
 
 Есть возможноть привязать дополнительного бота для мониторинга состояния основного бота и статистики. Для этого необходимо указать токен администратора в переменной окружения `ADMIN_BOT_TOKEN` и ID администратора в `ADMIN_ID`.
 
+### VK-бот (`cmd/vkbot`)
+
+Зеркало Telegram-бота для сообществ VK через VK Bots Long Poll: то же расписание (группы и преподаватели) с навигацией по дням, настройки беседы и пейджинг. VK-бот **не предоставляет админ-функций** (доступ, `access`/`setaccess`) — они есть только в Telegram.
+
+Для запуска нужны сообщество VK с включённым Long Poll и ключ доступа: `VK_GROUP_TOKEN`, `VK_GROUP_ID`, `VK_API_VERSION` (по умолчанию `5.199`). Ключи задаются в `.env` — см. [Сборка и запуск](#сборка-и-запуск).
+
+Рассылки (ежедневная, перед парами, об изменениях) работают и для VK: чаты платформы различаются колонкой `platform`, задачи `broadcast_jobs` обслуживаются своим процессом. Для отладки без живого скрейпинга есть `cmd/fakevkbot` с фейковыми данными (`internal/fakescraper`).
+
 ---
 
 ## Стек
@@ -50,6 +58,7 @@
         - `swaggo/swag` (Swagger-документация)
     - Бот:
         - `go-telegram/bot`
+        - `SevereCloud/vksdk` (VK-бот, Long Poll)
         - `gorm.io/gorm` + `gorm.io/driver/sqlite` (SQLite) / `gorm.io/driver/postgres` (PostgreSQL)
         - `pressly/goose/v3` (миграции БД)
         - `chromedp/chromedp`
@@ -58,10 +67,12 @@
 
 ## Архитектура
 
-Проект состоит из трёх сервисов:
+Проект состоит из нескольких сервисов:
 
 - `cmd/bot` — Telegram-бот. Хранит данные в SQLite или PostgreSQL (доступ через GORM, миграции применяются автоматически при запуске через goose), рендерит скриншоты расписания через собственный браузер Chromium (`chromedp`), расписания получает по HTTP от API.
-- `cmd/adminbot` — отдельный админ-бот для мониторинга, статистики и ручных рассылок (`ADMIN_BOT_TOKEN`/`ADMIN_ID`). Работает как отдельный процесс, ручные рассылки отдаёт в очередь `broadcast_jobs`, которую разбирает основной бот.
+- `cmd/adminbot` — отдельный админ-бот для мониторинга, статистики и ручных рассылок (`ADMIN_BOT_TOKEN`/`ADMIN_ID`). Работает как отдельный процесс, ручные рассылки отдаёт в очередь `broadcast_jobs`, которую разбирают основные боты.
+- `cmd/vkbot` — VK-бот для сообществ: зеркало Telegram-ботa (расписание, преподаватели, настройки беседы) через VK Bots Long Poll (`internal/vkbot/*`, `messenger.VK`). Использует ту же БД и рассылки, отличается колонкой `platform`.
+- `cmd/fakevkbot` — VK-бот на фейковых данных (`internal/fakescraper`) без обращения к API, для локальной разработки.
 - `cmd/api` — HTTP-сервис скрейпинга. Собирает расписание с `coworking.tyuiu.ru` напрямую по HTTP (`internal/api/scraper`), кэширует результаты в Redis и отдаёт по `/api/v1/*` (Swagger-документация доступна по адресам `/swagger/index.html` (UI) и `/swagger/doc.json`). Бот обращается к нему через `internal/apiclient` по `SCRAPER_HOST`/`SCRAPER_PORT`.
 
 Для локальной разработки с демо-данными (без реального скрейпинга) есть `cmd/fakeapi` и `cmd/fakebot`.
@@ -70,7 +81,7 @@
 
 ### Docker
 
-Поднять Redis, API и бота:
+Поднять Redis, API и ботов (Telegram + VK):
 
 ```sh
 docker compose up --build
@@ -82,6 +93,14 @@ docker compose up --build
 docker compose -f compose.fakeapi.yaml up --build
 ```
 
+Для локальной разработки с API из исходников (реальный скрейпинг):
+
+```sh
+docker compose -f compose.local.yaml up --build
+```
+
+VK-бот (`vkbot`) поднимется в любом из этих стеков, если заданы `VK_GROUP_TOKEN` и `VK_GROUP_ID`; без них соответствующий контейнер будет падать с ошибкой. `fakevkbot` доступен только в dev-стеках (`compose.fakeapi.yaml`/`compose.local.yaml`) и работает без API.
+
 ### Make
 
 Ключевые цели Makefile:
@@ -89,6 +108,7 @@ docker compose -f compose.fakeapi.yaml up --build
 ```sh
 make check        # fmt-check + vet + test + build
 make build-bot    # только бот (./cmd/bot, нужен CGO и Chromium)
+make build-vkbot  # VK-бот (./cmd/vkbot)
 make build-api    # API-скрейпер (./cmd/api)
 make test         # go test ./...
 make docs         # перегенерировать Swagger-документацию (go generate ./...)
@@ -126,13 +146,19 @@ make logs         # docker compose logs -f
    go build ./cmd/bot
    ```
 
-5. Запустить Redis (для кэша API):
+5. (Опционально) Собрать VK-бота:
+   
+   ```bash
+   go build ./cmd/vkbot
+   ```
+
+6. Запустить Redis (для кэша API):
    
    ```bash
    docker run --rm -p 6379:6379 redis:alpine
    ```
 
-6. Подготовить конфигурацию: скопировать `.env.example` в `.env` и указать свои значения (минимум — токен бота). Все ключи с комментариями перечислены в `.env.example`:
+7. Подготовить конфигурацию: скопировать `.env.example` в `.env` и указать свои значения (минимум — токен бота). Все ключи с комментариями перечислены в `.env.example`:
 
    ```bash
    cp .env.example .env
@@ -144,20 +170,24 @@ make logs         # docker compose logs -f
    # Required
    BOT_TOKEN=your_bot_token_here
    
+   # VK-бот (нужно только если запускается cmd/vkbot)
+   VK_GROUP_TOKEN=your_vk_group_token_here
+   VK_GROUP_ID=your_vk_group_id_here
+
    # Optional
    ADMIN_BOT_TOKEN=your_admin_bot_token_here
    ADMIN_ID=admin_user_id_here
    REDIS_PASSWORD=your_redis_password_here
    ```
 
-7. Запустить API-сервис и бота:
+8. Запустить API-сервис и бота:
    
    ```bash
    ./api
    ./bot
    ```
 
-Альтернативно, вместо реального API можно запустить `cmd/fakeapi` с демо-данными (`go build ./cmd/fakeapi && ./fakeapi`), или `cmd/fakebot` без API сервиса (`go build ./cmd/fakebot && ./fakebot`).
+Альтернативно, вместо реального API можно запустить `cmd/fakeapi` с демо-данными (`go build ./cmd/fakeapi && ./fakeapi`), или `cmd/fakebot` без API сервиса (`go build ./cmd/fakebot && ./fakebot`). VK-бот запускается аналогично: `go build ./cmd/vkbot && ./vkbot` (нужны `VK_GROUP_TOKEN`/`VK_GROUP_ID`), а `cmd/fakevkbot` — с фейковыми данными и без API.
 
 ## Развёртывание
 
@@ -176,18 +206,16 @@ make logs         # docker compose logs -f
 - **Фаза 2b** — сервис БД в Docker-стеке, полная совместимость SQLite/PostgreSQL (миграционный тест на живом PostgreSQL).
 - **Фаза 2c** — ручные рассылки через очередь `broadcast_jobs` (по одной задаче на платформу, воркер в каждом процессе забирает только свои), админ-бот вынесен в отдельный бинарник `cmd/adminbot` (report-only, без браузера). Прод остаётся на SQLite.
 - **Фаза 2d** — VK-бот на `SevereCloud/vksdk`: обёртка клиента `internal/vkbot/client` (Long Poll с reconnect и дедупом, отправка сообщений/фото, проверка прав админа сообщества), обработчики `internal/vkbot/main` (зеркало TG-хендлеров без админ-функций: расписание с навигацией по дням, поиск преподавателей, настройки беседы и пейджинг), разметка клавиатур в `internal/vkbot/util`, адаптер `messenger.VK`. Отдельный бинарник `cmd/vkbot`, демо `cmd/fakevkbot` на фейковых данных (`internal/fakescraper`). Рассылки покрывают `platform=vk`. Ручной smoke на реальном Long Poll сообщества пройден. Конфиг: `VK_GROUP_TOKEN`, `VK_GROUP_ID`, `VK_API_VERSION`.
+- **Фаза 3 (частично)** — единая сборка образа: `bot.Dockerfile` собирает `bot`, `adminbot`, `vkbot` и `fakevkbot`; сервисы `vkbot`/`fakevkbot` добавлены в compose-файлы (`compose.yaml`, `compose.fakeapi.yaml`, `compose.local.yaml`, PostgreSQL в dev-стеках). README обновлён под итоговую архитектуру.
 
 ### Впереди
 
-**Фаза 3 — полный стек:**
-
-- Сервисы `vkbot`/`fakevkbot` в compose-файлах, единая сборка образов.
-- Принятие решения о переезде прода с SQLite на PostgreSQL (на текущий момент прод работает на SQLite).
+- Принятие решения о переезде прода с SQLite на PostgreSQL (на текущий момент прод работает на SQLite, и с VK-ботом несколько процессов делят один SQLite-файл).
 
 **Фаза 4 — финализация:**
 
 - Smoke-проверка всего стека (Telegram-бот + VK-бот + админ-бот) в Docker, исправления по итогам.
-- Обновление README/SCRAPER под готовую архитектуру.
+- Обновление SCRAPER под готовую архитектуру (при необходимости).
 
 ---
 

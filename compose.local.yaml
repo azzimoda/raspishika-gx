@@ -129,6 +129,76 @@ services:
       - raspishika-network
     restart: unless-stopped
 
+  vkbot:
+    build:
+      context: .
+      dockerfile: bot.Dockerfile
+    container_name: raspishika-vkbot
+    entrypoint: /app/vkbot
+    shm_size: 2g
+    environment:
+      - VK_GROUP_TOKEN=${VK_GROUP_TOKEN}
+      - VK_GROUP_ID=${VK_GROUP_ID}
+      - VK_API_VERSION=${VK_API_VERSION:-5.199}
+      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+      - SCRAPER_HOST=api
+      - SCRAPER_PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - TZ=Asia/Yekaterinburg
+      - BROWSER_SCALE=${BROWSER_SCALE:-1}
+      - HANDLE_VACATION=${HANDLE_VACATION:-true}
+      - DB_DRIVER=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-raspishika}
+      - DB_NAME=raspishika
+      - DB_SSLMODE=disable
+    depends_on:
+      api:
+        condition: service_started
+      db:
+        condition: service_healthy
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - raspishika-network
+    restart: unless-stopped
+
+  fakevkbot:
+    build:
+      context: .
+      dockerfile: bot.Dockerfile
+    container_name: raspishika-fakevkbot
+    entrypoint: /app/fakevkbot
+    shm_size: 2g
+    environment:
+      - VK_GROUP_TOKEN=${VK_GROUP_TOKEN}
+      - VK_GROUP_ID=${VK_GROUP_ID}
+      - VK_API_VERSION=${VK_API_VERSION:-5.199}
+      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - TZ=Asia/Yekaterinburg
+      - BROWSER_SCALE=${BROWSER_SCALE:-1}
+      - HANDLE_VACATION=${HANDLE_VACATION:-true}
+      - DB_DRIVER=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-raspishika}
+      - DB_NAME=raspishika
+      - DB_SSLMODE=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - raspishika-network
+    restart: unless-stopped
+
 networks:
   raspishika-network:
     driver: bridge
