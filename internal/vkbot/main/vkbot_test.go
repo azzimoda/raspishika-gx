@@ -187,6 +187,11 @@ func TestParseCommandsAndPayload(t *testing.T) {
 		{vkclient.Message{Text: "подпись", Payload: `{"command":"groups\n123\n2"}`}, "groups", "123\n2", true},
 		{vkclient.Message{Text: "подпись", Payload: `{"command":"day\nИСПт-22-(9)-2\n3"}`}, "day", "ИСПт-22-(9)-2\n3", true},
 		{vkclient.Message{Text: "dark", Payload: `{broken`}, "", "", false},
+		{vkclient.Message{Text: "Настройки"}, "settings", "", true},
+		{vkclient.Message{Text: "преподаватель Иванов И.И."}, "teacher", "Иванов И.И.", true},
+		{vkclient.Message{Text: "Завтра в 9 собираемся у главного корпуса"}, "", "", false},
+		{vkclient.Message{Text: "Настройки хочу изменить"}, "", "", false},
+		{vkclient.Message{Text: "вторник собрание"}, "", "", false},
 	}
 	for _, tc := range cases {
 		command, arg, ok := parseCommand(tc.msg)

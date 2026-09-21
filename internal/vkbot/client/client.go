@@ -205,7 +205,7 @@ func (c *Client) DeleteMessage(ctx context.Context, peerID int64, messageIDs ...
 
 // IsAdmin reports whether userID administers the given peer. Private
 // conversations belong to their owner; group chats use the conversation
-// membership roles.
+// membership roles (paginated, as getConversationMembers caps its page size).
 func (c *Client) IsAdmin(ctx context.Context, peerID, userID int64) (bool, error) {
 	if userID <= 0 {
 		return false, nil
@@ -213,18 +213,28 @@ func (c *Client) IsAdmin(ctx context.Context, peerID, userID int64) (bool, error
 	if peerID < ChatPeerOffset {
 		return peerID == userID, nil
 	}
-	params := api.Params{
-		"peer_id": int(peerID),
-		"count":   1000,
-	}.WithContext(ctx)
-	resp, err := c.vk.MessagesGetConversationMembers(params)
-	if err != nil {
-		return false, err
-	}
-	for _, member := range resp.Items {
-		if int64(member.MemberID) == userID {
-			return bool(member.IsOwner) || bool(member.IsAdmin), nil
+	// membersPage must be within the server-side page limit for
+	// messages.getConversationMembers.
+	const membersPage = 200
+	for offset := 0; offset < 10000; {
+		params := api.Params{
+			"peer_id": int(peerID),
+			"count":   membersPage,
+			"offset":  offset,
+		}.WithContext(ctx)
+		resp, err := c.vk.MessagesGetConversationMembers(params)
+		if err != nil {
+			return false, err
 		}
+		for _, member := range resp.Items {
+			if int64(member.MemberID) == userID {
+				return bool(member.IsOwner) || bool(member.IsAdmin), nil
+			}
+		}
+		if len(resp.Items) < membersPage {
+			break
+		}
+		offset += len(resp.Items)
 	}
 	return false, nil
 }

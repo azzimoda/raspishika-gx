@@ -181,8 +181,7 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 	} else if err := b.requireAccess(ctx, chat, msg, configurationCommand(command)); err != nil {
 		return b.permissionReply(ctx, msg, err)
 	}
-	// Keep last activity current only after permission checks.
-	chat.UpdatedAt = b.now()
+	// UpdateChat stamps updated_at itself.
 	if command != "stop" {
 		if err := b.chats.UpdateChat(ctx, chat); err != nil {
 			return b.fail(ctx, msg, err)
@@ -360,7 +359,13 @@ func parseCommand(msg vkclient.Message) (command, arg string, recognized bool) {
 		"завтра": "tomorrow", "неделя": "week", "преподаватель": "teacher",
 		"настройки": "settings", "отмена": "cancel",
 	}
+	// no-arg aliases must consume the whole message, so natural-language
+	// sentences like "завтра в 9 собираемся..." do not turn into commands.
+	noArgAliases := map[string]bool{"start": true, "help": true, "cancel": true, "settings": true, "today": true, "tomorrow": true, "week": true}
 	if alias, ok := aliases[command]; ok {
+		if noArgAliases[alias] && arg != "" {
+			return "", "", false
+		}
 		command = alias
 	}
 	switch command {

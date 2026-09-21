@@ -12,6 +12,11 @@ import (
 
 // initialBroadcastPlatforms is the set of platforms a manual broadcast is
 // enqueued for.
+//
+// TODO: the admin enqueuer passes nil platforms and takes this list, so every
+// manual broadcast also creates a pending platform=vk job even when the VK
+// process is not running, leaving stalled rows in the admin audit. Consider
+// scoping the platforms on the enqueuer side.
 var initialBroadcastPlatforms = []model.Platform{model.PlatformTelegram, model.PlatformVK}
 
 // MassBroadcastEnqueuer records a manual broadcast for the schedule-bot
