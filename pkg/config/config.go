@@ -43,6 +43,10 @@ const (
 	KeyAdminBotToken = "admin_bot_token"
 	KeyAdminID       = "admin_id"
 
+	KeyVKToken      = "vk_group_token"
+	KeyVKGroupID    = "vk_group_id"
+	KeyVKAPIVersion = "vk_api_version"
+
 	KeyProxySourceURL   = "proxy_source_url"
 	KeyProxyBanCooldown = "proxy_ban_cooldown"
 
@@ -118,6 +122,8 @@ func Init() {
 
 	viper.SetDefault(KeyProxySourceURL, "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json")
 	viper.SetDefault(KeyProxyBanCooldown, 5*time.Minute)
+
+	viper.SetDefault(KeyVKAPIVersion, "5.199")
 
 	// Environment variables
 	if err := godotenv.Load(); err != nil {

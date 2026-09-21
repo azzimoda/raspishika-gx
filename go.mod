@@ -3,6 +3,7 @@ module github.com/azzimoda/raspishika-gx
 go 1.26.2
 
 require (
+	github.com/SevereCloud/vksdk/v3 v3.3.1
 	github.com/azzimoda/go-tg-proxy v0.1.1
 	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
 	github.com/go-telegram/bot v1.23.0
@@ -74,6 +75,8 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.2 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.8.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
