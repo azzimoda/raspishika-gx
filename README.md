@@ -175,16 +175,9 @@ make logs         # docker compose logs -f
 - **Фаза 2a** — мессенджер-нейтральный слой `internal/messenger` (Telegram-адаптер) и общий `BroadcastService`; рассылки больше не привязаны к конкретной платформе.
 - **Фаза 2b** — сервис БД в Docker-стеке, полная совместимость SQLite/PostgreSQL (миграционный тест на живом PostgreSQL).
 - **Фаза 2c** — ручные рассылки через очередь `broadcast_jobs` (по одной задаче на платформу, воркер в каждом процессе забирает только свои), админ-бот вынесен в отдельный бинарник `cmd/adminbot` (report-only, без браузера). Прод остаётся на SQLite.
+- **Фаза 2d** — VK-бот на `SevereCloud/vksdk`: обёртка клиента `internal/vkbot/client` (Long Poll с reconnect и дедупом, отправка сообщений/фото, проверка прав админа сообщества), обработчики `internal/vkbot/main` (зеркало TG-хендлеров без админ-функций: расписание с навигацией по дням, поиск преподавателей, настройки беседы и пейджинг), разметка клавиатур в `internal/vkbot/util`, адаптер `messenger.VK`. Отдельный бинарник `cmd/vkbot`, демо `cmd/fakevkbot` на фейковых данных (`internal/fakescraper`). Рассылки покрывают `platform=vk`. Ручной smoke на реальном Long Poll сообщества пройден. Конфиг: `VK_GROUP_TOKEN`, `VK_GROUP_ID`, `VK_API_VERSION`.
 
 ### Впереди
-
-**Фаза 2d — VK-бот:**
-
-- `internal/vk` — клиент VK API (порт из `raspishika-vk`).
-- `internal/vkbot` — обработчики VK-бота без админ-функций + адаптер `messenger.Messenger` → VK (простые тексты, без inline-клавиатур).
-- `cmd/vkbot` — отдельный бинарник: `NewContainer(db, PlatformVK)`, свой `BroadcastJobPoller` для `platform=vk`; включить `PlatformVK` в список платформ рассылок.
-- `cmd/fakevkbot` — демо-режим без реального VK API.
-- Верификация: `make check`, валидация compose-файлов.
 
 **Фаза 3 — полный стек:**
 
@@ -193,7 +186,7 @@ make logs         # docker compose logs -f
 
 **Фаза 4 — финализация:**
 
-- Smoke-проверка всего стека (Telegram-бот + VK-бот + админ-бот), исправления по итогам.
+- Smoke-проверка всего стека (Telegram-бот + VK-бот + админ-бот) в Docker, исправления по итогам.
 - Обновление README/SCRAPER под готовую архитектуру.
 
 ---

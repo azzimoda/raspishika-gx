@@ -2,7 +2,7 @@ GO       ?= go
 COMPOSE  ?= docker compose
 VERSION  ?=
 
-.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot test test-race docs check run-api run-fakeapi run-fakebot run-adminbot bump-proxy up up-fake up-local down logs clean
+.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot test test-race docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down logs clean
 
 all: check
 
@@ -18,6 +18,8 @@ help:
 	@echo "  build-api    build the scraper API (./cmd/api)"
 	@echo "  build-fakeapi  build the demo API (./cmd/fakeapi)"
 	@echo "  build-fakebot  build the API-less demo bot (./cmd/fakebot)"
+	@echo "  build-vkbot    build the VK community bot (./cmd/vkbot)"
+	@echo "  build-fakevkbot  build the API-less demo VK bot (./cmd/fakevkbot)"
 	@echo "  test         go test ./..."
 	@echo "  test-race    go test -race (bot and fakescraper)"
 	@echo "  check        fmt-check + vet + test + build"
@@ -26,6 +28,8 @@ help:
 	@echo "  run-fakeapi  go run ./cmd/fakeapi"
 	@echo "  run-fakebot  go run ./cmd/fakebot"
 	@echo "  run-adminbot go run ./cmd/adminbot (needs the stack: DB, API, ADMIN_ID)"
+	@echo "  run-vkbot    go run ./cmd/vkbot (needs VK credentials, DB, API)"
+	@echo "  run-fakevkbot  go run ./cmd/fakevkbot (needs VK credentials, DB)"
 	@echo "  bump-proxy VERSION=v0.x.y  update github.com/azzimoda/go-tg-proxy"
 	@echo "  up           docker compose up --build -d"
 	@echo "  up-fake      docker compose -f compose.fakeapi.yaml up --build -d"
@@ -64,6 +68,12 @@ build-fakeapi:
 build-fakebot:
 	$(GO) build ./cmd/fakebot
 
+build-vkbot:
+	$(GO) build ./cmd/vkbot
+
+build-fakevkbot:
+	$(GO) build ./cmd/fakevkbot
+
 test:
 	$(GO) test ./...
 
@@ -86,6 +96,12 @@ run-fakebot:
 
 run-adminbot:
 	$(GO) run ./cmd/adminbot
+
+run-vkbot:
+	$(GO) run ./cmd/vkbot
+
+run-fakevkbot:
+	$(GO) run ./cmd/fakevkbot
 
 bump-proxy:
 	@test -n "$(VERSION)" || { echo "Usage: make bump-proxy VERSION=v0.x.y"; exit 1; }

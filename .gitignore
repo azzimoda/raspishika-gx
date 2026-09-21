@@ -6,4 +6,7 @@
 
 storage/
 
+/vkbot
+/fakevkbot
+
 opencode.jsonc

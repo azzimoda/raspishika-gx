@@ -11,8 +11,8 @@ import (
 )
 
 // initialBroadcastPlatforms is the set of platforms a manual broadcast is
-// enqueued for. The VK platform joins as soon as the VK bot lands (Phase 2d).
-var initialBroadcastPlatforms = []model.Platform{model.PlatformTelegram}
+// enqueued for.
+var initialBroadcastPlatforms = []model.Platform{model.PlatformTelegram, model.PlatformVK}
 
 // MassBroadcastEnqueuer records a manual broadcast for the schedule-bot
 // workers instead of sending it directly.
