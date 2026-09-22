@@ -115,6 +115,15 @@ func (b *ChromedpBrowser) reinit(ctx context.Context) error {
 		cancelExecAllocator()
 	}
 
+	// Allocate the browser on the persistent context. If the first Run happened
+	// on a per-screenshot timeout context, chromedp would bind the browser
+	// process to that context (exec.CommandContext) and kill it once the
+	// screenshot finished and its context was cancelled, forcing a re-init on
+	// the next call.
+	if err := chromedp.Run(ctx); err != nil {
+		return fmt.Errorf("failed to allocate browser: %w", err)
+	}
+
 	b.restarterMu.Lock()
 	b.restarting = false
 	b.restarterMu.Unlock()
