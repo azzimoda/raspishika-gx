@@ -3,8 +3,8 @@ package fakescraper
 import "github.com/azzimoda/raspishika-gx/internal/model"
 
 var FakeDepartments = []model.Department{
-	{Name: "Отделение 1"},
-	{Name: "Отделение 2"},
+	{ID: "0", Name: "Отделение 1"},
+	{ID: "1", Name: "Отделение 2"},
 }
 
 // [model.Department.Name] => [][model.Group]

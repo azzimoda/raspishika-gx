@@ -2,7 +2,6 @@ package fakescraper
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
@@ -29,7 +28,7 @@ func (ScraperAPI) GetGroup(ctx context.Context, name string) (*model.Group, erro
 			}
 		}
 	}
-	return nil, errors.New("not found")
+	return nil, fmt.Errorf("%w: группа %s", apiclient.ErrNotFound, name)
 }
 
 func (ScraperAPI) GetGroups(ctx context.Context, departmentName string) ([]model.Group, error) {
@@ -47,7 +46,7 @@ func (ScraperAPI) GetTeacher(ctx context.Context, nameOrID string) (*model.Teach
 		}
 	}
 	log.Warn().Msg("Teacher not found")
-	return nil, errors.New("not found")
+	return nil, fmt.Errorf("%w: преподаватель %s", apiclient.ErrNotFound, nameOrID)
 }
 
 func (ScraperAPI) SearchTeachers(context.Context, string) ([]model.Teacher, error) {
@@ -86,5 +85,5 @@ func (f ScraperAPI) GetSchedule(ctx context.Context, params *apiclient.GetSchedu
 		return &scheduleData, nil
 	}
 	log.Warn().Msg("Schedule not found")
-	return nil, fmt.Errorf("no such group/teacher")
+	return nil, fmt.Errorf("%w: расписание не найдено для %s", apiclient.ErrServiceUnavailable, key)
 }

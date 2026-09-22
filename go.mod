@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/SevereCloud/vksdk/v3 v3.3.1
-	github.com/azzimoda/go-tg-proxy v0.1.1
+	github.com/azzimoda/go-tg-proxy v0.1.2
 	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
 	github.com/go-telegram/bot v1.23.0
 	github.com/joho/godotenv v1.5.1
