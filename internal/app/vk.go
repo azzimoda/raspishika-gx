@@ -202,7 +202,7 @@ func (a *VKApp) runBots(ctx context.Context, cancel context.CancelFunc) error {
 		adminID := viper.GetInt64(config.KeyAdminID)
 		a.AppReporter.Reporter = reporter.NewReporter(a.AdminReporterBot.Bot, adminID)
 	}
-	a.Report().Msg(fmt.Sprintf("Started on VK community %d", a.VKGroupID))
+	a.Report().Msg(fmt.Sprintf(`Started on VK community <a href="https://vk.me/club%d">%d</a>`, a.VKGroupID, a.VKGroupID))
 
 	<-gctx.Done()
 	cancel()
