@@ -142,22 +142,34 @@ func (c *Client) SendMessage(ctx context.Context, peerID int64, text string, key
 }
 
 // SendPhoto uploads data through the community's messages upload server and
-// sends it with a caption. It returns the message ID.
+// sends it with a caption. Upload and send are retried on transient failures;
+// the random_id is fixed for the whole call so a retried send cannot duplicate
+// a message VK already delivered. It returns the message ID.
 func (c *Client) SendPhoto(ctx context.Context, peerID int64, filename string, data []byte, caption string, keyboard *vkbotutil.Keyboard) (int, error) {
 	if len(data) == 0 {
 		return 0, errors.New("VK photo is empty")
 	}
-	photos, err := c.vk.UploadMessagesPhoto(int(peerID), bytes.NewReader(data))
-	if err != nil {
-		return 0, fmt.Errorf("upload VK photo: %w", err)
-	}
-	if len(photos) == 0 {
-		return 0, errors.New("VK saved photo is missing")
-	}
-	return c.send(ctx, peerID, caption, photos[0].ToAttachment(), keyboard)
+	id := randomID()
+	var lastID int
+	err := retryTransient(ctx, func() error {
+		photos, err := c.vk.UploadMessagesPhoto(int(peerID), bytes.NewReader(data))
+		if err != nil {
+			return fmt.Errorf("upload VK photo: %w", err)
+		}
+		if len(photos) == 0 {
+			return errors.New("VK saved photo is missing")
+		}
+		lastID, err = c.sendID(ctx, peerID, caption, photos[0].ToAttachment(), keyboard, id)
+		return err
+	})
+	return lastID, err
 }
 
 func (c *Client) send(ctx context.Context, peerID int64, text, attachment string, keyboard *vkbotutil.Keyboard) (lastID int, err error) {
+	return c.sendID(ctx, peerID, text, attachment, keyboard, 0)
+}
+
+func (c *Client) sendID(ctx context.Context, peerID int64, text, attachment string, keyboard *vkbotutil.Keyboard, id int) (lastID int, err error) {
 	if peerID == 0 {
 		return 0, errors.New("VK destination peer_id is zero")
 	}
@@ -168,7 +180,11 @@ func (c *Client) send(ctx context.Context, peerID int64, text, attachment string
 	for i, part := range parts {
 		b := params.NewMessagesSendBuilder()
 		b.Message(part)
-		b.RandomID(randomID())
+		if id != 0 {
+			b.RandomID(id)
+		} else {
+			b.RandomID(randomID())
+		}
 		b.PeerID(int(peerID))
 		if attachment != "" {
 			b.Attachment(attachment)
