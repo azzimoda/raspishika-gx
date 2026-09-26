@@ -120,6 +120,9 @@ up-local:
 down:
 	$(COMPOSE) down
 
+down-ro:
+	$(COMPOSE) down --remove-orphans
+
 logs:
 	$(COMPOSE) logs -f
 

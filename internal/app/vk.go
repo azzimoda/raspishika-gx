@@ -37,7 +37,6 @@ const vkShutdownTimeout = 30 * time.Second
 // Groupcha activities are reported to the Telegram admin bot when
 // ADMIN_BOT_TOKEN and ADMIN_ID are configured, like the Telegram bot does.
 func NewVKApp(scraperAPI service.APIClient) (*VKApp, error) {
-
 	config.Init()
 
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
@@ -141,7 +140,6 @@ type VKApp struct {
 }
 
 func (a *VKApp) Run() error {
-
 	defer a.Cancel()
 
 	log.Info().Msg("Starting VK app...")
@@ -169,7 +167,6 @@ func (a *VKApp) Run() error {
 // send-only admin bot, then waits for the shutdown signal. Returns nil on a
 // graceful shutdown; a failing Long Poll loop returns its error.
 func (a *VKApp) runBots(ctx context.Context, cancel context.CancelFunc) error {
-
 	g, gctx := errgroup.WithContext(ctx)
 
 	if a.AdminReporterBot != nil {
@@ -213,7 +210,6 @@ func (a *VKApp) runBots(ctx context.Context, cancel context.CancelFunc) error {
 // startup report can be delivered. Returns false if the context is cancelled
 // while waiting.
 func (a *VKApp) waitForReporterReady(ctx context.Context) bool {
-
 	if a.AdminReporterBot == nil {
 		return true
 	}
@@ -232,7 +228,6 @@ func (a *VKApp) waitForReporterReady(ctx context.Context) bool {
 }
 
 func (a *VKApp) Stop() error {
-
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), vkShutdownTimeout)
 	defer cancel()
 

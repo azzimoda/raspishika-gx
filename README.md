@@ -99,7 +99,7 @@ docker compose -f compose.fakeapi.yaml up --build
 docker compose -f compose.local.yaml up --build
 ```
 
-VK-бот (`vkbot`) поднимется в любом из этих стеков, если заданы `VK_GROUP_TOKEN` и `VK_GROUP_ID`; без них соответствующий контейнер будет падать с ошибкой. `fakevkbot` доступен только в dev-стеках (`compose.fakeapi.yaml`/`compose.local.yaml`) и работает без API.
+VK-бот (`vkbot`) поднимется в любом из этих стеков, если заданы `VK_GROUP_TOKEN` и `VK_GROUP_ID`; без них соответствующий контейнер будет падать с ошибкой. Демо-редакция `cmd/fakevkbot` (без обращения к API) в compose не входит и запускается локально: `go run ./cmd/fakevkbot`.
 
 ### Make
 
@@ -206,7 +206,7 @@ make logs         # docker compose logs -f
 - **Фаза 2b** — сервис БД в Docker-стеке, полная совместимость SQLite/PostgreSQL (миграционный тест на живом PostgreSQL).
 - **Фаза 2c** — ручные рассылки через очередь `broadcast_jobs` (по одной задаче на платформу, воркер в каждом процессе забирает только свои), админ-бот вынесен в отдельный бинарник `cmd/adminbot` (report-only, без браузера). Прод остаётся на SQLite.
 - **Фаза 2d** — VK-бот на `SevereCloud/vksdk`: обёртка клиента `internal/vkbot/client` (Long Poll с reconnect и дедупом, отправка сообщений/фото, проверка прав админа сообщества), обработчики `internal/vkbot/main` (зеркало TG-хендлеров без админ-функций: расписание с навигацией по дням, поиск преподавателей, настройки беседы и пейджинг), разметка клавиатур в `internal/vkbot/util`, адаптер `messenger.VK`. Отдельный бинарник `cmd/vkbot`, демо `cmd/fakevkbot` на фейковых данных (`internal/fakescraper`). Рассылки покрывают `platform=vk`. Ручной smoke на реальном Long Poll сообщества пройден. Конфиг: `VK_GROUP_TOKEN`, `VK_GROUP_ID`, `VK_API_VERSION`.
-- **Фаза 3 (частично)** — единая сборка образа: `bot.Dockerfile` собирает `bot`, `adminbot`, `vkbot` и `fakevkbot`; сервисы `vkbot`/`fakevkbot` добавлены в compose-файлы (`compose.yaml`, `compose.fakeapi.yaml`, `compose.local.yaml`, PostgreSQL в dev-стеках). README обновлён под итоговую архитектуру.
+- **Фаза 3 (частично)** — единая сборка образа: `bot.Dockerfile` собирает `bot`, `adminbot`, `vkbot` и `fakevkbot`; сервис `vkbot` добавлен во все compose-файлы (`compose.yaml`, `compose.fakeapi.yaml`, `compose.local.yaml`, PostgreSQL в dev-стеках). Демо-бинарник `fakevkbot` в compose не разворачивается и доступен локально.
 
 ### Впереди
 

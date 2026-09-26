@@ -42,7 +42,6 @@ func New() (*App, error) {
 // NewWithScraper creates the app using the given scraper API client.
 // If scraperAPI is nil, the default API client from configuration is used.
 func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
-
 	config.Init()
 
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
@@ -152,7 +151,6 @@ type App struct {
 const shutdownTimeout = 30 * time.Second
 
 func (a *App) Run() error {
-
 	defer a.Cancel()
 
 	log.Info().Msg("Starting app...")
@@ -184,7 +182,6 @@ func (a *App) Run() error {
 // shutdown signal and joins the bot goroutines. Returns nil unless a bot
 // goroutine fails.
 func (a *App) runBots(ctx context.Context, cancel context.CancelFunc) error {
-
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		a.MainBot.Start(gctx)
@@ -221,7 +218,6 @@ func (a *App) runBots(ctx context.Context, cancel context.CancelFunc) error {
 // waitForMainBotReady blocks until the main bot is built. Returns false if the
 // context is cancelled while waiting.
 func (a *App) waitForMainBotReady(ctx context.Context) bool {
-
 	for a.MainBot.Bot == nil {
 		select {
 		case <-ctx.Done():
@@ -238,7 +234,6 @@ func (a *App) waitForMainBotReady(ctx context.Context) bool {
 }
 
 func (a *App) Stop() error {
-
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
@@ -257,7 +252,6 @@ func (a *App) Stop() error {
 }
 
 func (a *App) OnMainBotRestart(ctx context.Context) {
-
 	a.Report().Msg("Main bot is restarting...")
 
 	for a.MainBot.Bot == nil {
@@ -291,7 +285,6 @@ func NewAppReporter(services *service.Services, getBotUsername func() string) *A
 // before that there is nothing to deliver the report through. Once connected,
 // reports go to the configured recipient.
 func (r *AppReporter) Report() reporter.ReportBuilder {
-
 	format := NewFormatter(r.getBotUsername, r.Services)
 	if r.Reporter == nil {
 		return reporter.EmptyReportBuilder().WithFormatFunc(format)
@@ -304,7 +297,6 @@ func (r *AppReporter) Report() reporter.ReportBuilder {
 // the username of the bot that serves the admin deep links (the admin bot) once
 // it is connected, so the formatter points the "Get chat" buttons back at it.
 func NewFormatter(getBotUsername func() string, services *service.Services) reporter.FormatFunc {
-
 	return func(msg string, debugValues map[string]any, err error) *bot.SendRichMessageParams {
 
 		log.Trace().Str("msg", msg).Any("debugValues", debugValues).Msg("formatReport called")

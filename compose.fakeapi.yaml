@@ -40,6 +40,7 @@ services:
       - raspishika-network
     restart: unless-stopped
 
+  # API on fake scraper
   api:
     build:
       context: .
@@ -157,39 +158,6 @@ services:
     depends_on:
       api:
         condition: service_started
-      db:
-        condition: service_healthy
-    volumes:
-      - ./storage:/app/storage
-    networks:
-      - raspishika-network
-    restart: unless-stopped
-
-  fakevkbot:
-    build:
-      context: .
-      dockerfile: bot.Dockerfile
-    container_name: raspishika-fakevkbot
-    entrypoint: /app/fakevkbot
-    shm_size: 2g
-    environment:
-      - VK_GROUP_TOKEN=${VK_GROUP_TOKEN}
-      - VK_GROUP_ID=${VK_GROUP_ID}
-      - VK_API_VERSION=${VK_API_VERSION:-5.199}
-      - ADMIN_BOT_TOKEN=${ADMIN_BOT_TOKEN}
-      - ADMIN_ID=${ADMIN_ID:-0}
-      - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - TZ=Asia/Yekaterinburg
-      - BROWSER_SCALE=${BROWSER_SCALE:-1}
-      - HANDLE_VACATION=${HANDLE_VACATION:-false}
-      - DB_DRIVER=postgres
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=${DB_PASSWORD:-raspishika}
-      - DB_NAME=raspishika
-      - DB_SSLMODE=disable
-    depends_on:
       db:
         condition: service_healthy
     volumes:
