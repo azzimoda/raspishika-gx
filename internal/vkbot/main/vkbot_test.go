@@ -102,6 +102,7 @@ type fakeSchedules struct {
 	teachers    []model.Teacher
 	schedule    *model.ScheduleData
 	imageErr    error
+	err         error
 	requested   model.ScheduleConfig
 	lookups     int
 }
@@ -134,6 +135,9 @@ func (f *fakeSchedules) FindTeachersByName(context.Context, string) ([]model.Tea
 
 func (f *fakeSchedules) GetSchedule(_ context.Context, config model.ScheduleConfig) (*model.ScheduleData, error) {
 	f.requested = config
+	if f.err != nil {
+		return nil, f.err
+	}
 	if f.schedule == nil {
 		return nil, nil
 	}
@@ -143,6 +147,16 @@ func (f *fakeSchedules) GetSchedule(_ context.Context, config model.ScheduleConf
 
 func (f *fakeSchedules) PrepareScheduleImage(context.Context, *model.ScheduleData) (string, []byte, error) {
 	return "schedule.png", []byte("png"), f.imageErr
+}
+
+type fakeStats struct {
+	entries []model.UpdateLog
+	err     error
+}
+
+func (f *fakeStats) LogUpdate(_ context.Context, entry model.UpdateLog) error {
+	f.entries = append(f.entries, entry)
+	return f.err
 }
 
 func testBot() (*Bot, *fakeMessenger, *fakeChats, *fakeSchedules) {
@@ -157,6 +171,12 @@ func testBot() (*Bot, *fakeMessenger, *fakeChats, *fakeSchedules) {
 		sessions:  make(map[sessionKey]session),
 	}
 	return b, m, c, s
+}
+
+func withStats(b *Bot) *fakeStats {
+	st := &fakeStats{}
+	b.stats = st
+	return st
 }
 
 func incoming(peerID, userID int64, command string) vkclient.Message {

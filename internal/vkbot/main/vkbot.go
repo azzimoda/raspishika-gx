@@ -118,6 +118,9 @@ func (b *Bot) send(ctx context.Context, peerID int64, text string, keyboard *vkb
 
 // Handle processes an incoming message_new event. VK's transport orders
 // messages within a peer; sessions additionally belong to the initiating user.
+// Every processed update is written to update_logs the same way the Telegram
+// bot does: metadata and errors flow through the context, the default handler
+// opts out, and the error column always carries a pointer (empty on success).
 func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 	if msg.Out || msg.FromID <= 0 || msg.PeerID <= 0 {
 		return nil
@@ -145,22 +148,66 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 	} else if err != nil {
 		return b.fail(ctx, msg, err)
 	}
+	log.Trace().Any("message", msg).Msg("Received VK update")
 	started := b.now()
-	entry := model.UpdateLog{ChatID: chat.ID, Kind: "message", MessageID: msg.ID, Data: input}
+
+	var handlerErrs []error
+	ctx = context.WithValue(ctx, keyError, &handlerErrs)
+	var noLogFlag bool
+	ctx = context.WithValue(ctx, keyNoLogFlag, &noLogFlag)
+	var groupOrTeacher string
+	ctx = context.WithValue(ctx, keyGroupOrTeacher, &groupOrTeacher)
+	var cachedSchedule bool
+	ctx = context.WithValue(ctx, keyCached, &cachedSchedule)
+
+	updateKind := "message"
+	updateData := input
 	if msg.Payload != "" {
-		entry.Kind = "keyboard"
-		entry.Data = msg.Payload
+		updateKind = "keyboard"
+		updateData = msg.Payload
 	}
+
 	defer func() {
-		if b.stats == nil || command == "stop" {
+		elapsedTime := b.now().Sub(started)
+		log.Trace().Any("message", msg).Msg("VK update processed")
+
+		if noLogFlag {
+			log.Trace().Msg("No log flag enabled")
 			return
 		}
-		entry.Elapsed = int(b.now().Sub(started).Milliseconds())
-		if result != nil {
-			text := result.Error()
-			entry.Error = &text
+
+		handlerErr := result
+		if len(handlerErrs) > 0 {
+			handlerErr = errors.Join(handlerErr, errors.Join(handlerErrs...))
 		}
-		if err := b.stats.LogUpdate(ctx, entry); err != nil {
+		handlerErrStr := ""
+		if handlerErr != nil {
+			handlerErrStr = handlerErr.Error()
+			log.Debug().Err(handlerErr).Int("message_id", msg.ID).Int64("chat_id", msg.PeerID).Msg("VK handler error")
+		}
+
+		logEvent := log.Info().Dur("elapsed_time", elapsedTime)
+		if updateKind == "keyboard" {
+			logEvent.Int("message_id", msg.ID).Int64("chat_id", msg.PeerID).
+				Str("data", updateData).Msg("VK keyboard update handled")
+		} else {
+			logEvent.Int("message_id", msg.ID).Int64("chat_id", msg.PeerID).
+				Str("text", shortenText(updateData, 100)).Msg("VK message handled")
+		}
+
+		if b.stats == nil {
+			return
+		}
+		if err := b.stats.LogUpdate(ctx, model.UpdateLog{
+			ChatID:         chat.ID,
+			Kind:           updateKind,
+			MessageID:      msg.ID,
+			Data:           updateData,
+			GroupOrTeacher: groupOrTeacher,
+			IsCached:       cachedSchedule,
+			Elapsed:        int(elapsedTime.Milliseconds()),
+			Error:          &handlerErrStr,
+		}); err != nil {
 			log.Warn().Err(err).Msg("VK update statistics failed")
 		}
 	}()
@@ -220,19 +267,21 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 	case "setaccess":
 		return b.setAccess(ctx, chat, msg, arg)
 	case "today", "tomorrow":
-		return b.groupSchedule(ctx, chat, msg, command, arg, &entry)
+		return b.groupSchedule(ctx, chat, msg, command, arg)
 	case "week", "day":
-		return b.keyboardSchedule(ctx, chat, msg, command, arg, &entry)
+		return b.keyboardSchedule(ctx, chat, msg, command, arg)
 	case "teacher":
-		return b.teacherSearch(ctx, chat, msg, arg, &entry)
+		return b.teacherSearch(ctx, chat, msg, arg)
 	case "teachers":
 		return b.teacherPage(ctx, chat, msg, arg)
 	case "showteacher":
-		return b.teacherSchedule(ctx, chat, msg, arg, &entry)
+		return b.teacherSchedule(ctx, chat, msg, arg)
 	default:
 		if _, err := model.GroupName(input).ValidateFormat(); err == nil {
-			return b.groupSchedule(ctx, chat, msg, "week", input, &entry)
+			return b.groupSchedule(ctx, chat, msg, "week", input)
 		}
+		setNoLogFlag(ctx)
+		log.Debug().Str("text", input).Msg("Unhandled VK message")
 		if chat.IsPrivate() {
 			return b.send(ctx, msg.PeerID, "Выберите команду на клавиатуре или отправьте /help.", mainKeyboard())
 		}

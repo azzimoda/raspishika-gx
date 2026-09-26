@@ -6,12 +6,12 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 )
 
-// UpdateLog represents a log entry for a Telegram API update.
+// UpdateLog represents a log entry for a bot update (Telegram or VK).
 type UpdateLog struct {
 	ID             int64     `gorm:"primaryKey;column:id"`
 	ChatID         int64     `gorm:"column:chat_id"`          // [Chat.ID]
-	Kind           string    `gorm:"column:kind"`             // Variants: "message", "callback_query".
-	MessageID      int       `gorm:"column:message_id"`       // ID of User's message or of the message of inline keyboard of the callback query.
+	Kind           string    `gorm:"column:kind"`             // Variants: "message", "callback_query", "keyboard".
+	MessageID      int       `gorm:"column:message_id"`       // ID of User's message or of the message of inline keyboard (VK payload).
 	Data           string    `gorm:"column:data"`             // Message text or callback query data.
 	IsCached       bool      `gorm:"column:cached"`           // true if schedule sent from cache.
 	GroupOrTeacher string    `gorm:"column:group_or_teacher"` // [Group.GroupName] or [Teacher.Name] or empty.

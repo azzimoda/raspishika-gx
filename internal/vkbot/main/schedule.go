@@ -21,7 +21,7 @@ var (
 	errTeacherNotFound = errors.New("teacher not found")
 )
 
-func (b *Bot) groupSchedule(ctx context.Context, chat *model.Chat, msg vkclient.Message, kind, name string, entry *model.UpdateLog) error {
+func (b *Bot) groupSchedule(ctx context.Context, chat *model.Chat, msg vkclient.Message, kind, name string) error {
 	b.clearSession(msg)
 	if strings.TrimSpace(name) == "" {
 		if chat.GroupName == nil {
@@ -37,13 +37,13 @@ func (b *Bot) groupSchedule(ctx context.Context, chat *model.Chat, msg vkclient.
 		return b.send(ctx, msg.PeerID, "Группа не найдена. Выберите её заново через /settings.", nil)
 	}
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
-	return b.sendSchedule(ctx, msg, conf, kind, model.ScheduleURL(conf, nil), entry)
+	return b.sendSchedule(ctx, msg, conf, kind, model.ScheduleURL(conf, nil))
 }
 
 // keyboardSchedule opens a schedule view referenced by the week and day
 // buttons. The value is a group name or a numeric teacher ID in the on-screen
 // schedule.
-func (b *Bot) keyboardSchedule(ctx context.Context, chat *model.Chat, msg vkclient.Message, kind, arg string, entry *model.UpdateLog) error {
+func (b *Bot) keyboardSchedule(ctx context.Context, chat *model.Chat, msg vkclient.Message, kind, arg string) error {
 	b.clearSession(msg)
 	value := strings.TrimSpace(arg)
 	if value == "" {
@@ -62,20 +62,20 @@ func (b *Bot) keyboardSchedule(ctx context.Context, chat *model.Chat, msg vkclie
 		if len(parts) == 2 {
 			idx, _ = strconv.Atoi(strings.TrimSpace(parts[1]))
 		}
-		return b.dayView(ctx, msg, value, idx, chat.DarkMode, entry)
+		return b.dayView(ctx, msg, value, idx, chat.DarkMode)
 	}
-	return b.weekView(ctx, msg, value, chat.DarkMode, entry)
+	return b.weekView(ctx, msg, value, chat.DarkMode)
 }
 
-func (b *Bot) weekView(ctx context.Context, msg vkclient.Message, value string, darkMode bool, entry *model.UpdateLog) error {
+func (b *Bot) weekView(ctx context.Context, msg vkclient.Message, value string, darkMode bool) error {
 	conf, link, err := b.resolveScheduleTarget(ctx, value, darkMode)
 	if err != nil {
 		return b.scheduleTargetFail(ctx, msg, err)
 	}
-	return b.sendSchedule(ctx, msg, conf, "week", link, entry)
+	return b.sendSchedule(ctx, msg, conf, "week", link)
 }
 
-func (b *Bot) dayView(ctx context.Context, msg vkclient.Message, value string, idx int, darkMode bool, entry *model.UpdateLog) error {
+func (b *Bot) dayView(ctx context.Context, msg vkclient.Message, value string, idx int, darkMode bool) error {
 	conf, link, err := b.resolveScheduleTarget(ctx, value, darkMode)
 	if err != nil {
 		return b.scheduleTargetFail(ctx, msg, err)
@@ -91,7 +91,7 @@ func (b *Bot) dayView(ctx context.Context, msg vkclient.Message, value string, i
 		return b.send(ctx, msg.PeerID, "На эту дату расписания нет.", nil)
 	}
 	schedule.Config = conf
-	entry.GroupOrTeacher, entry.IsCached = conf.Name(), schedule.IsOld
+	setGroupOrTeacherAndCached(ctx, conf.Name(), schedule.IsOld)
 	markPassed := time.Time{}
 	if sameDate(schedule.Days[idx].Date, b.now()) {
 		markPassed = b.now()
@@ -153,7 +153,7 @@ func (b *Bot) scheduleTargetFail(ctx context.Context, msg vkclient.Message, err 
 
 // sendSchedule sends the week photo or the today/tomorrow day text, depending
 // on kind, and records the update statistics entry.
-func (b *Bot) sendSchedule(ctx context.Context, msg vkclient.Message, conf model.ScheduleConfig, kind, link string, entry *model.UpdateLog) error {
+func (b *Bot) sendSchedule(ctx context.Context, msg vkclient.Message, conf model.ScheduleConfig, kind, link string) error {
 	schedule, err := b.schedules.GetSchedule(ctx, conf)
 	if err != nil {
 		return b.fail(ctx, msg, err)
@@ -162,7 +162,7 @@ func (b *Bot) sendSchedule(ctx context.Context, msg vkclient.Message, conf model
 		return b.send(ctx, msg.PeerID, "Расписание пока не опубликовано. Попробуйте позже.", nil)
 	}
 	schedule.Config = conf
-	entry.GroupOrTeacher, entry.IsCached = conf.Name(), schedule.IsOld
+	setGroupOrTeacherAndCached(ctx, conf.Name(), schedule.IsOld)
 	keyboard := vkbotutil.ScheduleKeyboard(navigatorValue(conf), schedule.Days, -1, link)
 	note := ""
 	if schedule.IsOld {
@@ -321,7 +321,7 @@ func formatDay(day model.ScheduleDay, current time.Time) string {
 	return out.String()
 }
 
-func (b *Bot) teacherSearch(ctx context.Context, chat *model.Chat, msg vkclient.Message, query string, entry *model.UpdateLog) error {
+func (b *Bot) teacherSearch(ctx context.Context, chat *model.Chat, msg vkclient.Message, query string) error {
 	query = strings.TrimSpace(query)
 	if len([]rune(query)) > 100 {
 		return b.send(ctx, msg.PeerID, "Введите фамилию или часть имени преподавателя (до 100 символов).", nil)
@@ -338,7 +338,7 @@ func (b *Bot) teacherSearch(ctx context.Context, chat *model.Chat, msg vkclient.
 		return b.send(ctx, msg.PeerID, "Преподаватель не найден. Попробуйте другую фамилию или её часть. Отмена — /cancel.", nil)
 	}
 	if len(teachers) == 1 {
-		return b.teacherSchedule(ctx, chat, msg, teachers[0].TeacherID, entry)
+		return b.teacherSchedule(ctx, chat, msg, teachers[0].TeacherID)
 	}
 	return b.sendTeacherChoices(ctx, msg, teachers, 0, false)
 }
@@ -383,9 +383,9 @@ func (b *Bot) sendTeacherChoices(ctx context.Context, msg vkclient.Message, teac
 	return b.send(ctx, msg.PeerID, text, vkbotutil.PagedKeyboard(items, page, "teachers", "cancel"))
 }
 
-func (b *Bot) teacherSchedule(ctx context.Context, chat *model.Chat, msg vkclient.Message, id string, entry *model.UpdateLog) error {
+func (b *Bot) teacherSchedule(ctx context.Context, chat *model.Chat, msg vkclient.Message, id string) error {
 	if strings.TrimSpace(id) == "" {
-		return b.teacherSearch(ctx, chat, msg, "", entry)
+		return b.teacherSearch(ctx, chat, msg, "")
 	}
 	teacher, err := b.schedules.GetTeacherByNameOrID(ctx, id)
 	if err != nil {
@@ -400,12 +400,13 @@ func (b *Bot) teacherSchedule(ctx context.Context, chat *model.Chat, msg vkclien
 	if err == nil {
 		link = model.ScheduleURL(conf, departments)
 	}
-	if err := b.sendSchedule(ctx, msg, conf, "week", link, entry); err != nil {
+	if err := b.sendSchedule(ctx, msg, conf, "week", link); err != nil {
 		return err
 	}
 	b.clearSession(msg)
 	if err := b.chats.AddChatRecentTeacher(ctx, &model.RecentTeacher{ChatID: chat.ID, TeacherID: teacher.TeacherID, TeacherName: teacher.Name}); err != nil {
 		log.Warn().Err(err).Msg("Failed to save VK recent teacher")
+		addHandlerCtxErr(ctx, err)
 	}
 	return nil
 }
