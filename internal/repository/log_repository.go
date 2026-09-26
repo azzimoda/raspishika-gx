@@ -197,7 +197,7 @@ func (r *logRepository) CountActualRequests(ctx context.Context, start, end time
 	var countUpdates int64
 	if err := r.db.WithContext(ctx).
 		Model(&model.UpdateLog{}).
-		Where("group_or_teacher IS NOT NULL AND group_or_teacher != '' AND cached = 0 AND created_at BETWEEN ? AND ?", start, end).
+		Where("group_or_teacher IS NOT NULL AND group_or_teacher != '' AND cached IS FALSE AND created_at BETWEEN ? AND ?", start, end).
 		Count(&countUpdates).Error; err != nil {
 		return 0, fmt.Errorf("failed to count actual update requests: %w", err)
 	}

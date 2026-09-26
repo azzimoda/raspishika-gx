@@ -249,7 +249,7 @@ func (r *chatRepository) GetChatsByDepartment(ctx context.Context, dept string) 
 func (r *chatRepository) GetChatsByWatchedGroup(ctx context.Context, group model.GroupName) ([]*model.Chat, error) {
 	var chats []*model.Chat
 	err := r.scoped().WithContext(ctx).
-		Where("group = ? AND update_notification = 1", group).
+		Where("group = ? AND update_notification IS TRUE", group).
 		Find(&chats).Error
 	return chats, err
 }
@@ -263,18 +263,18 @@ func (r *chatRepository) GetChatsWithDailyTime(ctx context.Context, time string)
 func (r *chatRepository) GetChatsWithPairNotification(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
 	err := r.scoped().WithContext(ctx).
-		Where(`"group" IS NOT NULL AND "group" != '' AND pair_sending = 1`).
+		Where(`"group" IS NOT NULL AND "group" != '' AND pair_sending IS TRUE`).
 		Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithChangeAlert(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.scoped().WithContext(ctx).Where("update_notification = 1").Find(&chats).Error
+	err := r.scoped().WithContext(ctx).Where("update_notification IS TRUE").Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithDarkMode(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.scoped().WithContext(ctx).Where("dark_mode = 1").Find(&chats).Error
+	err := r.scoped().WithContext(ctx).Where("dark_mode IS TRUE").Find(&chats).Error
 	return chats, err
 }
 
@@ -374,7 +374,7 @@ func (r *chatRepository) CountChatActivitiesByPeriod(ctx context.Context, start,
 			SELECT c.id,
 				COUNT(ul.id) AS cnt,
 				("group" IS NOT NULL AND "group" != '') AS has_group,
-				(daily_sending_time IS NOT NULL OR pair_sending = 1 OR update_notification = 1) AS has_broadcast
+				(daily_sending_time IS NOT NULL OR pair_sending IS TRUE OR update_notification IS TRUE) AS has_broadcast
 			FROM chats c
 			LEFT JOIN update_logs ul
 				ON ul.chat_id = c.id AND ul.created_at BETWEEN ? AND ?
@@ -423,7 +423,7 @@ func (r *chatRepository) CountPairEnabled(ctx context.Context) (int, error) {
 	var count int64
 	err := r.scoped().WithContext(ctx).
 		Model(&model.Chat{}).
-		Where("pair_sending = 1").
+		Where("pair_sending IS TRUE").
 		Count(&count).Error
 	return int(count), err
 }
@@ -431,7 +431,7 @@ func (r *chatRepository) CountChangeEnabled(ctx context.Context) (int, error) {
 	var count int64
 	err := r.scoped().WithContext(ctx).
 		Model(&model.Chat{}).
-		Where("update_notification = 1").
+		Where("update_notification IS TRUE").
 		Count(&count).Error
 	return int(count), err
 }
@@ -439,7 +439,7 @@ func (r *chatRepository) CountDarkEnabled(ctx context.Context) (int, error) {
 	var count int64
 	err := r.scoped().WithContext(ctx).
 		Model(&model.Chat{}).
-		Where("dark_mode = 1").
+		Where("dark_mode IS TRUE").
 		Count(&count).Error
 	return int(count), err
 }
@@ -594,7 +594,7 @@ func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, err
 func (r *chatRepository) GetWatchedGroupNames(ctx context.Context) ([]string, error) {
 	const query = `
 		SELECT DISTINCT "group" FROM chats
-		WHERE "group" IS NOT NULL AND "group" != '' AND update_notification = 1
+		WHERE "group" IS NOT NULL AND "group" != '' AND update_notification IS TRUE
 	`
 	var groupNames []string
 	err := r.scoped().WithContext(ctx).Raw(query).Scan(&groupNames).Error
