@@ -18,7 +18,9 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/service"
 	"github.com/azzimoda/raspishika-gx/internal/vkbot/client"
 	vkbotutil "github.com/azzimoda/raspishika-gx/internal/vkbot/util"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
 
@@ -35,6 +37,7 @@ type chatService interface {
 	CreateChat(context.Context, *model.Chat) error
 	UpdateChat(context.Context, *model.Chat) error
 	DeleteChat(context.Context, int64) error
+	ResetGroupSettings(context.Context, *model.Chat) error
 	GetRecentTeachers(context.Context, int64) ([]*model.RecentTeacher, error)
 	AddChatRecentTeacher(context.Context, *model.RecentTeacher) error
 }
@@ -47,6 +50,7 @@ type scheduleService interface {
 	FindTeachersByName(context.Context, string) ([]model.Teacher, error)
 	GetSchedule(context.Context, model.ScheduleConfig) (*model.ScheduleData, error)
 	PrepareScheduleImage(context.Context, *model.ScheduleData) (string, []byte, error)
+	IsVacation(context.Context) (bool, error)
 }
 
 type statsService interface {
@@ -251,6 +255,11 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 		return b.send(ctx, msg.PeerID, "Настройки и история выбора преподавателей удалены. Рассылки остановлены. Чтобы настроить бота заново, отправьте /start.", &vkbotutil.Keyboard{Buttons: [][]vkbotutil.Button{}})
 	case "settings":
 		b.clearSession(msg)
+		// HANDLE_VACATION gates the menu, as in the Telegram bot: during the
+		// holidays there is nothing to configure.
+		if viper.GetBool(config.KeyHandleVacation) && b.vacationActive(ctx) {
+			return b.sendVacationAnswer(ctx, msg.PeerID, true)
+		}
 		return b.settings(ctx, chat)
 	case "departments":
 		return b.departments(ctx, chat, msg, pageNumber(arg))

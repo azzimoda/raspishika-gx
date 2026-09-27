@@ -12,6 +12,8 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/vkbot/client"
 	vkbotutil "github.com/azzimoda/raspishika-gx/internal/vkbot/util"
+	"github.com/azzimoda/raspishika-gx/pkg/config"
+	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
 
@@ -48,7 +50,23 @@ func (f *fakeMessenger) IsAdmin(_ context.Context, _, userID int64) (bool, error
 type fakeChats struct {
 	records                   map[model.ChatID]*model.Chat
 	updates, creates, deletes int
+	resets                    int
 	recent                    []*model.RecentTeacher
+}
+
+func (f *fakeChats) ResetGroupSettings(_ context.Context, chat *model.Chat) error {
+	f.resets++
+	f.updates++
+	chat.GroupName = nil
+	chat.DepartmentName = nil
+	chat.PairSending = false
+	chat.ChangeAlert = false
+	chat.DailySendingTime = nil
+	chat.State = model.ChatStateDefault
+	if stored, ok := f.records[model.ChatID(chat.ID)]; ok {
+		*stored = *chat
+	}
+	return nil
 }
 
 func (f *fakeChats) GetChatByChatID(_ context.Context, id model.ChatID) (*model.Chat, error) {
@@ -105,6 +123,12 @@ type fakeSchedules struct {
 	err         error
 	requested   model.ScheduleConfig
 	lookups     int
+	vacation    bool
+	vacationErr error
+}
+
+func (f *fakeSchedules) IsVacation(context.Context) (bool, error) {
+	return f.vacation, f.vacationErr
 }
 
 func (f *fakeSchedules) GetDepartments(context.Context) ([]model.Department, error) {
@@ -475,5 +499,161 @@ func TestStopRemovesSettingsAndSessions(t *testing.T) {
 	keyboard := m.messages[len(m.messages)-1].keyboard
 	if keyboard == nil || len(keyboard.Buttons) != 0 {
 		t.Fatal("stop did not clear keyboard")
+	}
+}
+
+// TestExpiredStoredGroupResetsTheChat is the VK counterpart of the Telegram
+// bot's resetChatForExpiredGroup. Without it the chat keeps a group that has
+// left the schedule, so every later request repeats the same refusal and the
+// broadcasts keep running against a dead group.
+func TestExpiredStoredGroupResetsTheChat(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  vkclient.Message
+	}{
+		{"typed command", incoming(42, 10, "/week")},
+		{"keyboard button", vkclient.Message{ID: 1, PeerID: 42, FromID: 10, Payload: `{"command":"day\nИСПт-22-(9)-2\n1"}`}},
+		{"button without a group", vkclient.Message{ID: 1, PeerID: 42, FromID: 10, Payload: `{"command":"day"}`}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b, m, c, s := testBot()
+			addChat(c, 42, model.ChatAccessAll)
+			s.group = nil // the group has left the schedule
+
+			run(t, b, tc.msg)
+
+			if c.resets != 1 {
+				t.Fatalf("ResetGroupSettings calls = %d, want 1", c.resets)
+			}
+			chat, err := c.GetChatByChatID(context.Background(), 42)
+			if err != nil {
+				t.Fatalf("GetChatByChatID: %v", err)
+			}
+			if chat.GroupName != nil {
+				t.Fatalf("stored group = %q, want it cleared", *chat.GroupName)
+			}
+			if len(m.messages) == 0 || !strings.Contains(m.messages[len(m.messages)-1].text, "была удалена") {
+				t.Fatalf("last message = %q, want the group-removed notice", m.messages[len(m.messages)-1].text)
+			}
+		})
+	}
+}
+
+// TestUnknownTypedGroupKeepsSettings guards the other side: a name the user
+// typed is not the chat's stored group, so a typo must not wipe their settings.
+func TestUnknownTypedGroupKeepsSettings(t *testing.T) {
+	b, _, c, s := testBot()
+	addChat(c, 42, model.ChatAccessAll)
+	s.group = nil
+
+	run(t, b, incoming(42, 10, "/week АиЭС-22(9)-1"))
+
+	if c.resets != 0 {
+		t.Fatalf("ResetGroupSettings calls = %d, want 0 for a name the user typed", c.resets)
+	}
+	chat, err := c.GetChatByChatID(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("GetChatByChatID: %v", err)
+	}
+	if chat.GroupName == nil {
+		t.Fatal("stored group was cleared for an unknown name the user typed")
+	}
+}
+
+// TestSettingsMenuAnswersVacation covers HANDLE_VACATION parity: during the
+// holidays the Telegram bot answers with the vacation notice instead of the
+// menu, and so must the VK bot.
+func TestSettingsMenuAnswersVacation(t *testing.T) {
+	b, m, c, s := testBot()
+	addChat(c, 42, model.ChatAccessAll)
+	s.vacation = true
+	viper.Set(config.KeyHandleVacation, true)
+	t.Cleanup(func() { viper.Set(config.KeyHandleVacation, true) })
+
+	run(t, b, incoming(42, 10, "/settings"))
+
+	if len(m.messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(m.messages))
+	}
+	text := m.messages[0].text
+	if !strings.Contains(text, "каникул") {
+		t.Fatalf("message = %q, want the vacation notice", text)
+	}
+	if strings.Contains(text, "Настройки") {
+		t.Fatalf("message = %q, want the settings menu replaced by the notice", text)
+	}
+	if strings.Contains(text, "-") && strings.Contains(text, "осталось -") {
+		t.Fatalf("message = %q, want a non-negative day count", text)
+	}
+}
+
+// TestSettingsMenuDuringVacationWhenFlagOff keeps the flag in charge: an
+// operator who disables HANDLE_VACATION still gets the menu.
+func TestSettingsMenuDuringVacationWhenFlagOff(t *testing.T) {
+	b, m, c, s := testBot()
+	addChat(c, 42, model.ChatAccessAll)
+	s.vacation = true
+	viper.Set(config.KeyHandleVacation, false)
+	t.Cleanup(func() { viper.Set(config.KeyHandleVacation, true) })
+
+	run(t, b, incoming(42, 10, "/settings"))
+
+	if len(m.messages) != 1 || !strings.Contains(m.messages[0].text, "Настройки") {
+		t.Fatalf("messages = %+v, want the settings menu", m.messages)
+	}
+}
+
+// TestTeacherSearchAnswersVacation mirrors the Telegram teacher command, which
+// is not gated by HANDLE_VACATION.
+func TestTeacherSearchAnswersVacation(t *testing.T) {
+	b, m, c, s := testBot()
+	addChat(c, 42, model.ChatAccessAll)
+	s.vacation = true
+	viper.Set(config.KeyHandleVacation, false)
+	t.Cleanup(func() { viper.Set(config.KeyHandleVacation, true) })
+
+	run(t, b, incoming(42, 10, "/teacher Иванов"))
+
+	if len(m.messages) != 1 || !strings.Contains(m.messages[0].text, "каникул") {
+		t.Fatalf("messages = %+v, want the vacation notice", m.messages)
+	}
+	if s.lookups != 0 {
+		t.Fatalf("teacher lookups = %d, want 0 during vacation", s.lookups)
+	}
+}
+
+// TestVacationCheckFailureDoesNotLockOut keeps a transient API error from
+// locking users out of their settings: the Telegram bot logs it and carries on.
+func TestVacationCheckFailureDoesNotLockOut(t *testing.T) {
+	b, m, c, s := testBot()
+	addChat(c, 42, model.ChatAccessAll)
+	s.vacationErr = errors.New("boom")
+	viper.Set(config.KeyHandleVacation, true)
+	t.Cleanup(func() { viper.Set(config.KeyHandleVacation, true) })
+
+	run(t, b, incoming(42, 10, "/settings"))
+
+	if len(m.messages) != 1 || !strings.Contains(m.messages[0].text, "Настройки") {
+		t.Fatalf("messages = %+v, want the settings menu despite the failed check", m.messages)
+	}
+}
+
+func TestDaysUntilSeptember(t *testing.T) {
+	cases := []struct {
+		now  time.Time
+		want int
+	}{
+		{time.Date(2026, 7, 5, 0, 0, 0, 0, time.UTC), 58},
+		{time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC), 1},
+		{time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), 0},
+		// Past the end of the holidays the count must not go negative.
+		{time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC), 0},
+		{time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), 0},
+	}
+	for _, tc := range cases {
+		if got := daysUntilSeptember(tc.now); got != tc.want {
+			t.Errorf("daysUntilSeptember(%s) = %d, want %d", tc.now, got, tc.want)
+		}
 	}
 }

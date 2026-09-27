@@ -34,6 +34,9 @@ func (b *Bot) groupSchedule(ctx context.Context, chat *model.Chat, msg vkclient.
 		return b.fail(ctx, msg, err)
 	}
 	if group == nil {
+		if storedGroupIsGone(chat, name) {
+			return b.resetChatForExpiredGroup(ctx, chat, msg, name)
+		}
 		return b.send(ctx, msg.PeerID, "Группа не найдена. Выберите её заново через /settings.", nil)
 	}
 	conf := model.GroupScheduleConfig(group, chat.DarkMode)
@@ -62,23 +65,23 @@ func (b *Bot) keyboardSchedule(ctx context.Context, chat *model.Chat, msg vkclie
 		if len(parts) == 2 {
 			idx, _ = strconv.Atoi(strings.TrimSpace(parts[1]))
 		}
-		return b.dayView(ctx, msg, value, idx, chat.DarkMode)
+		return b.dayView(ctx, chat, msg, value, idx, chat.DarkMode)
 	}
-	return b.weekView(ctx, msg, value, chat.DarkMode)
+	return b.weekView(ctx, chat, msg, value, chat.DarkMode)
 }
 
-func (b *Bot) weekView(ctx context.Context, msg vkclient.Message, value string, darkMode bool) error {
+func (b *Bot) weekView(ctx context.Context, chat *model.Chat, msg vkclient.Message, value string, darkMode bool) error {
 	conf, link, err := b.resolveScheduleTarget(ctx, value, darkMode)
 	if err != nil {
-		return b.scheduleTargetFail(ctx, msg, err)
+		return b.scheduleTargetFail(ctx, chat, msg, value, err)
 	}
 	return b.sendSchedule(ctx, msg, conf, "week", link)
 }
 
-func (b *Bot) dayView(ctx context.Context, msg vkclient.Message, value string, idx int, darkMode bool) error {
+func (b *Bot) dayView(ctx context.Context, chat *model.Chat, msg vkclient.Message, value string, idx int, darkMode bool) error {
 	conf, link, err := b.resolveScheduleTarget(ctx, value, darkMode)
 	if err != nil {
-		return b.scheduleTargetFail(ctx, msg, err)
+		return b.scheduleTargetFail(ctx, chat, msg, value, err)
 	}
 	schedule, err := b.schedules.GetSchedule(ctx, conf)
 	if err != nil {
@@ -141,8 +144,11 @@ func (b *Bot) resolveScheduleTarget(ctx context.Context, value string, darkMode 
 	return conf, model.ScheduleURL(conf, nil), nil
 }
 
-func (b *Bot) scheduleTargetFail(ctx context.Context, msg vkclient.Message, err error) error {
+func (b *Bot) scheduleTargetFail(ctx context.Context, chat *model.Chat, msg vkclient.Message, value string, err error) error {
 	if errors.Is(err, errGroupNotFound) {
+		if chat != nil && storedGroupIsGone(chat, value) {
+			return b.resetChatForExpiredGroup(ctx, chat, msg, value)
+		}
 		return b.send(ctx, msg.PeerID, "Группа не найдена. Выберите её заново через /settings.", nil)
 	}
 	if errors.Is(err, errTeacherNotFound) {
@@ -322,6 +328,11 @@ func formatDay(day model.ScheduleDay, current time.Time) string {
 }
 
 func (b *Bot) teacherSearch(ctx context.Context, chat *model.Chat, msg vkclient.Message, query string) error {
+	// The Telegram bot answers with the vacation notice instead of searching
+	// while the college is on holidays, so the two bots behave the same.
+	if b.vacationActive(ctx) {
+		return b.sendVacationAnswer(ctx, msg.PeerID, false)
+	}
 	query = strings.TrimSpace(query)
 	if len([]rune(query)) > 100 {
 		return b.send(ctx, msg.PeerID, "Введите фамилию или часть имени преподавателя (до 100 символов).", nil)
