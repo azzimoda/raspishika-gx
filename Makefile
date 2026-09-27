@@ -114,8 +114,10 @@ uninstall-justray-rotate:
 test:
 	$(GO) test ./...
 
+# The whole tree, not just the packages that used to have concurrent tests: the
+# VK client, the rotator and the service layer all start goroutines of their own.
 test-race:
-	$(GO) test -race ./internal/bot/... ./internal/fakescraper/...
+	$(GO) test -race ./...
 
 # Postgres-backed tests are skipped unless TEST_POSTGRES_DSN is set, so the
 # dialect-specific SQL (IS TRUE on booleans, derived-table aliases) is never

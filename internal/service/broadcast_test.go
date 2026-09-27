@@ -80,6 +80,8 @@ func (m *broadcastMessengerStub) SendPhotoPeer(
 	caption string,
 	opts ...messenger.SendOptions,
 ) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.deliveries = append(m.deliveries, broadcastDelivery{
 		peerID:   peerID,
 		text:     caption,
@@ -88,6 +90,21 @@ func (m *broadcastMessengerStub) SendPhotoPeer(
 		buttons:  firstButtons(opts),
 	})
 	return m.sendError
+}
+
+// sent and deletions copy under the lock: the auto-delete of a pair reminder
+// runs on its own goroutine, so a test that waits for it and then reads the
+// stub's slices directly is a data race, which `make test-race` reports.
+func (m *broadcastMessengerStub) sent() []broadcastDelivery {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]broadcastDelivery(nil), m.deliveries...)
+}
+
+func (m *broadcastMessengerStub) deletions() []broadcastDeletion {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]broadcastDeletion(nil), m.deleted...)
 }
 
 // firstButtons returns the first non-nil schedule buttons from the send options.
@@ -239,10 +256,10 @@ func TestBroadcastPairUsesScheduleGroupAndActualDate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(messenger.deliveries) != 1 {
-				t.Fatalf("deliveries = %d, want 1", len(messenger.deliveries))
+			if len(messenger.sent()) != 1 {
+				t.Fatalf("deliveries = %d, want 1", len(messenger.sent()))
 			}
-			got := messenger.deliveries[0]
+			got := messenger.sent()[0]
 			if got.peerID != 2000000009 || !strings.Contains(got.text, "Математика") {
 				t.Fatalf("incorrect delivery: %+v", got)
 			}
@@ -260,7 +277,7 @@ func TestBroadcastPairUsesScheduleGroupAndActualDate(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			if len(messenger.deliveries) != 1 {
+			if len(messenger.sent()) != 1 {
 				t.Fatal("sent a reminder for the wrong date")
 			}
 		})
@@ -326,7 +343,7 @@ func TestBroadcastSchedulePhotoCaptionKeepsHTMLAndStaleWarning(t *testing.T) {
 	if err := service.sendSchedule(context.Background(), &model.Chat{PeerID: 123}, image); err != nil {
 		t.Fatal(err)
 	}
-	got := messenger.deliveries[0]
+	got := messenger.sent()[0]
 	if got.peerID != 123 || got.filename != "schedule.png" || string(got.data) != "image" {
 		t.Fatalf("photo = %+v", got)
 	}
@@ -362,8 +379,8 @@ func TestBroadcastMassShutdownCancelsSendAndRejectsNewJobs(t *testing.T) {
 	if ctx.Err() != nil {
 		t.Fatal("shutdown did not cancel in-flight sending")
 	}
-	if len(messenger.deliveries) != 1 || messenger.deliveries[0].text != "<b>Привет</b> &amp; мир" {
-		t.Fatalf("unexpected sends: %+v", messenger.deliveries)
+	if len(messenger.sent()) != 1 || messenger.sent()[0].text != "<b>Привет</b> &amp; мир" {
+		t.Fatalf("unexpected sends: %+v", messenger.sent())
 	}
 	if logs.finished != 1 || len(logs.logs) != 1 {
 		t.Fatal("mass broadcast task was not finalized")
@@ -403,7 +420,7 @@ func TestBroadcastResetsRemovedGroupAlongsideValidRecipients(t *testing.T) {
 		t.Fatalf("unexpected prepared groups: %v, %v, stop=%v", groups, invalid, stop)
 	}
 	service.notifyAndResetInvalidChats(context.Background(), invalid)
-	if len(messenger.deliveries) != 1 || messenger.deliveries[0].peerID != 12 || len(chats.updated) != 1 {
+	if len(messenger.sent()) != 1 || messenger.sent()[0].peerID != 12 || len(chats.updated) != 1 {
 		t.Fatal("removed recipient was not notified and reset")
 	}
 	current, err := chats.GetChat(context.Background(), bad.ID)
@@ -493,8 +510,8 @@ func TestBroadcastQueuedStopSkipsDeletedRecipient(t *testing.T) {
 	if ctx.Err() != nil {
 		t.Fatal("broadcast did not complete")
 	}
-	if len(messenger.deliveries) != 1 || messenger.deliveries[0].peerID != first.PeerID.Int64() {
-		t.Fatalf("stopped recipient was sent queued content: %+v", messenger.deliveries)
+	if len(messenger.sent()) != 1 || messenger.sent()[0].peerID != first.PeerID.Int64() {
+		t.Fatalf("stopped recipient was sent queued content: %+v", messenger.sent())
 	}
 	if len(logs.logs) != 1 || logs.finished != 1 {
 		t.Fatal("skipped recipient logged as delivered or task not finalized")
@@ -550,8 +567,8 @@ func TestBroadcastQueuedPairOptOutIsHonored(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("reminders did not complete")
 	}
-	if len(messenger.deliveries) != 1 {
-		t.Fatalf("opted-out recipient received a queued reminder: %+v", messenger.deliveries)
+	if len(messenger.sent()) != 1 {
+		t.Fatalf("opted-out recipient received a queued reminder: %+v", messenger.sent())
 	}
 }
 
@@ -588,20 +605,20 @@ func TestBroadcastPairNotificationAutoDelete(t *testing.T) {
 		map[model.GroupName][]*model.Chat{group: {chat}}, nil, now); err != nil {
 		t.Fatal(err)
 	}
-	if len(messenger.deliveries) != 1 || len(messenger.deliveries[0].text) == 0 {
-		t.Fatalf("pair reminder not delivered: %+v", messenger.deliveries)
+	if len(messenger.sent()) != 1 || len(messenger.sent()[0].text) == 0 {
+		t.Fatalf("pair reminder not delivered: %+v", messenger.sent())
 	}
-	if len(messenger.deleted) != 0 {
+	if len(messenger.deletions()) != 0 {
 		t.Fatal("pair message deleted before the TTL elapsed")
 	}
 	deadline := time.Now().Add(2 * time.Second)
-	for len(messenger.deleted) != 1 && time.Now().Before(deadline) {
+	for len(messenger.deletions()) != 1 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(messenger.deleted) != 1 {
+	if len(messenger.deletions()) != 1 {
 		t.Fatal("pair message was not auto-deleted after the TTL")
 	}
-	got := messenger.deleted[0]
+	got := messenger.deletions()[0]
 	if got.peerID != int64(chat.PeerID) || got.messageID != 1 {
 		t.Fatalf("auto-deleted %+v, want peerID %d messageID 1", got, chat.PeerID)
 	}
@@ -659,7 +676,7 @@ func TestBroadcastRecipientLookupFailureDoesNotSend(t *testing.T) {
 	if ctx.Err() != nil {
 		t.Fatal("broadcast did not finish")
 	}
-	if len(messenger.deliveries) != 0 || len(logs.logs) != 0 || logs.finished != 1 {
+	if len(messenger.sent()) != 0 || len(logs.logs) != 0 || logs.finished != 1 {
 		t.Fatal("recipient was sent without confirming subscription")
 	}
 }
