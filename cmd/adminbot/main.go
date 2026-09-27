@@ -37,17 +37,7 @@ func main() {
 		log.Fatal().Msg("ADMIN_ID and ADMIN_BOT_TOKEN are required to run the admin bot")
 	}
 
-	db, err := database.Open(database.Config{
-		Driver:        viper.GetString(config.KeyDBDriver),
-		File:          viper.GetString(config.KeyDBFile),
-		MigrationsDir: viper.GetString(config.KeyDBMigrationDir),
-		Host:          viper.GetString(config.KeyDBHost),
-		Port:          viper.GetString(config.KeyDBPort),
-		User:          viper.GetString(config.KeyDBUser),
-		Password:      viper.GetString(config.KeyDBPassword),
-		Name:          viper.GetString(config.KeyDBName),
-		SSLMode:       viper.GetString(config.KeyDBSSLMode),
-	})
+	db, err := database.Open(config.DBConfig())
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to open database")
 	}

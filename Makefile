@@ -2,7 +2,14 @@ GO       ?= go
 COMPOSE  ?= docker compose
 VERSION  ?=
 
-.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate test test-race docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down rollback logs clean
+# Stack variants, selected by the up-*/down-* pair. The down targets used to run
+# bare `docker compose`, so tearing down after `make up-fake` or `make up-local`
+# did not see the same project and left containers running.
+STACK       ?=
+STACK_FLAG   = $(if $(STACK),-f compose.$(STACK).yaml,)
+
+# Compose stacks: up-fake/up-local, torn down with down-fake-ro/down-local-ro.
+.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate test test-race docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down down-fake-ro down-local-ro rollback logs clean
 
 BIN_DIR   ?= $(HOME)/.local/bin
 UNIT_DIR  ?= $(HOME)/.config/systemd/user
@@ -41,7 +48,7 @@ help:
 	@echo "  up           docker compose up --build -d"
 	@echo "  up-fake      docker compose -f compose.fakeapi.yaml up --build -d"
 	@echo "  up-local     docker compose -f compose.local.yaml up --build -d"
-	@echo "  down         docker compose down"
+	@echo "  down         docker compose down (STACK=<fakeapi|local> to match a variant stack)"
 	@echo "  logs         docker compose logs -f"
 	@echo "  rollback TAG=<sha>  redeploy a previously deployed image by SHA"
 	@echo "  clean        go clean + docker compose down"
@@ -138,19 +145,25 @@ bump-proxy:
 	$(GO) mod tidy
 
 up:
-	$(COMPOSE) up --build -d
+	$(COMPOSE) $(STACK_FLAG) up --build -d
 
 up-fake:
-	$(COMPOSE) -f compose.fakeapi.yaml up --build -d
+	$(MAKE) up STACK=fakeapi
 
 up-local:
-	$(COMPOSE) -f compose.local.yaml up --build -d
+	$(MAKE) up STACK=local
 
 down:
-	$(COMPOSE) down
+	$(COMPOSE) $(STACK_FLAG) down
 
 down-ro:
-	$(COMPOSE) down --remove-orphans
+	$(COMPOSE) $(STACK_FLAG) down --remove-orphans
+
+down-fake-ro:
+	$(MAKE) down-ro STACK=fakeapi
+
+down-local-ro:
+	$(MAKE) down-ro STACK=local
 
 # Откат на ранее задеплоенный SHA (образы тегируются по SHA в CI).
 # Выполняется на VPS, где лежит рабочий клон и .env.

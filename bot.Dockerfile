@@ -13,5 +13,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=1 go build -v -o
 RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=1 go build -v -o adminbot ./cmd/adminbot
 RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=1 go build -v -o vkbot ./cmd/vkbot
 RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=1 go build -v -o fakevkbot ./cmd/fakevkbot
+# One-shot migration runner, so bot/adminbot/vkbot never migrate the shared
+# SQLite file concurrently.
+RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=1 go build -v -o migrate ./cmd/migrate
 
 ENTRYPOINT ["/app/bot"]

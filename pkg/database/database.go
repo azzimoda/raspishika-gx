@@ -17,6 +17,13 @@ import (
 // Config describes the database connection. Driver "sqlite" (default) uses a
 // local file, driver "postgres" connects to a PostgreSQL server and applies
 // the goose migrations from the "postgres" subdirectory of MigrationsDir.
+//
+// AutoMigrate applies pending migrations on open. Several processes sharing one
+// SQLite file each ran goose on startup, so bot, adminbot and vkbot could apply
+// the same migration concurrently; a busy timeout serialises the writes but not
+// the version bookkeeping, and the loser fails on the statements the winner
+// already committed. Deployments turn it off and run the migrations once in the
+// dedicated migrate service instead.
 type Config struct {
 	Driver        string
 	File          string
@@ -27,6 +34,16 @@ type Config struct {
 	Password      string
 	Name          string
 	SSLMode       string
+	AutoMigrate   bool
+}
+
+// migrationsDir returns the configured migrations directory, or "" when
+// migrations are disabled.
+func (c Config) migrationsDir() string {
+	if !c.AutoMigrate {
+		return ""
+	}
+	return c.MigrationsDir
 }
 
 func Open(cfg Config) (*gorm.DB, error) {
@@ -58,8 +75,8 @@ func openPostgres(cfg Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	if cfg.MigrationsDir != "" {
-		if err := migrate(sqlDB, cfg.MigrationsDir, "postgres"); err != nil {
+	if dir := cfg.migrationsDir(); dir != "" {
+		if err := migrate(sqlDB, dir, "postgres"); err != nil {
 			return nil, err
 		}
 	}
@@ -90,8 +107,8 @@ func openSQLite(cfg Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	if cfg.MigrationsDir != "" {
-		if err := migrate(sqlDB, cfg.MigrationsDir, "sqlite3"); err != nil {
+	if dir := cfg.migrationsDir(); dir != "" {
+		if err := migrate(sqlDB, dir, "sqlite3"); err != nil {
 			return nil, err
 		}
 	}

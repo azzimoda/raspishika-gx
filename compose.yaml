@@ -35,6 +35,27 @@ services:
       - raspishika-network
     restart: unless-stopped
 
+  # Applies the pending migrations once. The bot, adminbot and vkbot all share
+  # one SQLite file, and each used to run goose on startup, so a deploy starting
+  # them together could apply the same migration from several processes at once.
+  # restart: "no" is the point: the service must finish, not come back.
+  migrate:
+    image: azzimoda/raspishika-bot:${IMAGE_TAG:-latest}
+    container_name: raspishika-migrate
+    entrypoint: /app/migrate
+    # The binary always migrates, whatever DB_AUTO_MIGRATE says elsewhere.
+    environment:
+      - DB_DRIVER=sqlite3
+      - DB_FILE=/app/storage/database/data.db
+      - DB_MIGRATION_DIR=migrations
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - TZ=Asia/Yekaterinburg
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - raspishika-network
+    restart: "no"
+
   bot:
     image: azzimoda/raspishika-bot:${IMAGE_TAG:-latest}
     container_name: raspishika-bot
@@ -52,10 +73,13 @@ services:
       - DB_DRIVER=sqlite3
       - DB_FILE=/app/storage/database/data.db
       - DB_MIGRATION_DIR=migrations
+      - DB_AUTO_MIGRATE=false
       - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       api:
         condition: service_started
     volumes:
@@ -78,10 +102,13 @@ services:
       - DB_DRIVER=sqlite3
       - DB_FILE=/app/storage/database/data.db
       - DB_MIGRATION_DIR=migrations
+      - DB_AUTO_MIGRATE=false
       - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       api:
         condition: service_started
       bot:
@@ -112,7 +139,13 @@ services:
       - DB_DRIVER=sqlite3
       - DB_FILE=/app/storage/database/data.db
       - DB_MIGRATION_DIR=migrations
+      - DB_AUTO_MIGRATE=false
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       api:
         condition: service_started
     volumes:

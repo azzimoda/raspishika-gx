@@ -61,12 +61,36 @@ services:
       - raspishika-network
     restart: unless-stopped
 
+  # Applies the pending migrations once; the app services below wait for it.
+  migrate:
+    build:
+      context: .
+      dockerfile: bot.Dockerfile
+    container_name: raspishika-migrate
+    entrypoint: /app/migrate
+    # The binary always migrates, whatever DB_AUTO_MIGRATE says elsewhere.
+    environment:
+      - DB_DRIVER=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-raspishika}
+      - DB_NAME=raspishika
+      - DB_SSLMODE=disable
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - TZ=Asia/Yekaterinburg
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - raspishika-network
+    restart: "no"
+
   bot:
     build:
       context: .
       dockerfile: bot.Dockerfile
     container_name: raspishika-bot
-    command: ["/app/bot"]
     shm_size: 2g
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
@@ -85,10 +109,13 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-raspishika}
       - DB_NAME=raspishika
       - DB_SSLMODE=disable
+      - DB_AUTO_MIGRATE=false
       - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       api:
         condition: service_started
       db:
@@ -119,10 +146,13 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-raspishika}
       - DB_NAME=raspishika
       - DB_SSLMODE=disable
+      - DB_AUTO_MIGRATE=false
       - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       api:
         condition: service_started
       bot:
@@ -161,7 +191,13 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-raspishika}
       - DB_NAME=raspishika
       - DB_SSLMODE=disable
+      - DB_AUTO_MIGRATE=false
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       api:
         condition: service_started
       db:

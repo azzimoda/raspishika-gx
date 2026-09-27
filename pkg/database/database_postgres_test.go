@@ -19,7 +19,7 @@ func TestPostgresMigrateUp(t *testing.T) {
 		t.Skip("TEST_POSTGRES_DSN not set; skipping postgres migration test")
 	}
 	testutil.MoveToProjectRoot()
-	cfg := Config{Driver: "postgres", MigrationsDir: "migrations"}
+	cfg := Config{Driver: "postgres", MigrationsDir: "migrations", AutoMigrate: true}
 	for _, kv := range strings.Fields(dsn) {
 		key, value, found := strings.Cut(kv, "=")
 		if !found {

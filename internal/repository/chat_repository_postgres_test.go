@@ -24,7 +24,7 @@ func TestPostgresCountChatActivitiesByPeriod(t *testing.T) {
 		t.Skip("TEST_POSTGRES_DSN not set; skipping postgres repository test")
 	}
 	testutil.MoveToProjectRoot()
-	cfg := database.Config{Driver: "postgres", MigrationsDir: "migrations"}
+	cfg := database.Config{Driver: "postgres", MigrationsDir: "migrations", AutoMigrate: true}
 	for _, kv := range strings.Fields(dsn) {
 		key, value, found := strings.Cut(kv, "=")
 		if !found {

@@ -13,7 +13,7 @@ func TestSQLiteMigrateUp(t *testing.T) {
 	testutil.MoveToProjectRoot()
 	file := filepath.Join(t.TempDir(), "migrated.db")
 
-	db, err := Open(Config{File: file, MigrationsDir: "migrations", Driver: "sqlite3"})
+	db, err := Open(Config{File: file, MigrationsDir: "migrations", Driver: "sqlite3", AutoMigrate: true})
 	if err != nil {
 		t.Fatalf("failed to open/migrate database: %v", err)
 	}

@@ -3,6 +3,8 @@ package config
 import (
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/pkg/database"
+
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -23,6 +25,7 @@ const (
 	KeyDBPassword     = "db_password"
 	KeyDBName         = "db_name"
 	KeyDBSSLMode      = "db_sslmode"
+	KeyDBAutoMigrate  = "db_auto_migrate"
 
 	KeyRedisHost     = "redis_host"
 	KeyRedisPort     = "redis_port"
@@ -98,6 +101,9 @@ func Init() {
 	viper.SetDefault(KeyDBPassword, "raspishika")
 	viper.SetDefault(KeyDBName, "raspishika")
 	viper.SetDefault(KeyDBSSLMode, "disable")
+	// Single-process defaults migrate on open. Compose runs the migrations once
+	// in the migrate service and sets this to false everywhere else.
+	viper.SetDefault(KeyDBAutoMigrate, true)
 
 	viper.SetDefault(KeyRedisHost, "redis")
 	viper.SetDefault(KeyRedisPort, "6379")
@@ -157,4 +163,23 @@ func Init() {
 	// the free-proxy source only, and without this the default 127.0.0.1:10808
 	// came back and justray was used anyway.
 	viper.AllowEmptyEnv(true)
+}
+
+// DBConfig builds the database configuration from the environment.
+//
+// The commands repeat this mapping, and cmd/migrate must see exactly the same
+// database as the services it prepares, so it lives in one place.
+func DBConfig() database.Config {
+	return database.Config{
+		Driver:        viper.GetString(KeyDBDriver),
+		File:          viper.GetString(KeyDBFile),
+		MigrationsDir: viper.GetString(KeyDBMigrationDir),
+		Host:          viper.GetString(KeyDBHost),
+		Port:          viper.GetString(KeyDBPort),
+		User:          viper.GetString(KeyDBUser),
+		Password:      viper.GetString(KeyDBPassword),
+		Name:          viper.GetString(KeyDBName),
+		SSLMode:       viper.GetString(KeyDBSSLMode),
+		AutoMigrate:   viper.GetBool(KeyDBAutoMigrate),
+	}
 }
