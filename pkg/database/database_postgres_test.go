@@ -68,6 +68,15 @@ func TestPostgresMigrateUp(t *testing.T) {
 		t.Fatal("chats table has no platform column")
 	}
 
+	// The inserts below use a fixed peer id to prove the unique constraint, so
+	// they have to be removed again: leaving them behind made every later run
+	// fail on uq_chats_platform_peer instead of testing anything.
+	t.Cleanup(func() {
+		if err := db.Exec(`DELETE FROM chats WHERE tg_chat_id = ?`, int64(12345)).Error; err != nil {
+			t.Errorf("cleanup: failed to remove test chats: %v", err)
+		}
+	})
+
 	if err := db.Exec(`INSERT INTO chats (tg_chat_id, platform) VALUES (?, ?)`, int64(12345), "telegram").Error; err != nil {
 		t.Fatalf("failed to insert telegram chat: %v", err)
 	}

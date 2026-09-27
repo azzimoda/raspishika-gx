@@ -2,11 +2,26 @@ package fakescraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/rs/zerolog/log"
+)
+
+// Sentinel errors for the fake scraper's failure modes. They let a test assert on
+// the reason a call failed with errors.Is, and let the fake report failures with
+// the same errors the real client understands, so a bot under test cannot tell
+// the demo dataset from the real API.
+var (
+	// ErrNoDepartment is returned for a department that is not in the fake data.
+	ErrNoDepartment = errors.New("no such department")
+	// ErrNoSchedule is returned for a group or teacher that has no fake schedule.
+	ErrNoSchedule = errors.New("no such group/teacher")
+	// ErrInvalidScheduleQuery is returned when neither a group nor a teacher was
+	// asked for.
+	ErrInvalidScheduleQuery = errors.New("invalid schedule config")
 )
 
 // ScraperAPI implements the service API client over the hardcoded fake data.
@@ -76,7 +91,7 @@ func (f ScraperAPI) GetSchedule(ctx context.Context, params *apiclient.GetSchedu
 		key = teacher.Name
 		log.Trace().Str("name", key).Msg("Teacher schedule")
 	} else {
-		panic("invalid schedule config")
+		return nil, fmt.Errorf("%w: neither group nor teacher", ErrInvalidScheduleQuery)
 	}
 
 	scheduleData, ok := FakeSchedule(key)

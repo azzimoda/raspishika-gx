@@ -1,9 +1,12 @@
 package fakescraper
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 )
 
@@ -62,5 +65,65 @@ func TestFakeSchedule_FirstDayIsToday(t *testing.T) {
 			t.Errorf("FakeSchedule(%q) first day = %q, want today %q",
 				key, schedule.Days[0].Date, today.Format("2006-01-02"))
 		}
+	}
+}
+
+// TestFakeFailuresAreSentinels covers the failure modes a bot has to react to
+// differently. In particular ErrNotFound means "the group left the schedule" and
+// makes a bot clear the user's settings, so a plain ad-hoc error there would
+// leave a real group looking deleted; anything else must not be confused for it.
+func TestFakeFailuresAreSentinels(t *testing.T) {
+	api := ScraperAPI{}
+	ctx := context.Background()
+
+	t.Run("unknown group", func(t *testing.T) {
+		_, err := api.GetGroup(ctx, "Нет-такой-22")
+		if !errors.Is(err, apiclient.ErrNotFound) {
+			t.Fatalf("GetGroup = %v, want apiclient.ErrNotFound", err)
+		}
+	})
+
+	t.Run("unknown teacher", func(t *testing.T) {
+		_, err := api.GetTeacher(ctx, "Нет-такого-преподавателя")
+		if !errors.Is(err, apiclient.ErrNotFound) {
+			t.Fatalf("GetTeacher = %v, want apiclient.ErrNotFound", err)
+		}
+	})
+
+	t.Run("group without a schedule", func(t *testing.T) {
+		_, err := api.GetSchedule(ctx, &apiclient.GetScheduleParams{Group: "Нет-такой-22"})
+		if !errors.Is(err, apiclient.ErrServiceUnavailable) {
+			t.Fatalf("GetSchedule = %v, want apiclient.ErrServiceUnavailable", err)
+		}
+		// A missing schedule is not a deleted group: resetting a chat on this
+		// would throw away settings over a scrape miss.
+		if errors.Is(err, apiclient.ErrNotFound) {
+			t.Fatalf("GetSchedule reported ErrNotFound for a missing schedule")
+		}
+	})
+
+	t.Run("unknown department", func(t *testing.T) {
+		scraper := FakeScraper{}
+		_, err := scraper.ScrapeDepartmentGroups(&model.Department{Name: "Нет-такой"})
+		if !errors.Is(err, ErrNoDepartment) {
+			t.Fatalf("ScrapeDepartmentGroups = %v, want ErrNoDepartment", err)
+		}
+	})
+}
+
+// TestFakeScheduleQueryWithoutGroupOrTeacher keeps a malformed request from
+// taking the process down. Both entry points used to panic, which in the demo
+// stack means one bad request restarts the container, and in a test means the
+// whole test binary dies instead of one case failing.
+func TestFakeScheduleQueryWithoutGroupOrTeacher(t *testing.T) {
+	conf := model.ScheduleConfig{}
+
+	scraper := FakeScraper{}
+	if _, err := scraper.ScrapeSchedule("url", conf); !errors.Is(err, ErrInvalidScheduleQuery) {
+		t.Fatalf("ScrapeSchedule = %v, want ErrInvalidScheduleQuery", err)
+	}
+	_, err := (ScraperAPI{}).GetSchedule(context.Background(), &apiclient.GetScheduleParams{})
+	if !errors.Is(err, ErrInvalidScheduleQuery) {
+		t.Fatalf("ScraperAPI.GetSchedule = %v, want ErrInvalidScheduleQuery", err)
 	}
 }

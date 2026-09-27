@@ -74,7 +74,7 @@ func (s *FakeScraper) ScrapeDepartmentGroups(department *model.Department) ([]mo
 			return gs, nil
 		}
 	}
-	return nil, fmt.Errorf("no department %q", department.Name)
+	return nil, fmt.Errorf("%w: %q", ErrNoDepartment, department.Name)
 }
 
 // ScrapeTeachers returns a fixed list of demo teachers.
@@ -94,7 +94,11 @@ func (s *FakeScraper) ScrapeSchedule(url string, conf model.ScheduleConfig) (*mo
 	} else if conf.Teacher != nil {
 		key = conf.Teacher.Name
 	} else {
-		panic("invalid schedule config")
+		// A query with neither a group nor a teacher is a caller bug, but
+		// panicking here took down the whole process: the demo API serves this
+		// from an HTTP handler, so a single malformed request would restart the
+		// container. Return a sentinel like every other failure instead.
+		return nil, fmt.Errorf("%w: neither group nor teacher", ErrInvalidScheduleQuery)
 	}
 
 	schedule, ok := FakeSchedule(key)
@@ -103,5 +107,5 @@ func (s *FakeScraper) ScrapeSchedule(url string, conf model.ScheduleConfig) (*mo
 		return &schedule, nil
 	}
 	log.Trace().Msg("Schedule not found")
-	return nil, fmt.Errorf("no such group/teacher")
+	return nil, fmt.Errorf("%w: %q", ErrNoSchedule, key)
 }
