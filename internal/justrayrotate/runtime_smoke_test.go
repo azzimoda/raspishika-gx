@@ -58,12 +58,19 @@ func TestJustrayRotatorSmoke(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rotator := NewRotator(RotatorConfig{
-		Probe:            NewTelProbe("127.0.0.1:10808", DefaultProbeURL, 5*time.Second),
+	probe, err := NewTelProbe("127.0.0.1:10808", DefaultProbeURL, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotator, err := NewRotator(RotatorConfig{
+		Probe:            probe,
 		CheckInterval:    200 * time.Millisecond,
 		FailureThreshold: 2,
 		MaxRotations:     3,
 	}, CLIRunner{}, NewPicker("🇷🇺", "Россия", "моб. операторов"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	done := make(chan bool)
 	go func() {

@@ -135,7 +135,9 @@ func Init() {
 	viper.SetDefault(KeyProxyBanCooldown, 5*time.Minute)
 
 	viper.SetDefault(KeyJustrayBin, "justray")
-	viper.SetDefault(KeyJustrayProbeURL, "https://api.telegram.org/")
+	// Keep in sync with justrayrotate.DefaultProbeURL. A Bot API method, not the
+	// bare host: the root answers 302 to core.telegram.org.
+	viper.SetDefault(KeyJustrayProbeURL, "https://api.telegram.org/bot0/getMe")
 	viper.SetDefault(KeyJustrayCheckInterval, 20*time.Second)
 	viper.SetDefault(KeyJustrayFailureThreshold, 3)
 	viper.SetDefault(KeyJustrayCooldown, 60*time.Second)

@@ -34,14 +34,22 @@ func main() {
 	picker := justrayrotate.NewPicker(exclude...)
 	runner := justrayrotate.CLIRunner{Bin: viper.GetString(config.KeyJustrayBin)}
 
-	rotator := justrayrotate.NewRotator(justrayrotate.RotatorConfig{
-		Probe:            justrayrotate.NewTelProbe(proxyAddr, probeURL, justrayrotate.DefaultProbeTimeout),
+	probe, err := justrayrotate.NewTelProbe(proxyAddr, probeURL, justrayrotate.DefaultProbeTimeout)
+	if err != nil {
+		log.Fatal().Err(err).Str("proxy", proxyAddr).Msg("Cannot build Telegram probe")
+	}
+
+	rotator, err := justrayrotate.NewRotator(justrayrotate.RotatorConfig{
+		Probe:            probe,
 		CheckInterval:    viper.GetDuration(config.KeyJustrayCheckInterval),
 		FailureThreshold: viper.GetInt(config.KeyJustrayFailureThreshold),
 		Cooldown:         viper.GetDuration(config.KeyJustrayCooldown),
 		MaxRotations:     viper.GetInt(config.KeyJustrayMaxRotations),
 		LongBackoff:      viper.GetDuration(config.KeyJustrayLongBackoff),
 	}, runner, picker)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot build rotator")
+	}
 
 	log.Info().
 		Str("proxy", proxyAddr).
