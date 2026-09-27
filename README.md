@@ -111,12 +111,29 @@ make build-bot    # только бот (./cmd/bot, нужен CGO и Chromium)
 make build-vkbot  # VK-бот (./cmd/vkbot)
 make build-api    # API-скрейпер (./cmd/api)
 make test         # go test ./...
+make test-race    # go test -race ./...
+make test-pg      # тесты на живом PostgreSQL (TEST_PG_DSN=...; по умолчанию локальный)
 make docs         # перегенерировать Swagger-документацию (go generate ./...)
 make up           # docker compose up --build -d (реальный API)
 make up-fake      # то же, но с демо-данными (compose.fakeapi.yaml)
 make up-local     # то же, но API собирается из исходников (compose.local.yaml)
+make down         # остановить текущий стек
 make logs         # docker compose logs -f
+make rollback TAG=<sha>   # откатить прод на предыдущий образ по SHA
 ```
+
+Цели `up-*`/`down`/`logs` работают с одним стеком и снимают ровно его: `down`
+поднимает `STACK` (по умолчанию `fakeapi`), а `down-fake-ro`/`down-local-ro`
+разбирают оба dev-стека — так демо-стек не сносит прод-контейнеры, и наоборот.
+
+### Миграции в Docker
+
+Сервис `migrate` (`cmd/migrate`) применяет goose-миграции один раз и выходит.
+Бот, админ-бот и VK-бот запускаются с `DB_AUTO_MIGRATE=false` и ждут его
+завершения (`service_completed_successfully`), поэтому четыре процесса не
+гоняют `goose.Up` по одному SQLite-файлу одновременно. Локально (вне Docker)
+миграции по-прежнему применяются при открытии БД — за это отвечает
+`DB_AUTO_MIGRATE` (по умолчанию `true`).
 
 Полный список — `make help`.
 
@@ -191,7 +208,41 @@ make logs         # docker compose logs -f
 
 ## Развёртывание
 
-При push в ветку `main` GitHub Actions (`.github/workflows/deploy.yaml`) собирает и публикует образы `raspishika-api` и `raspishika-bot` в Docker Hub, после чего по SSH перезапускает сервисы на VPS (`docker compose pull && docker compose up -d`).
+При push в ветку `main` GitHub Actions (`.github/workflows/deploy.yaml`) прогоняет `make check`, собирает образы `raspishika-api` и `raspishika-bot` и публикует их в Docker Hub дважды: тегом `latest` и тегом commit SHA. Старые образы намеренно не вычищаются — без них откат невозможен.
+
+Дальше workflow по SSH на VPS: обновляет репозиторий, точечно заменяет в `.env` строку `IMAGE_TAG` на SHA коммита (секреты в `.env` не трогаются) и перезапускает стек. Миграции применяет сервис `migrate` (см. выше).
+
+### Откат
+
+Образы тегируются по SHA, поэтому откат — это правка одной строки и повторный запуск стека:
+
+```sh
+make rollback TAG=<sha>   # правит IMAGE_TAG в .env и поднимает стек на этом образе
+docker compose ps         # убедиться, что migrate завершился, а сервисы healthy
+```
+
+### justray и ротатор на VPS
+
+Прокси для Telegram живёт на хосте, а не в контейнере: контейнеры ходят в
+`host.docker.internal:10808` (`extra_hosts: host-gateway` в compose).
+
+1. **justray в режиме прокси.** Включить mixed in-bound на `127.0.0.1:10808`
+   в режиме прокси. `allow_lan` включать **только** на docker-мост
+   (`172.17.0.0/16` и, при нестандартной сети, адрес compose-сети): с
+   `allow_lan` на всех интерфейсах публичный SOCKS5 получается на любом
+   свободном порту. Ограничить вход файрволом (ufw/firewalld) до адресов
+   docker-моста и `127.0.0.1` — внешние подключения к 10808 должны отбрасываться.
+2. **Ротатор.** `make build-justray-rotate` и `make install-justray-rotate`
+   ставят `justray-rotate.service` как systemd **user**-юнит
+   (`configs/justray-rotate.service`); `make uninstall-justray-rotate` его
+   снимает. Он дергает `JUSTRAY_PROBE_URL` и после `JUSTRAY_FAILURE_THRESHOLD`
+   неудач переключает justray на следующий живой не-RU узел по кругу
+   (`justray subscription list --json`, `JUSTRAY_EXCLUDE` добавляет свои
+   подстроки к исключениям по умолчанию). Проверка вживую: `systemctl --user
+   status justray-rotate`, журнал — `journalctl --user -u justray-rotate`.
+3. **Переменные.** В `.env` на VPS: `JUSTRAY_PROXY_ADDR` (для контейнеров
+   `host.docker.internal:10808`), секреты VK (`VK_GROUP_TOKEN`, `VK_GROUP_ID`) и
+   `IMAGE_TAG` последнего рабочего SHA.
 
 ---
 
@@ -206,11 +257,14 @@ make logs         # docker compose logs -f
 - **Фаза 2b** — сервис БД в Docker-стеке, полная совместимость SQLite/PostgreSQL (миграционный тест на живом PostgreSQL).
 - **Фаза 2c** — ручные рассылки через очередь `broadcast_jobs` (по одной задаче на платформу, воркер в каждом процессе забирает только свои), админ-бот вынесен в отдельный бинарник `cmd/adminbot` (report-only, без браузера). Прод остаётся на SQLite.
 - **Фаза 2d** — VK-бот на `SevereCloud/vksdk`: обёртка клиента `internal/vkbot/client` (Long Poll с reconnect и дедупом, отправка сообщений/фото, проверка прав админа сообщества), обработчики `internal/vkbot/main` (зеркало TG-хендлеров без админ-функций: расписание с навигацией по дням, поиск преподавателей, настройки беседы и пейджинг), разметка клавиатур в `internal/vkbot/util`, адаптер `messenger.VK`. Отдельный бинарник `cmd/vkbot`, демо `cmd/fakevkbot` на фейковых данных (`internal/fakescraper`). Рассылки покрывают `platform=vk`. Ручной smoke на реальном Long Poll сообщества пройден. Конфиг: `VK_GROUP_TOKEN`, `VK_GROUP_ID`, `VK_API_VERSION`.
+- **Фаза 3a (деплой)** — образы тегируются по SHA коммита плюс `latest`, старые не вычищаются; откат — `make rollback TAG=<sha>`. Миграции вынесены в одноразовый сервис `migrate`, боты/админ-бот/VK-бот ждут его вместо гонки за один SQLite-файл. Ротатор justray ставится на хост systemd user-юнитом; порядок развёртывания описан в разделе «Развёртывание».
+- **Фаза 3b (надёжность VK-бота)** — коды `901/902/917/5/15/27/100` распознаются из `*api.Error`, HTTP-клиент ограничен по таймауту (без этого зависший upload замораживал обработку событий всем пользователям), Long Poll переподключается с нарастающей паузой и продолжает с последнего курсора, дедуп по ключу события, уникальный `random_id` на каждую часть сообщения, кэш проверки прав админа. Паритет с Telegram-ботом: каникулы (`HANDLE_VACATION`) и сброс настроек беседы, если группа ушла из расписания.
+- **Фаза 3c (тесты)** — `make test-race` гоняет всё дерево (`go test -race ./...`), `Client.Run` покрыт целиком на httptest-сервере (реконнект, курсор, дедуп, отмена), добавлены вырожденные случаи `Picker` и сентинелы ошибок фейкового скрейпера. Тесты на PostgreSQL повторяемы (чистят свои строки).
 - **Фаза 3 (частично)** — единая сборка образа: `bot.Dockerfile` собирает `bot`, `adminbot`, `vkbot` и `fakevkbot`; сервис `vkbot` добавлен во все compose-файлы (`compose.yaml`, `compose.fakeapi.yaml`, `compose.local.yaml`, PostgreSQL в dev-стеках). Демо-бинарник `fakevkbot` в compose не разворачивается и доступен локально.
 
 ### Впереди
 
-- Принятие решения о переезде прода с SQLite на PostgreSQL (на текущий момент прод работает на SQLite, и с VK-ботом несколько процессов делят один SQLite-файл).
+- Принятие решения о переезде прода с SQLite на PostgreSQL. Прод по-прежнему на SQLite, но гонку процессов за один файл сняли: миграции применяет отдельный одноразовый сервис `migrate`, остальные ждут его завершения.
 
 **Фаза 4 — финализация:**
 
