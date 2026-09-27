@@ -9,7 +9,7 @@ STACK       ?=
 STACK_FLAG   = $(if $(STACK),-f compose.$(STACK).yaml,)
 
 # Compose stacks: up-fake/up-local, torn down with down-fake-ro/down-local-ro.
-.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate test test-race docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down down-fake-ro down-local-ro rollback logs clean
+.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate test test-race test-pg docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down down-fake-ro down-local-ro rollback logs clean
 
 BIN_DIR   ?= $(HOME)/.local/bin
 UNIT_DIR  ?= $(HOME)/.config/systemd/user
@@ -35,6 +35,7 @@ help:
 	@echo "  install-justray-rotate  build + install rotator as a systemd user unit"
 	@echo "  uninstall-justray-rotate  stop and remove the rotator systemd unit"
 	@echo "  test         go test ./..."
+	@echo "  test-pg       Postgres-backed tests (TEST_PG_DSN=... to point elsewhere)"
 	@echo "  test-race    go test -race (bot and fakescraper)"
 	@echo "  check        fmt-check + vet + test + build"
 	@echo "  docs         regenerate Swagger docs (go generate ./...)"
@@ -115,6 +116,14 @@ test:
 
 test-race:
 	$(GO) test -race ./internal/bot/... ./internal/fakescraper/...
+
+# Postgres-backed tests are skipped unless TEST_POSTGRES_DSN is set, so the
+# dialect-specific SQL (IS TRUE on booleans, derived-table aliases) is never
+# exercised by a plain `make test`. Point this at a scratch database: the tests
+# write rows and delete them again.
+TEST_PG_DSN ?= host=127.0.0.1 port=5432 user=postgres password=raspishika dbname=raspishika sslmode=disable
+test-pg:
+	TEST_POSTGRES_DSN="$(TEST_PG_DSN)" $(GO) test -count=1 -v -run Postgres ./pkg/database/ ./internal/repository/
 
 check: fmt-check vet test build
 

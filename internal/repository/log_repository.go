@@ -191,7 +191,7 @@ func (r *logRepository) CountBroadcastLogsByPeriodAndKind(ctx context.Context, k
 }
 
 // CountActualRequests counts requests the bot actually made: manual schedule
-// requests that were not served from cache (cached = 0) plus all broadcast
+// requests that were not served from cache (cached IS FALSE) plus all broadcast
 // group schedule requests.
 func (r *logRepository) CountActualRequests(ctx context.Context, start, end time.Time) (int, error) {
 	var countUpdates int64
