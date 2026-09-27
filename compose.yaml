@@ -74,7 +74,7 @@ services:
       - DB_FILE=/app/storage/database/data.db
       - DB_MIGRATION_DIR=migrations
       - DB_AUTO_MIGRATE=false
-      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR-host.docker.internal:10808}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -103,7 +103,7 @@ services:
       - DB_FILE=/app/storage/database/data.db
       - DB_MIGRATION_DIR=migrations
       - DB_AUTO_MIGRATE=false
-      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR-host.docker.internal:10808}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -140,7 +140,7 @@ services:
       - DB_FILE=/app/storage/database/data.db
       - DB_MIGRATION_DIR=migrations
       - DB_AUTO_MIGRATE=false
-      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR-host.docker.internal:10808}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
