@@ -2,7 +2,11 @@ GO       ?= go
 COMPOSE  ?= docker compose
 VERSION  ?=
 
-.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot test test-race docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down logs clean
+.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate test test-race docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down logs clean
+
+BIN_DIR   ?= $(HOME)/.local/bin
+UNIT_DIR  ?= $(HOME)/.config/systemd/user
+UNIT_NAME := justray-rotate.service
 
 all: check
 
@@ -20,6 +24,9 @@ help:
 	@echo "  build-fakebot  build the API-less demo bot (./cmd/fakebot)"
 	@echo "  build-vkbot    build the VK community bot (./cmd/vkbot)"
 	@echo "  build-fakevkbot  build the API-less demo VK bot (./cmd/fakevkbot)"
+	@echo "  build-justray-rotate  build the justray node rotator (./cmd/justray-rotate)"
+	@echo "  install-justray-rotate  build + install rotator as a systemd user unit"
+	@echo "  uninstall-justray-rotate  stop and remove the rotator systemd unit"
 	@echo "  test         go test ./..."
 	@echo "  test-race    go test -race (bot and fakescraper)"
 	@echo "  check        fmt-check + vet + test + build"
@@ -73,6 +80,23 @@ build-vkbot:
 
 build-fakevkbot:
 	$(GO) build ./cmd/fakevkbot
+
+build-justray-rotate:
+	$(GO) build -o /tmp/justray-rotate ./cmd/justray-rotate
+
+install-justray-rotate: build-justray-rotate
+	mkdir -p $(BIN_DIR) $(UNIT_DIR)
+	install -m 0755 /tmp/justray-rotate $(BIN_DIR)/justray-rotate
+	sed 's|__REPO_DIR__|$(CURDIR)|' configs/justray-rotate.service > $(UNIT_DIR)/$(UNIT_NAME)
+	systemctl --user daemon-reload
+	systemctl --user enable --now justray-rotate.service
+	@echo "Installed: $(BIN_DIR)/justray-rotate and $(UNIT_DIR)/$(UNIT_NAME)"
+
+uninstall-justray-rotate:
+	systemctl --user disable --now justray-rotate.service || true
+	rm -f $(UNIT_DIR)/$(UNIT_NAME) $(BIN_DIR)/justray-rotate
+	systemctl --user daemon-reload
+	@echo "Removed justray-rotate unit and binary"
 
 test:
 	$(GO) test ./...

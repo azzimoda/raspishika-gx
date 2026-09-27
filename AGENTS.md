@@ -7,6 +7,7 @@ Go 1.26 Telegram bot ("Распиши-ка") that shows МПК ТИУ college sc
 - `cmd/bot` — the Telegram bot (the main binary). Persists to SQLite, renders schedule screenshots via its own chromedp browser (`internal/browser`), talks to the scraper API over HTTP (`internal/apiclient`).
 - `cmd/api` — HTTP scraper API (`internal/api/*`). Scrapes `coworking.tyuiu.ru` over plain HTTP (`internal/api/scraper`), caches in Redis, exposes `/api/v1/*` + Swagger UI (gin).
 - `cmd/fakeapi` — same API server but with hardcoded fake data (`fake_scraper.go`).
+- `cmd/justray-rotate` — host-side daemon that watches the local justray in-bound (`JUSTRAY_PROXY_ADDR`) and rotates justray's active node (round-robin over non-RU alive nodes from `justray subscription list --json`) after `JUSTRAY_FAILURE_THRESHOLD` failed probes to `JUSTRAY_PROBE_URL`. Backs off (`JUSTRAY_COOLDOWN`, `JUSTRAY_LONG_BACKOFF` after `JUSTRAY_MAX_ROTATIONS`). Install as a systemd user unit with `make install-justray-rotate` (unit template `configs/justray-rotate.service`, built by `make build-justray-rotate`); `make uninstall-justray-rotate` removes it. Runtime smoke: `RT_SMOKE=1`.
 - Bot connects to Telegram via SOCKS5 proxies fetched at runtime from a proxy source (filtered to non-RU socks5, cached 1h in memory). No proxies → `ErrNoAvailableProxy`.
 
 ## External modules
@@ -27,7 +28,7 @@ Go 1.26 Telegram bot ("Распиши-ка") that shows МПК ТИУ college sc
 
 viper + godotenv (`.env` at repo root), defaults in `pkg/config/config.go`, keys are env-var-style (e.g. `BOT_TOKEN`, `SCRAPER_HOST`). `config.Init()` must run before viper reads. Notable keys:
 
-- `BOT_TOKEN` (required), `ADMIN_BOT_TOKEN` + `ADMIN_ID` (enables admin bot), `SCRAPER_HOST`/`SCRAPER_PORT`, `PROXY_SOURCE_URL`, `JUSTRAY_PROXY_ADDR`, `LOG_LEVEL` (`trace` enables bot debug output), `BROWSER_SCALE`, `HANDLE_VACATION`.
+- `BOT_TOKEN` (required), `ADMIN_BOT_TOKEN` + `ADMIN_ID` (enables admin bot), `SCRAPER_HOST`/`SCRAPER_PORT`, `PROXY_SOURCE_URL`, `JUSTRAY_PROXY_ADDR`, `LOG_LEVEL` (`trace` enables bot debug output), `BROWSER_SCALE`, `HANDLE_VACATION`. The rotator reads the same env: `JUSTRAY_BIN`, `JUSTRAY_PROBE_URL`, `JUSTRAY_CHECK_INTERVAL`, `JUSTRAY_FAILURE_THRESHOLD`, `JUSTRAY_COOLDOWN`, `JUSTRAY_MAX_ROTATIONS`, `JUSTRAY_LONG_BACKOFF`, `JUSTRAY_EXCLUDE` (extra comma-separated substrings to exclude; 🇷🇺/«Россия»/«моб. операторов» excluded by default).
 
 ## Database
 

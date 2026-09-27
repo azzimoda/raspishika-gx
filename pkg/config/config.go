@@ -51,6 +51,15 @@ const (
 	KeyJustrayProxyAddr = "justray_proxy_addr"
 	KeyProxyBanCooldown = "proxy_ban_cooldown"
 
+	KeyJustrayBin              = "justray_bin"
+	KeyJustrayProbeURL         = "justray_probe_url"
+	KeyJustrayCheckInterval    = "justray_check_interval"
+	KeyJustrayFailureThreshold = "justray_failure_threshold"
+	KeyJustrayCooldown         = "justray_cooldown"
+	KeyJustrayMaxRotations     = "justray_max_rotations"
+	KeyJustrayLongBackoff      = "justray_long_backoff"
+	KeyJustrayExclude          = "justray_exclude"
+
 	KeyBotCommands      = "bot_commands"
 	KeyAdminBotCommands = "admin_bot_commands"
 
@@ -124,6 +133,15 @@ func Init() {
 	viper.SetDefault(KeyProxySourceURL, "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json")
 	viper.SetDefault(KeyJustrayProxyAddr, "127.0.0.1:10808")
 	viper.SetDefault(KeyProxyBanCooldown, 5*time.Minute)
+
+	viper.SetDefault(KeyJustrayBin, "justray")
+	viper.SetDefault(KeyJustrayProbeURL, "https://api.telegram.org/")
+	viper.SetDefault(KeyJustrayCheckInterval, 20*time.Second)
+	viper.SetDefault(KeyJustrayFailureThreshold, 3)
+	viper.SetDefault(KeyJustrayCooldown, 60*time.Second)
+	viper.SetDefault(KeyJustrayMaxRotations, 3)
+	viper.SetDefault(KeyJustrayLongBackoff, 10*time.Minute)
+	viper.SetDefault(KeyJustrayExclude, "")
 
 	viper.SetDefault(KeyVKAPIVersion, "5.199")
 

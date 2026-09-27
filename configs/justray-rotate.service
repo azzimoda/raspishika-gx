@@ -1,0 +1,17 @@
+[Unit]
+Description=Justray node rotator for Распиши-ка
+# Depends on the justray daemon (justrayd) already running on this host.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# .env from the repo root is picked up by pkg/config (godotenv).
+WorkingDirectory=__REPO_DIR__
+EnvironmentFile=-__REPO_DIR__/.env
+ExecStart=%h/.local/bin/justray-rotate
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
