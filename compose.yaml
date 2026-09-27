@@ -52,6 +52,9 @@ services:
       - DB_DRIVER=sqlite3
       - DB_FILE=/app/storage/database/data.db
       - DB_MIGRATION_DIR=migrations
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       api:
         condition: service_started
@@ -75,6 +78,9 @@ services:
       - DB_DRIVER=sqlite3
       - DB_FILE=/app/storage/database/data.db
       - DB_MIGRATION_DIR=migrations
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       api:
         condition: service_started

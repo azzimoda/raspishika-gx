@@ -11,7 +11,7 @@ Go 1.26 Telegram bot ("Распиши-ка") that shows МПК ТИУ college sc
 
 ## External modules
 
-- The proxy stack and the bot lifecycle manager live in `github.com/azzimoda/go-tg-proxy` (packages `proxy`, `botservice`, `proxyutil`), pinned at `v0.1.0` here. Its source provider is injected (`proxy.NewProxiflySource`), the default URL is proxifly's jsdelivr mirror, overridable with `PROXY_SOURCE_URL`.
+- The proxy stack and the bot lifecycle manager live in `github.com/azzimoda/go-tg-proxy` (packages `proxy`, `botservice`, `proxyutil`), pinned at `v0.1.2` here. Its source provider is injected (`proxy.NewProxiflySource`), the default URL is proxifly's jsdelivr mirror, overridable with `PROXY_SOURCE_URL`. A primary local proxy is layered on top: `internal/service/newJustrayFirstSource` prepends `JUSTRAY_PROXY_ADDR` (default `127.0.0.1:10808`, e.g. a justray mixed in-bound in proxy mode) ahead of the free-proxy list, so justray wins the pool's latency ranking while healthy and the free proxies act as a fallback when it isn't. In Docker, compose passes `host.docker.internal:10808` + `host-gateway`; set `JUSTRAY_PROXY_ADDR=` empty to keep only the free-proxy source.
 - After pushing changes to the module, bump the version here with `go get github.com/azzimoda/go-tg-proxy@<version>` and `go mod tidy`.
 
 ## Build & run
@@ -27,7 +27,7 @@ Go 1.26 Telegram bot ("Распиши-ка") that shows МПК ТИУ college sc
 
 viper + godotenv (`.env` at repo root), defaults in `pkg/config/config.go`, keys are env-var-style (e.g. `BOT_TOKEN`, `SCRAPER_HOST`). `config.Init()` must run before viper reads. Notable keys:
 
-- `BOT_TOKEN` (required), `ADMIN_BOT_TOKEN` + `ADMIN_ID` (enables admin bot), `SCRAPER_HOST`/`SCRAPER_PORT`, `LOG_LEVEL` (`trace` enables bot debug output), `BROWSER_SCALE`, `HANDLE_VACATION`.
+- `BOT_TOKEN` (required), `ADMIN_BOT_TOKEN` + `ADMIN_ID` (enables admin bot), `SCRAPER_HOST`/`SCRAPER_PORT`, `PROXY_SOURCE_URL`, `JUSTRAY_PROXY_ADDR`, `LOG_LEVEL` (`trace` enables bot debug output), `BROWSER_SCALE`, `HANDLE_VACATION`.
 
 ## Database
 

@@ -86,6 +86,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-raspishika}
       - DB_NAME=raspishika
       - DB_SSLMODE=disable
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       api:
         condition: service_started
@@ -116,6 +119,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-raspishika}
       - DB_NAME=raspishika
       - DB_SSLMODE=disable
+      - JUSTRAY_PROXY_ADDR=${JUSTRAY_PROXY_ADDR:-host.docker.internal:10808}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       api:
         condition: service_started

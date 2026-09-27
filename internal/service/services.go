@@ -15,8 +15,12 @@ import (
 
 func newProxyService() (*proxy.Service, *proxyfail.FailTracker) {
 	tracker := proxyfail.NewFailTracker(viper.GetDuration(config.KeyProxyBanCooldown))
-	service := proxy.NewService(
+	source := newJustrayFirstSource(
+		viper.GetString(config.KeyJustrayProxyAddr),
 		proxy.NewProxiflySource(viper.GetString(config.KeyProxySourceURL)),
+	)
+	service := proxy.NewService(
+		source,
 		proxy.WithChecker(proxyfail.BanChecker{
 			Checker: proxy.TelegramChecker{},
 			Tracker: tracker,

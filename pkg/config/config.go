@@ -48,6 +48,7 @@ const (
 	KeyVKAPIVersion = "vk_api_version"
 
 	KeyProxySourceURL   = "proxy_source_url"
+	KeyJustrayProxyAddr = "justray_proxy_addr"
 	KeyProxyBanCooldown = "proxy_ban_cooldown"
 
 	KeyBotCommands      = "bot_commands"
@@ -121,6 +122,7 @@ func Init() {
 	viper.SetDefault(KeyScheduleTemplateDarkFile, "templates/dark.html")
 
 	viper.SetDefault(KeyProxySourceURL, "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json")
+	viper.SetDefault(KeyJustrayProxyAddr, "127.0.0.1:10808")
 	viper.SetDefault(KeyProxyBanCooldown, 5*time.Minute)
 
 	viper.SetDefault(KeyVKAPIVersion, "5.199")
