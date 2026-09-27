@@ -96,6 +96,50 @@ func (r *chatRepository) scoped() *gorm.DB {
 	return r.db.Where("platform = ?", string(r.platform))
 }
 
+// platformCond matches the repository's platform for a query that selects from
+// chats, optionally under the given table alias. An empty platform spans all
+// platforms.
+func (r *chatRepository) platformCond(alias string) (string, []any) {
+	if r.platform == "" {
+		return "", nil
+	}
+	if alias == "" {
+		return "platform = ?", []any{string(r.platform)}
+	}
+	return alias + ".platform = ?", []any{string(r.platform)}
+}
+
+// whereClause renders a WHERE clause from the given conditions, dropping empty
+// ones, or an empty string when there is nothing to filter on. Raw queries
+// embed its result through a single %s so the platform filter can disappear
+// without leaving the query malformed.
+func whereClause(conds ...string) string {
+	kept := make([]string, 0, len(conds))
+	for _, cond := range conds {
+		if cond != "" {
+			kept = append(kept, cond)
+		}
+	}
+	if len(kept) == 0 {
+		return ""
+	}
+	return "WHERE " + strings.Join(kept, " AND ")
+}
+
+// platformScoped renders a raw query's %s placeholder as a WHERE clause that
+// covers the repository's platform and the query's own conditions, and returns
+// the platform's placeholder values. Args still have to be passed to gorm in
+// the order their placeholders appear in the rendered SQL, so the caller
+// appends its own values at the right position.
+//
+// scoped() cannot be used for raw queries: gorm's Raw replaces the whole
+// statement and drops any Where clause already set, so a platform-scoped
+// repository would read every platform's rows.
+func (r *chatRepository) platformScoped(query, alias string, conds ...string) (string, []any) {
+	cond, args := r.platformCond(alias)
+	return fmt.Sprintf(query, whereClause(append([]string{cond}, conds...)...)), args
+}
+
 // privateChatCond matches private chats within the repository's platform.
 // Telegram group chats are negative, VK group conversations start at
 // ChatPeerOffset, so a positive peer below the offset is private everywhere.
@@ -325,12 +369,14 @@ func (r *chatRepository) GetNewChatCountByYearByPeriod(ctx context.Context, star
 		Group *string
 		Count int
 	}, 0)
-	err := r.scoped().WithContext(ctx).Raw(`
+	const query = `
 		SELECT "group", count(*) AS count
 		FROM chats
-		WHERE created_at BETWEEN ? AND ?
+		%s
 		GROUP BY "group"
-	`, start, end).Scan(&result).Error
+	`
+	q, platformArgs := r.platformScoped(query, "", "created_at BETWEEN ? AND ?")
+	err := r.db.WithContext(ctx).Raw(q, append(platformArgs, start, end)...).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +411,7 @@ type ChatActivityCounts struct {
 //   - inactive: no logs within the period and otherwise (no group or no
 //     broadcast enabled).
 func (r *chatRepository) CountChatActivitiesByPeriod(ctx context.Context, start, end time.Time) (ChatActivityCounts, error) {
-	query := `
+	const query = `
 		SELECT
 			COALESCE(SUM(CASE WHEN cnt > 0 THEN 1 ELSE 0 END), 0) AS active,
 			COALESCE(SUM(CASE WHEN cnt = 0 AND has_group AND has_broadcast THEN 1 ELSE 0 END), 0) AS semiactive,
@@ -380,17 +426,11 @@ func (r *chatRepository) CountChatActivitiesByPeriod(ctx context.Context, start,
 				ON ul.chat_id = c.id AND ul.created_at BETWEEN ? AND ?
 			%s
 			GROUP BY c.id
-		)
+		) AS per_chat
 	`
-	filter := ""
-	args := []any{start, end}
-	if r.platform != "" {
-		filter = "WHERE c.platform = ?"
-		args = append(args, r.platform)
-	}
-	query = fmt.Sprintf(query, filter)
 	var counts ChatActivityCounts
-	err := r.scoped().WithContext(ctx).Raw(query, args...).Scan(&counts).Error
+	q, platformArgs := r.platformScoped(query, "c")
+	err := r.db.WithContext(ctx).Raw(q, append([]any{start, end}, platformArgs...)...).Scan(&counts).Error
 	return counts, err
 }
 
@@ -449,25 +489,29 @@ func (r *chatRepository) GetAvgChatPerGroup(ctx context.Context) (float64, error
 	const query = `
 		SELECT AVG(chats) FROM (
 			SELECT COUNT(*) AS chats FROM chats
-			WHERE "group" IS NOT NULL AND "group" != ''
+			%s
 			GROUP BY "group"
-		)
+		) AS per_group
 	`
 	var avg *float64
-	err := r.scoped().WithContext(ctx).Raw(query).Scan(&avg).Error
+	q, args := r.platformScoped(query, "", `"group" IS NOT NULL AND "group" != ''`)
+	err := r.db.WithContext(ctx).Raw(q, args...).Scan(&avg).Error
 	return refutil.DerefOrTypeDefault(avg), err
 }
 
 func (r *chatRepository) GetGroupedCountChatCountByTime(ctx context.Context) ([]TimeCount, error) {
 	const query = `
 		SELECT daily_sending_time AS time, count(*) AS count FROM chats
-		WHERE "group" IS NOT NULL AND "group" != ''
-			AND daily_sending_time IS NOT NULL AND daily_sending_time != ''
+		%s
 		GROUP BY daily_sending_time
 		ORDER BY daily_sending_time
 	`
 	var result []TimeCount
-	err := r.scoped().WithContext(ctx).Raw(query).Scan(&result).Error
+	q, args := r.platformScoped(query, "",
+		`"group" IS NOT NULL AND "group" != ''`,
+		`daily_sending_time IS NOT NULL AND daily_sending_time != ''`,
+	)
+	err := r.db.WithContext(ctx).Raw(q, args...).Scan(&result).Error
 	return result, err
 }
 
@@ -475,10 +519,12 @@ func (r *chatRepository) GetChatCountByDepartment(ctx context.Context) ([]NameCo
 	const query = `
 		SELECT COALESCE(NULLIF(department, ''), 'unknown') AS name, count(*) AS count
 		FROM chats
+		%s
 		GROUP BY COALESCE(NULLIF(department, ''), 'unknown')
 	`
 	var result []NameCount
-	err := r.scoped().WithContext(ctx).Raw(query).Scan(&result).Error
+	q, args := r.platformScoped(query, "")
+	err := r.db.WithContext(ctx).Raw(q, args...).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -522,6 +568,7 @@ func normalizeDepartmentName(name string) string {
 func (r *chatRepository) GetChatsByAccessLevel(ctx context.Context) (map[model.ChatAccessLevel]int, error) {
 	const query = `
 		SELECT access, count(*) AS count FROM chats
+		%s
 		GROUP BY access
 		ORDER BY access
 	`
@@ -529,7 +576,8 @@ func (r *chatRepository) GetChatsByAccessLevel(ctx context.Context) (map[model.C
 		Access model.ChatAccessLevel
 		Count  int
 	}
-	err := r.scoped().WithContext(ctx).Raw(query).Scan(&result).Error
+	q, args := r.platformScoped(query, "")
+	err := r.db.WithContext(ctx).Raw(q, args...).Scan(&result).Error
 	if err != nil {
 		return nil, err
 	}
@@ -543,13 +591,14 @@ func (r *chatRepository) GetChatsByAccessLevel(ctx context.Context) (map[model.C
 func (r *chatRepository) GetTopGroupsByChatCount(ctx context.Context, limit int) ([]NameCount, error) {
 	const query = `
 		SELECT "group" AS name, count(*) AS count FROM chats
-		WHERE "group" IS NOT NULL AND "group" != ''
+		%s
 		GROUP BY "group"
 		ORDER BY count DESC, name ASC
 		LIMIT ?
 	`
 	var result []NameCount
-	err := r.scoped().WithContext(ctx).Raw(query, limit).Scan(&result).Error
+	q, platformArgs := r.platformScoped(query, "", `"group" IS NOT NULL AND "group" != ''`)
+	err := r.db.WithContext(ctx).Raw(q, append(platformArgs, limit)...).Scan(&result).Error
 	return result, err
 }
 
@@ -582,11 +631,12 @@ func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, err
 	const query = `
 		SELECT count(*) FROM (
 			SELECT DISTINCT "group" FROM chats
-			WHERE "group" IS NOT NULL AND "group" != ''
-		)
+			%s
+		) AS distinct_groups
 	`
 	var count int
-	err := r.scoped().WithContext(ctx).Raw(query).Scan(&count).Error
+	q, args := r.platformScoped(query, "", `"group" IS NOT NULL AND "group" != ''`)
+	err := r.db.WithContext(ctx).Raw(q, args...).Scan(&count).Error
 	return count, err
 }
 
@@ -594,10 +644,14 @@ func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, err
 func (r *chatRepository) GetWatchedGroupNames(ctx context.Context) ([]string, error) {
 	const query = `
 		SELECT DISTINCT "group" FROM chats
-		WHERE "group" IS NOT NULL AND "group" != '' AND update_notification IS TRUE
+		%s
 	`
 	var groupNames []string
-	err := r.scoped().WithContext(ctx).Raw(query).Scan(&groupNames).Error
+	q, args := r.platformScoped(query, "",
+		`"group" IS NOT NULL AND "group" != ''`,
+		`update_notification IS TRUE`,
+	)
+	err := r.db.WithContext(ctx).Raw(q, args...).Scan(&groupNames).Error
 	return groupNames, err
 }
 
