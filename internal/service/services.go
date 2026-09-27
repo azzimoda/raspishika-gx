@@ -15,17 +15,18 @@ import (
 
 func newProxyService() (*proxy.Service, *proxyfail.FailTracker) {
 	tracker := proxyfail.NewFailTracker(viper.GetDuration(config.KeyProxyBanCooldown))
+	justrayAddr := viper.GetString(config.KeyJustrayProxyAddr)
 	source := newJustrayFirstSource(
-		viper.GetString(config.KeyJustrayProxyAddr),
+		justrayAddr,
 		proxy.NewProxiflySource(viper.GetString(config.KeyProxySourceURL)),
 	)
-	service := proxy.NewService(
-		source,
-		proxy.WithChecker(proxyfail.BanChecker{
-			Checker: proxy.TelegramChecker{},
-			Tracker: tracker,
-		}),
-	)
+	// The pool only ranks by reported latency, so justray has to win the check
+	// to be used first, not merely appear first in the source list.
+	checker := newJustrayFirstChecker(justrayAddr, proxyfail.BanChecker{
+		Checker: proxy.TelegramChecker{},
+		Tracker: tracker,
+	})
+	service := proxy.NewService(source, proxy.WithChecker(checker))
 	return service, tracker
 }
 

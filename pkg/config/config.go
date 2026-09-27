@@ -152,4 +152,9 @@ func Init() {
 		log.Warn().Err(err).Msg(".env file not found")
 	}
 	viper.AutomaticEnv()
+	// An explicitly empty variable must be readable as empty rather than falling
+	// back to the default. JUSTRAY_PROXY_ADDR= is the documented way to run with
+	// the free-proxy source only, and without this the default 127.0.0.1:10808
+	// came back and justray was used anyway.
+	viper.AllowEmptyEnv(true)
 }

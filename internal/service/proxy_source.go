@@ -2,8 +2,7 @@ package service
 
 import (
 	"context"
-
-	"github.com/rs/zerolog/log"
+	"fmt"
 
 	"github.com/azzimoda/go-tg-proxy/proxy"
 )
@@ -27,18 +26,26 @@ func newJustrayFirstSource(justrayAddr string, fallback proxy.Source) proxy.Sour
 	return justrayFirstSource{justrayAddr: justrayAddr, fallback: fallback}
 }
 
-// Fetch returns justray ahead of the fallback list. A failed fallback fetch is
-// downgraded to just justray so the service keeps operating on the local proxy
-// instead of dropping it with the free-proxy list.
+// Fetch returns justray ahead of the fallback list.
+//
+// A failed fallback fetch is reported as an error rather than downgraded to a
+// justray-only list. proxy.Service caches a successful fetch for an hour, so
+// returning a degraded list without an error replaced the whole repository with
+// justray and marked it fresh: for the next hour the bot ran with no free-proxy
+// fallback even after proxifly had recovered. Propagating the error leaves the
+// previous list in place and the next call retries, which is what a transient
+// upstream failure needs.
+//
+// The only cost is a cold start while proxifly is down: the repository is still
+// empty, so the bot has no proxy at all until the source answers.
 func (s justrayFirstSource) Fetch(ctx context.Context) ([]string, error) {
-	addrs := []string{s.justrayAddr}
-
 	fallback, err := s.fallback.Fetch(ctx)
 	if err != nil {
-		log.Warn().Err(err).Msg("Fallback proxy source failed, keeping justray only")
-		return addrs, nil
+		return nil, fmt.Errorf("fallback proxy source: %w", err)
 	}
 
+	addrs := make([]string, 0, len(fallback)+1)
+	addrs = append(addrs, s.justrayAddr)
 	for _, a := range fallback {
 		if a != s.justrayAddr {
 			addrs = append(addrs, a)
