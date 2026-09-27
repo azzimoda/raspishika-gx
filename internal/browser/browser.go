@@ -16,15 +16,15 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-func New(ctx context.Context) (*ChromedpBrowser, error) {
-	restartInterval := viper.GetDuration("browser.restart_interval")
-	if restartInterval == 0 {
-		restartInterval = 24 * time.Hour
-	}
+// defaultRestartInterval is used when BROWSER_RESTART_INTERVAL is unset. Chromium
+// is restarted periodically because a long-lived instance slowly leaks and starts
+// dropping screenshots.
+const defaultRestartInterval = 24 * time.Hour
 
+func New(ctx context.Context) (*ChromedpBrowser, error) {
 	b := &ChromedpBrowser{
 		parentContext:   ctx,
-		restartInterval: restartInterval,
+		restartInterval: restartIntervalFromConfig(),
 		stopRestarter:   make(chan struct{}),
 		restartDone:     make(chan struct{}),
 	}
@@ -35,9 +35,36 @@ func New(ctx context.Context) (*ChromedpBrowser, error) {
 
 	if b.restartInterval > 0 {
 		go b.runRestarter()
+	} else {
+		b.stopRestarterWithoutGoroutine()
 	}
 
 	return b, nil
+}
+
+// stopRestarterWithoutGoroutine unblocks Close when no restarter was started:
+// Close waits on restartDone, which only runRestarter closes.
+func (b *ChromedpBrowser) stopRestarterWithoutGoroutine() {
+	log.Debug().Msg("Periodic browser restarts are disabled")
+	close(b.restartDone)
+}
+
+// restartIntervalFromConfig reads BROWSER_RESTART_INTERVAL.
+//
+// The lookup used the literal "browser.restart_interval", which never matched
+// anything: viper.AutomaticEnv resolves that key to the env var
+// BROWSER.RESTART_INTERVAL, while both the env file and the config package use
+// BROWSER_RESTART_INTERVAL. The setting was therefore ignored and the fallback
+// below always won.
+//
+// A negative value disables periodic restarts; only an unset/zero one falls back
+// to the default.
+func restartIntervalFromConfig() time.Duration {
+	interval := viper.GetDuration(config.KeyBrowserRestartInterval)
+	if interval == 0 {
+		return defaultRestartInterval
+	}
+	return interval
 }
 
 type ChromedpBrowser struct {
@@ -121,6 +148,12 @@ func (b *ChromedpBrowser) reinit(ctx context.Context) error {
 	// screenshot finished and its context was cancelled, forcing a re-init on
 	// the next call.
 	if err := chromedp.Run(ctx); err != nil {
+		// Nothing would ever cancel this context afterwards. Screenshots only
+		// re-initialize when b.chromedpCtx is nil or already cancelled, and a
+		// context whose allocation failed is typically not cancelled, so the
+		// dead browser stayed "ready": every later screenshot failed against it
+		// and the Chromium process and its temp dir leaked.
+		b.discardChromedp()
 		return fmt.Errorf("failed to allocate browser: %w", err)
 	}
 
@@ -139,6 +172,23 @@ func (chromiumOutputWriter) Write(p []byte) (int, error) {
 		log.Trace().Msg("chromium: " + string(p))
 	}
 	return len(p), nil
+}
+
+// discardChromedp tears down the current browser context and marks it absent, so
+// the next screenshot builds a fresh one instead of reusing a dead context.
+func (b *ChromedpBrowser) discardChromedp() {
+	if b.chromedpCancel != nil {
+		b.chromedpCancel()
+	}
+	b.chromedpCtx = nil
+	b.chromedpCancel = nil
+}
+
+// needsReinit reports whether the browser has to be rebuilt before the next
+// screenshot. A nil context counts as unusable: a failed allocation clears it,
+// and reusing that state would mean screenshotting against a dead browser.
+func (b *ChromedpBrowser) needsReinit() bool {
+	return b.chromedpCtx == nil || b.chromedpCtx.Err() != nil
 }
 
 func (b *ChromedpBrowser) Close() error {
@@ -216,7 +266,7 @@ func (b *ChromedpBrowser) ScreenshotHTML(html string) ([]byte, error) {
 
 		// The previous browser may have crashed (e.g. it lost connection), which
 		// cancels its context. Re-initialize it so screenshots keep working.
-		if b.chromedpCtx == nil || b.chromedpCtx.Err() != nil {
+		if b.needsReinit() {
 			if err := b.reinit(b.parentContext); err != nil {
 				return nil, fmt.Errorf("failed to re-initialize browser: %w", err)
 			}
