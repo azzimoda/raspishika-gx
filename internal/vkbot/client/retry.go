@@ -20,13 +20,16 @@ const sendRetryAttempts = 3
 func retryTransient(ctx context.Context, upload func() error) error {
 	var lastErr error
 	for attempt := 0; attempt < sendRetryAttempts; attempt++ {
-		if err := upload(); err == nil {
+		err := upload()
+		if err == nil {
 			return nil
-		} else {
-			lastErr = err
-			if !retryableError(ctx, err) {
-				return err
-			}
+		}
+		lastErr = err
+		if !retryableError(ctx, err) {
+			return err
+		}
+		if attempt == sendRetryAttempts-1 {
+			break
 		}
 		log.Warn().Err(lastErr).Int("attempt", attempt+1).Int("max", sendRetryAttempts).
 			Msg("Transient VK error, retrying upload...")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/SevereCloud/vksdk/v3/api"
 	"github.com/SevereCloud/vksdk/v3/longpoll-bot"
@@ -193,5 +194,60 @@ func TestResumeFromCarriesCursor(t *testing.T) {
 	resumeFrom(first, "")
 	if first.Ts != "fresh-from-server" {
 		t.Fatalf("ts = %q, want the server cursor untouched", first.Ts)
+	}
+}
+
+// TestLongPollBackoffGrowsWhileSessionsDieInstantly is the regression: the delay
+// used to be reset right after the session initialised, so sessions that failed
+// immediately always waited one second, hammering VK once per second for the
+// whole outage.
+func TestLongPollBackoffGrowsWhileSessionsDieInstantly(t *testing.T) {
+	b := newLongPollBackoff()
+	want := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
+	for i, w := range want {
+		got := b.sessionFailed(0)
+		if got != w {
+			t.Fatalf("attempt %d: wait = %v, want %v", i+1, got, w)
+		}
+	}
+	// Repeated reconnects must not stay at the cap forever either.
+	for range 10 {
+		b.sessionFailed(0)
+	}
+	if b.wait > maxLongPollBackoff {
+		t.Fatalf("wait = %v, want at most %v", b.wait, maxLongPollBackoff)
+	}
+	if got := b.sessionFailed(0); got != maxLongPollBackoff {
+		t.Fatalf("wait at the cap = %v, want %v", got, maxLongPollBackoff)
+	}
+}
+
+// TestLongPollBackoffResetsAfterAWorkingSession keeps a healthy session from
+// inheriting the delay an outage built up.
+func TestLongPollBackoffResetsAfterAWorkingSession(t *testing.T) {
+	b := newLongPollBackoff()
+	for range 5 {
+		b.sessionFailed(0)
+	}
+	if b.wait == time.Second {
+		t.Fatal("backoff never grew; the test premise is broken")
+	}
+	// A session that outlived the wait it replaces is proof the connection works.
+	if got := b.sessionFailed(45 * time.Second); got != time.Second {
+		t.Fatalf("wait after a long healthy session = %v, want %v", got, time.Second)
+	}
+}
+
+// TestLongPollBackoffKeepsGrowingForFlashSessions is the boundary: a session
+// shorter than the current wait proves nothing.
+func TestLongPollBackoffKeepsGrowingForFlashSessions(t *testing.T) {
+	b := newLongPollBackoff()
+	first := b.sessionFailed(0)
+	if first != time.Second {
+		t.Fatalf("first wait = %v, want %v", first, time.Second)
+	}
+	// 900ms is just under the 1s wait, so this session is not proof of life.
+	if got := b.sessionFailed(900 * time.Millisecond); got != 2*time.Second {
+		t.Fatalf("wait after a 900ms session = %v, want 2s", got)
 	}
 }

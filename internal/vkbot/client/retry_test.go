@@ -193,3 +193,148 @@ func TestSendPhotoSharedRandomIDAcrossSendRetry(t *testing.T) {
 		t.Fatalf("random_id across retries = %v, want equal non-empty", ids)
 	}
 }
+
+// TestSendPhotoSplitCaptionDistinctRandomIDs covers a caption long enough to be
+// split into several messages. VK deduplicates by random_id, so reusing the
+// call's id for every part silently drops all but the first one.
+func TestSendPhotoSplitCaptionDistinctRandomIDs(t *testing.T) {
+	var ids []string
+	c, _, _, uploadURL := fakePhotoTransport(t, nil)
+	c.vk.Handler = func(method string, sliceParams ...api.Params) (api.Response, error) {
+		switch method {
+		case "photos.getMessagesUploadServer":
+			return api.Response{Response: object.RawMessage(`{"upload_url": "` + uploadURL + `"}`)}, nil
+		case "photos.saveMessagesPhoto":
+			return api.Response{Response: object.RawMessage(`[{"id": 1, "owner_id": 1, "access_key": "key"}]`)}, nil
+		case "messages.send":
+			ids = append(ids, fmt.Sprint(sliceParams[0]["random_id"]))
+			return api.Response{Response: object.RawMessage(`123`)}, nil
+		}
+		return api.Response{}, nil
+	}
+
+	caption := strings.Repeat("а", 9000)
+	if _, err := c.SendPhoto(context.Background(), 1, "photo.png", []byte("img"), caption, nil); err != nil {
+		t.Fatalf("SendPhoto failed: %v", err)
+	}
+	parts := splitText(caption)
+	if len(parts) < 2 {
+		t.Fatalf("test premise broken: caption split into %d part(s), want several", len(parts))
+	}
+	if len(ids) != len(parts) {
+		t.Fatalf("messages.send calls = %d, want one per part (%d)", len(ids), len(parts))
+	}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if id == "" {
+			t.Fatalf("empty random_id in %v", ids)
+		}
+		if seen[id] {
+			t.Fatalf("random_id %q reused across parts %v: VK would drop the duplicates", id, ids)
+		}
+		seen[id] = true
+	}
+}
+
+// TestSendPhotoSplitCaptionRetryRepeatsRandomIDs pins the other half of the
+// contract: retrying a send that failed on a later part has to repeat the ids
+// of the parts VK already accepted, otherwise the retry delivers them twice.
+func TestSendPhotoSplitCaptionRetryRepeatsRandomIDs(t *testing.T) {
+	var ids []string
+	var sendCalls atomic.Int32
+	perAttempt := len(splitText(strings.Repeat("а", 9000)))
+	c, _, _, uploadURL := fakePhotoTransport(t, nil)
+	c.vk.Handler = func(method string, sliceParams ...api.Params) (api.Response, error) {
+		switch method {
+		case "photos.getMessagesUploadServer":
+			return api.Response{Response: object.RawMessage(`{"upload_url": "` + uploadURL + `"}`)}, nil
+		case "photos.saveMessagesPhoto":
+			return api.Response{Response: object.RawMessage(`[{"id": 1, "owner_id": 1, "access_key": "key"}]`)}, nil
+		case "messages.send":
+			ids = append(ids, fmt.Sprint(sliceParams[0]["random_id"]))
+			// Deliver the first two parts, then fail on the last one so the
+			// retry has to reproduce the ids of the parts VK already has.
+			if int(sendCalls.Add(1)) == perAttempt {
+				return api.Response{}, errors.New("EOF")
+			}
+			return api.Response{Response: object.RawMessage(`123`)}, nil
+		}
+		return api.Response{}, nil
+	}
+
+	caption := strings.Repeat("а", 9000)
+	if _, err := c.SendPhoto(context.Background(), 1, "photo.png", []byte("img"), caption, nil); err != nil {
+		t.Fatalf("SendPhoto failed: %v", err)
+	}
+	if len(ids) != 2*perAttempt {
+		t.Fatalf("messages.send calls = %d, want two attempts of %d parts", len(ids), perAttempt)
+	}
+	for i := 0; i < perAttempt; i++ {
+		if ids[i] != ids[perAttempt+i] {
+			t.Fatalf("part %d random_id changed on retry: %q then %q (all ids %v)", i, ids[i], ids[perAttempt+i], ids)
+		}
+	}
+}
+
+// TestRandomIDForPartStaysInRange covers the wrap: a base id at the very top of
+// the range must not push the derived ids out of what VK accepts.
+func TestRandomIDForPartStaysInRange(t *testing.T) {
+	for _, base := range []int{1, 2, maxRandomID - 1, maxRandomID} {
+		for part := 0; part < 5; part++ {
+			got := randomIDForPart(base, part)
+			if got < 1 || got > maxRandomID {
+				t.Fatalf("randomIDForPart(%d, %d) = %d, want within [1, %d]", base, part, got, maxRandomID)
+			}
+		}
+	}
+	if randomIDForPart(maxRandomID, 1) != 1 {
+		t.Errorf("randomIDForPart(%d, 1) = %d, want wrap to 1", maxRandomID, randomIDForPart(maxRandomID, 1))
+	}
+	if randomIDForPart(7, 0) != 7 {
+		t.Errorf("randomIDForPart(7, 0) = %d, want 7", randomIDForPart(7, 0))
+	}
+	if randomIDForPart(7, 1) != 8 {
+		t.Errorf("randomIDForPart(7, 1) = %d, want 8", randomIDForPart(7, 1))
+	}
+}
+
+// TestRetryTransientNoSleepAfterLastAttempt guards the backoff sequence. The
+// backoffs are 1s and 2s; sleeping again after the final attempt only delays the
+// error the caller is about to see, and it used to log a "retrying" line for a
+// retry that never happened.
+func TestRetryTransientNoSleepAfterLastAttempt(t *testing.T) {
+	calls := 0
+	start := time.Now()
+	err := retryTransient(context.Background(), func() error {
+		calls++
+		return errors.New("EOF")
+	})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("retryTransient() = nil, want the last error")
+	}
+	if calls != sendRetryAttempts {
+		t.Fatalf("upload calls = %d, want %d", calls, sendRetryAttempts)
+	}
+	if want := 3 * time.Second; elapsed > want+500*time.Millisecond {
+		t.Fatalf("exhausted retries took %v, want at most %v (1s + 2s of backoff)", elapsed, want)
+	}
+}
+
+// TestRetryTransientStopsOnNonRetryable covers that a permanent error is not
+// retried at all, which is what keeps a fatal VK code from being hammered.
+func TestRetryTransientStopsOnNonRetryable(t *testing.T) {
+	calls := 0
+	err := retryTransient(context.Background(), func() error {
+		calls++
+		return &api.Error{Code: 901}
+	})
+	if calls != 1 {
+		t.Fatalf("upload calls = %d, want 1 for a non-retryable code", calls)
+	}
+	var apiErr *api.Error
+	if !errors.As(err, &apiErr) || apiErr.Code != 901 {
+		t.Fatalf("retryTransient() = %v, want the original *api.Error", err)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/SevereCloud/vksdk/v3/api"
@@ -58,7 +59,35 @@ type Message struct {
 type Client struct {
 	vk      *api.VK
 	groupID int64
+
+	adminMu    sync.Mutex
+	adminCache map[adminKey]adminVerdict
 }
+
+// adminKey identifies one (conversation, user) admin check.
+type adminKey struct {
+	peerID, userID int64
+}
+
+type adminVerdict struct {
+	admin     bool
+	expiresAt time.Time
+}
+
+// adminCacheTTL is how long an admin verdict is reused. The answer comes from
+// paginating the conversation member list, which costs up to 50 API calls, and
+// every admin-only command asks again, so without a cache one busy conversation
+// costs a full scan per command. The window is kept short because it applies to
+// negative answers too: VK's member list lags behind a promotion or a demotion,
+// and a cached "not an admin" must not keep a new administrator waiting.
+const adminCacheTTL = time.Minute
+
+// errAdminScanExhausted reports that the member scan hit its page cap before it
+// could rule the user in or out. It is deliberately an error rather than a
+// negative answer: a conversation with more members than the cap would otherwise
+// look like "not an administrator" for every user past the cap, and callers
+// treat a false answer as a refusal.
+var errAdminScanExhausted = errors.New("conversation member list is longer than the scan limit")
 
 // New validates the community token and group. It does not contact VK.
 func New(token string, groupID int64, version string) (*Client, error) {
@@ -74,7 +103,7 @@ func New(token string, groupID int64, version string) (*Client, error) {
 	vk := api.NewVK(token)
 	vk.Version = version
 	vk.Client = &http.Client{Timeout: vkHTTPTimeout}
-	return &Client{vk: vk, groupID: groupID}, nil
+	return &Client{vk: vk, groupID: groupID, adminCache: map[adminKey]adminVerdict{}}, nil
 }
 
 // IsForbidden identifies destinations which no longer permit bot messages.
@@ -110,13 +139,25 @@ func pause(ctx context.Context, delay time.Duration) error {
 	}
 }
 
+// maxRandomID is the largest random_id VK accepts.
+const maxRandomID = 2147483646
+
 // randomID returns a positive int for messages.send random_id.
 func randomID() int {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return int(time.Now().UnixNano()) & 0x7fffffff
+		return int(time.Now().UnixNano())&0x7fffffff + 1
 	}
-	return int(binary.BigEndian.Uint32(b[:])%2147483647) + 1
+	return int(binary.BigEndian.Uint32(b[:])%maxRandomID) + 1
+}
+
+// randomIDForPart derives the random_id of the i-th part of a split message
+// from the call's base id. VK deduplicates by random_id, so every part needs
+// its own, while a retried send has to repeat the whole sequence to avoid
+// delivering the parts VK already accepted. The wrap keeps the value inside
+// [1, maxRandomID].
+func randomIDForPart(base, part int) int {
+	return (base-1+part)%maxRandomID + 1
 }
 
 // splitText cuts at UTF-16 units (VK's message length base) keeping a margin
@@ -200,14 +241,13 @@ func (c *Client) sendID(ctx context.Context, peerID int64, text, attachment stri
 		return 0, errors.New("VK message is empty")
 	}
 	parts := splitText(text)
+	if id == 0 {
+		id = randomID()
+	}
 	for i, part := range parts {
 		b := params.NewMessagesSendBuilder()
 		b.Message(part)
-		if id != 0 {
-			b.RandomID(id)
-		} else {
-			b.RandomID(randomID())
-		}
+		b.RandomID(randomIDForPart(id, i))
 		b.PeerID(int(peerID))
 		if attachment != "" {
 			b.Attachment(attachment)
@@ -245,6 +285,10 @@ func (c *Client) DeleteMessage(ctx context.Context, peerID int64, messageIDs ...
 // IsAdmin reports whether userID administers the given peer. Private
 // conversations belong to their owner; group chats use the conversation
 // membership roles (paginated, as getConversationMembers caps its page size).
+// IsAdmin reports whether userID administers the conversation. Verdicts are
+// cached for adminCacheTTL, because the check otherwise walks the whole
+// conversation member list. A scan that reaches the page cap returns an error
+// rather than false: the user may well be an administrator further down.
 func (c *Client) IsAdmin(ctx context.Context, peerID, userID int64) (bool, error) {
 	if userID <= 0 {
 		return false, nil
@@ -252,10 +296,13 @@ func (c *Client) IsAdmin(ctx context.Context, peerID, userID int64) (bool, error
 	if peerID < ChatPeerOffset {
 		return peerID == userID, nil
 	}
+	if admin, ok := c.cachedAdmin(peerID, userID); ok {
+		return admin, nil
+	}
 	// membersPage must be within the server-side page limit for
 	// messages.getConversationMembers.
 	const membersPage = 200
-	for offset := 0; offset < 10000; {
+	for offset := 0; ; {
 		params := api.Params{
 			"peer_id": int(peerID),
 			"count":   membersPage,
@@ -267,15 +314,47 @@ func (c *Client) IsAdmin(ctx context.Context, peerID, userID int64) (bool, error
 		}
 		for _, member := range resp.Items {
 			if int64(member.MemberID) == userID {
-				return bool(member.IsOwner) || bool(member.IsAdmin), nil
+				admin := bool(member.IsOwner) || bool(member.IsAdmin)
+				c.storeAdmin(peerID, userID, admin)
+				return admin, nil
 			}
 		}
 		if len(resp.Items) < membersPage {
-			break
+			// The list ended, so the user really is not an administrator.
+			c.storeAdmin(peerID, userID, false)
+			return false, nil
 		}
 		offset += len(resp.Items)
+		if offset >= membersLimit {
+			return false, fmt.Errorf("%w (peer %d, scanned %d)", errAdminScanExhausted, peerID, offset)
+		}
 	}
-	return false, nil
+}
+
+// membersLimit caps the conversation member scan so a conversation larger than
+// VK's own limits cannot spin the loop forever.
+const membersLimit = 10000
+
+func (c *Client) cachedAdmin(peerID, userID int64) (bool, bool) {
+	if c.adminCache == nil || adminCacheTTL <= 0 {
+		return false, false
+	}
+	c.adminMu.Lock()
+	defer c.adminMu.Unlock()
+	verdict, ok := c.adminCache[adminKey{peerID, userID}]
+	if !ok || time.Now().After(verdict.expiresAt) {
+		return false, false
+	}
+	return verdict.admin, true
+}
+
+func (c *Client) storeAdmin(peerID, userID int64, admin bool) {
+	if c.adminCache == nil || adminCacheTTL <= 0 {
+		return
+	}
+	c.adminMu.Lock()
+	defer c.adminMu.Unlock()
+	c.adminCache[adminKey{peerID, userID}] = adminVerdict{admin: admin, expiresAt: time.Now().Add(adminCacheTTL)}
 }
 
 // isFatalInitError reports Long Poll bootstrap failures that a retry cannot fix.
@@ -318,7 +397,7 @@ func (c *Client) Run(ctx context.Context, handler func(context.Context, Message)
 	if handler == nil {
 		return errors.New("VK message handler is nil")
 	}
-	backoff := time.Second
+	backoff := newLongPollBackoff()
 	var lastTs string
 	seen, order := map[string]struct{}{}, []string{}
 	for ctx.Err() == nil {
@@ -331,14 +410,14 @@ func (c *Client) Run(ctx context.Context, handler func(context.Context, Message)
 				return ctx.Err()
 			}
 			log.Warn().Err(err).Msg("VK Long Poll init failed; reconnecting")
-			if err := pause(ctx, backoff); err != nil {
+			if err := pause(ctx, backoff.wait); err != nil {
 				return ctx.Err()
 			}
-			backoff = min(backoff*2, 30*time.Second)
+			backoff.grow()
 			continue
 		}
 		resumeFrom(lp, lastTs)
-		backoff = time.Second
+		sessionStart := time.Now()
 
 		lp.MessageNew(func(ctx context.Context, obj events.MessageNewObject) {
 			msg := fromMessage(obj)
@@ -375,19 +454,58 @@ func (c *Client) Run(ctx context.Context, handler func(context.Context, Message)
 		// it for responses it processed, so it still points at the last event we
 		// actually handled.
 		lastTs = lp.Ts
+		alive := time.Since(sessionStart)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
 			log.Warn().Err(err).Msg("VK Long Poll session failed; reconnecting")
-			if err := pause(ctx, backoff); err != nil {
+			if err := pause(ctx, backoff.sessionFailed(alive)); err != nil {
 				return ctx.Err()
 			}
-			backoff = min(backoff*2, 30*time.Second)
 			continue
 		}
+		backoff.sessionEnded(alive)
 	}
 	return ctx.Err()
+}
+
+// longPollBackoff tracks how long to wait before the next Long Poll attempt.
+//
+// The delay may only be reset once a session has demonstrably worked. Initialising
+// the session is not proof: a rejected poll request or a black-holed connection
+// fails right after init, and resetting there pinned the delay at one second, so
+// an outage or a token problem turned into a reconnect per second for as long as
+// it lasted. A session counts as healthy only if it outlived the wait it replaced.
+type longPollBackoff struct{ wait time.Duration }
+
+// maxLongPollBackoff caps the reconnect delay.
+const maxLongPollBackoff = 30 * time.Second
+
+func newLongPollBackoff() *longPollBackoff {
+	return &longPollBackoff{wait: time.Second}
+}
+
+// sessionFailed returns the delay before the next attempt after a session that
+// ended with an error, and grows it for the attempt after that.
+func (b *longPollBackoff) sessionFailed(alive time.Duration) time.Duration {
+	if alive > b.wait {
+		b.wait = time.Second
+	}
+	wait := b.wait
+	b.grow()
+	return wait
+}
+
+// sessionEnded resets the delay after a session that ended without an error.
+func (b *longPollBackoff) sessionEnded(alive time.Duration) {
+	if alive > b.wait {
+		b.wait = time.Second
+	}
+}
+
+func (b *longPollBackoff) grow() {
+	b.wait = min(b.wait*2, maxLongPollBackoff)
 }
 
 func fromMessage(obj events.MessageNewObject) Message {
