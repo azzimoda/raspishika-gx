@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: azzimoda/raspishika-api:latest
+    image: azzimoda/raspishika-api:${IMAGE_TAG:-latest}
     container_name: raspishika-api
     ports:
       - "8080:8080"
@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
 
   bot:
-    image: azzimoda/raspishika-bot:latest
+    image: azzimoda/raspishika-bot:${IMAGE_TAG:-latest}
     container_name: raspishika-bot
     shm_size: 2g
     environment:
@@ -65,7 +65,7 @@ services:
     restart: unless-stopped
 
   adminbot:
-    image: azzimoda/raspishika-bot:latest
+    image: azzimoda/raspishika-bot:${IMAGE_TAG:-latest}
     container_name: raspishika-adminbot
     entrypoint: /app/adminbot
     environment:
@@ -93,7 +93,7 @@ services:
     restart: unless-stopped
 
   vkbot:
-    image: azzimoda/raspishika-bot:latest
+    image: azzimoda/raspishika-bot:${IMAGE_TAG:-latest}
     container_name: raspishika-vkbot
     entrypoint: /app/vkbot
     shm_size: 2g

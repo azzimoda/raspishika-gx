@@ -2,7 +2,7 @@ GO       ?= go
 COMPOSE  ?= docker compose
 VERSION  ?=
 
-.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate test test-race docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down logs clean
+.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate test test-race docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down rollback logs clean
 
 BIN_DIR   ?= $(HOME)/.local/bin
 UNIT_DIR  ?= $(HOME)/.config/systemd/user
@@ -43,6 +43,7 @@ help:
 	@echo "  up-local     docker compose -f compose.local.yaml up --build -d"
 	@echo "  down         docker compose down"
 	@echo "  logs         docker compose logs -f"
+	@echo "  rollback TAG=<sha>  redeploy a previously deployed image by SHA"
 	@echo "  clean        go clean + docker compose down"
 
 deps:
@@ -146,6 +147,15 @@ down:
 
 down-ro:
 	$(COMPOSE) down --remove-orphans
+
+# Откат на ранее задеплоенный SHA (образы тегируются по SHA в CI).
+# Выполняется на VPS, где лежит рабочий клон и .env.
+rollback:
+	@test -n "$(TAG)" || { echo "Usage: make rollback TAG=<sha>"; exit 1; }
+	sed -i '/^IMAGE_TAG=/d' .env
+	echo "IMAGE_TAG=$(TAG)" >> .env
+	$(COMPOSE) up -d
+	$(COMPOSE) ps
 
 logs:
 	$(COMPOSE) logs -f
