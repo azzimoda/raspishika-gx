@@ -82,15 +82,19 @@ build-vkbot:
 build-fakevkbot:
 	$(GO) build ./cmd/fakevkbot
 
+# Build straight into BIN_DIR. Staging in /tmp first would leave a window in
+# which another local user could replace the binary between build and install.
 build-justray-rotate:
-	$(GO) build -o /tmp/justray-rotate ./cmd/justray-rotate
+	@mkdir -p $(BIN_DIR)
+	$(GO) build -o $(BIN_DIR)/justray-rotate ./cmd/justray-rotate
 
 install-justray-rotate: build-justray-rotate
-	mkdir -p $(BIN_DIR) $(UNIT_DIR)
-	install -m 0755 /tmp/justray-rotate $(BIN_DIR)/justray-rotate
-	sed 's|__REPO_DIR__|$(CURDIR)|' configs/justray-rotate.service > $(UNIT_DIR)/$(UNIT_NAME)
+	@mkdir -p $(UNIT_DIR)
+	sed -e 's|__REPO_DIR__|$(CURDIR)|' -e 's|__BIN_DIR__|$(BIN_DIR)|' configs/justray-rotate.service > $(UNIT_DIR)/$(UNIT_NAME)
 	systemctl --user daemon-reload
 	systemctl --user enable --now justray-rotate.service
+	@# Without linger the user manager is killed on logout and the rotator stops.
+	@loginctl enable-linger $$(id -un) 2>/dev/null || echo "warning: could not enable linger; the rotator will stop on logout"
 	@echo "Installed: $(BIN_DIR)/justray-rotate and $(UNIT_DIR)/$(UNIT_NAME)"
 
 uninstall-justray-rotate:

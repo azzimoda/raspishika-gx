@@ -188,12 +188,21 @@ func (r *Rotator) rotate(ctx context.Context) error {
 	}
 	nodes := Flatten(subs)
 
-	next, ok := r.picker.Next(nodes, "")
+	// Without the real current node the very first rotation after a restart may
+	// pick the node that is already active - the one the probe just found
+	// unusable - and the rotation is a no-op that resets nothing.
+	current := r.currentNode(ctx, nodes)
+
+	next, ok := r.picker.Next(nodes, current)
 	if !ok {
 		return errors.New("no eligible node to rotate to")
 	}
 
-	log.Info().Str("node", next.Name).Str("id", next.ID).Msg("Rotating justray to node")
+	log.Info().
+		Str("node", next.Name).
+		Str("id", next.ID).
+		Str("previous", current).
+		Msg("Rotating justray to node")
 
 	if err := r.runner.Down(ctx); err != nil {
 		log.Debug().Err(err).Msg("justray down (already disconnected?)")
@@ -202,4 +211,21 @@ func (r *Rotator) rotate(ctx context.Context) error {
 		return fmt.Errorf("justray up %s: %w", next.ID, err)
 	}
 	return nil
+}
+
+// currentNode returns the id of the node justray is connected to, or "" when that
+// cannot be determined. A missing daemon, an older justray without status, or a
+// node that has since left the list all degrade to "unknown", which leaves the
+// picker's own round-robin in charge.
+func (r *Rotator) currentNode(ctx context.Context, nodes []Node) string {
+	st, err := r.runner.Status(ctx)
+	if err != nil {
+		log.Debug().Err(err).Msg("Cannot read justray status, assuming an unknown current node")
+		return ""
+	}
+	node, ok := CurrentNode(nodes, st)
+	if !ok {
+		return ""
+	}
+	return node.ID
 }

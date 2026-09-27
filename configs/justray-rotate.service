@@ -6,11 +6,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# .env from the repo root is picked up by pkg/config (godotenv).
+# The rotator reads .env from here itself (godotenv), so the unit does not
+# inject it: EnvironmentFile would put every secret in the repo's .env, bot
+# tokens included, into this process's environment for no benefit.
 WorkingDirectory=__REPO_DIR__
-EnvironmentFile=-__REPO_DIR__/.env
-ExecStart=%h/.local/bin/justray-rotate
-Restart=on-failure
+# A systemd user manager has a minimal PATH, and justray is resolved by name.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=__BIN_DIR__/justray-rotate
+# Run returns nil on a cancelled context, so a clean exit is the normal shutdown
+# path and on-failure would not bring the rotator back after an unexpected exit.
+Restart=always
 RestartSec=10
 
 [Install]

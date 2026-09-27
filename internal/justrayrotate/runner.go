@@ -21,6 +21,8 @@ const DefaultExecTimeout = 30 * time.Second
 type Runner interface {
 	// List returns the current subscriptions with probe results.
 	List(ctx context.Context) ([]Sub, error)
+	// Status returns what justray is currently connected to.
+	Status(ctx context.Context) (Status, error)
 	// Up connects in proxy mode to the given node.
 	Up(ctx context.Context, id string) error
 	// Down disconnects the current connection.
@@ -68,6 +70,17 @@ func (r CLIRunner) List(ctx context.Context) ([]Sub, error) {
 		return nil, err
 	}
 	return subs, nil
+}
+
+// Status runs `justray status --json`.
+func (r CLIRunner) Status(ctx context.Context) (Status, error) {
+	cmdCtx, cancel := r.withTimeout(ctx)
+	defer cancel()
+	out, err := exec.CommandContext(cmdCtx, r.bin(), "status", "--json").Output()
+	if err != nil {
+		return Status{}, fmt.Errorf("justray status: %w", err)
+	}
+	return ParseStatus(out)
 }
 
 // Up connects in proxy mode to the given node.

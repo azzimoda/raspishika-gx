@@ -10,18 +10,26 @@ import (
 )
 
 type fakeRunner struct {
-	mu      sync.Mutex
-	subs    []Sub
-	ups     []string
-	downs   int
-	upErr   error
-	listErr error
+	mu        sync.Mutex
+	subs      []Sub
+	ups       []string
+	downs     int
+	upErr     error
+	listErr   error
+	status    Status
+	statusErr error
 }
 
 func (f *fakeRunner) List(context.Context) ([]Sub, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.subs, f.listErr
+}
+
+func (f *fakeRunner) Status(context.Context) (Status, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.status, f.statusErr
 }
 
 func (f *fakeRunner) Up(_ context.Context, id string) error {
