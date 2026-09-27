@@ -3,6 +3,7 @@ package vkclient
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -38,27 +39,51 @@ func TestNewDefaultVersion(t *testing.T) {
 	}
 }
 
+// The cases here use *api.Error because that is what vksdk puts in the error
+// chain (api/api.go returns &response.Error). A value api.Error never reaches
+// these functions in production.
 func TestIsForbidden(t *testing.T) {
 	for _, code := range []int{901, 902, 917} {
-		if !IsForbidden(api.Error{Code: api.ErrorType(code)}) {
+		if !IsForbidden(&api.Error{Code: api.ErrorType(code)}) {
 			t.Errorf("code %d should be treated as forbidden", code)
 		}
 	}
 	for _, input := range []error{
 		nil,
 		errors.New("boom"),
-		api.Error{Code: 9},
-		&api.Error{Code: 917},
-		api.Error{Code: api.ErrorType((1000))},
+		&api.Error{Code: 9},
+		&api.Error{Code: api.ErrorType(1000)},
 	} {
 		if IsForbidden(input) {
 			t.Errorf("input %#v must not be forbidden", input)
 		}
 	}
-	var wrapped api.Error
-	wrapped.Code = api.ErrorType(902)
+	// Wrapped and formatted forms must still be recognised, since the VK
+	// broadcast path inspects errors coming back through fmt.Errorf chains.
+	wrapped := fmt.Errorf("send VK message: %w", &api.Error{Code: 917})
 	if !IsForbidden(wrapped) {
-		t.Fatal("wrapped api error not detected")
+		t.Fatal("wrapped *api.Error not detected")
+	}
+}
+
+func TestIsFatalInitError(t *testing.T) {
+	for _, code := range []int{5, 15, 27, 100} {
+		if !isFatalInitError(&api.Error{Code: api.ErrorType(code)}) {
+			t.Errorf("code %d should be fatal", code)
+		}
+	}
+	for _, input := range []error{
+		nil,
+		errors.New("boom"),
+		&api.Error{Code: 901},
+		&api.Error{Code: api.ErrorType(6)},
+	} {
+		if isFatalInitError(input) {
+			t.Errorf("input %#v must not be fatal", input)
+		}
+	}
+	if !isFatalInitError(fmt.Errorf("init long poll: %w", &api.Error{Code: 5})) {
+		t.Fatal("wrapped fatal *api.Error not detected")
 	}
 }
 

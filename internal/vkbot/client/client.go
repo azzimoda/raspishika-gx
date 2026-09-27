@@ -62,8 +62,13 @@ func New(token string, groupID int64, version string) (*Client, error) {
 // IsForbidden identifies destinations which no longer permit bot messages.
 // Other failures (configuration, flood limits, transient errors) are
 // deliberately not treated as an unsubscribe request.
+//
+// vksdk surfaces API failures as *api.Error, so the target must be a pointer:
+// errors.As matches on assignability, and *api.Error is not assignable to
+// api.Error. Matching the value form silently reported "not forbidden" for
+// every real 901/902/917.
 func IsForbidden(err error) bool {
-	var apiErr api.Error
+	var apiErr *api.Error
 	if errors.As(err, &apiErr) {
 		switch int(apiErr.Code) {
 		case 901, 902, 917:
@@ -256,8 +261,9 @@ func (c *Client) IsAdmin(ctx context.Context, peerID, userID int64) (bool, error
 }
 
 // isFatalInitError reports Long Poll bootstrap failures that a retry cannot fix.
+// The pointer target matters for the same reason as in IsForbidden.
 func isFatalInitError(err error) bool {
-	var apiErr api.Error
+	var apiErr *api.Error
 	if errors.As(err, &apiErr) {
 		switch int(apiErr.Code) {
 		case 5, 15, 27, 100:
