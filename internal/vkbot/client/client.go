@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -23,6 +24,22 @@ import (
 
 // DefaultVersion is the VK API version used when the config does not specify one.
 const DefaultVersion = "5.199"
+
+// vkHTTPTimeout bounds every HTTP call the SDK makes on the community client.
+//
+// Regular API calls are already limited: the SDK threads our context through
+// and applies its own handler timeout. The upload path is not: UploadMessagesPhoto
+// takes no context and posts to the upload server through a bare
+// http.Client.Post, so with the SDK's default client (no timeout) a black-holed
+// upload connection parked the request goroutine forever. Because the SDK
+// dispatches Long Poll events synchronously, that froze event handling for every
+// user with no way to interrupt it - context cancellation, the retry loop and
+// shutdown all sit behind the stuck read. Setting a client timeout closes the
+// hole at the root and makes such an upload fail as a normal transient error.
+//
+// A nil Transport keeps the shared http.DefaultTransport, so connection pooling
+// is unaffected.
+const vkHTTPTimeout = 60 * time.Second
 
 // ChatPeerOffset separates group chats from private conversations in VK peer IDs.
 const ChatPeerOffset int64 = 2000000000
@@ -56,6 +73,7 @@ func New(token string, groupID int64, version string) (*Client, error) {
 	}
 	vk := api.NewVK(token)
 	vk.Version = version
+	vk.Client = &http.Client{Timeout: vkHTTPTimeout}
 	return &Client{vk: vk, groupID: groupID}, nil
 }
 
@@ -273,16 +291,35 @@ func isFatalInitError(err error) bool {
 	return false
 }
 
+// resumeFrom points a freshly created Long Poll session at the cursor of the
+// previous one, so VK replays whatever arrived while we were disconnected.
+// A fresh session always starts at "now", which is how events were being lost.
+func resumeFrom(lp *longpoll.LongPoll, lastTs string) {
+	if lastTs != "" {
+		lp.Ts = lastTs
+	}
+}
+
 // Run processes incoming message_new events sequentially so conversation setup
 // stays ordered. A bounded in-memory event cache prevents duplicate deliveries
 // during reconnects. Handler errors are logged and do not stop other users'
 // messages; handlers must send their own user-facing error response. Context
 // cancellation stops promptly.
+//
+// The Long Poll cursor is carried across reconnects. Every fresh LongPoll starts
+// from "now", so a network blip silently dropped everything that arrived during
+// the gap - users pressing a keyboard button would simply get no reply. Reusing
+// the last processed ts with the freshly issued server/key makes VK replay the
+// backlog. If the cursor has aged out, VK answers failed=3 and the SDK resets to
+// the current ts, which is the same behaviour as before this change.
+//
+// The cursor lives in memory, so a process restart still resumes from "now".
 func (c *Client) Run(ctx context.Context, handler func(context.Context, Message) error) error {
 	if handler == nil {
 		return errors.New("VK message handler is nil")
 	}
 	backoff := time.Second
+	var lastTs string
 	seen, order := map[string]struct{}{}, []string{}
 	for ctx.Err() == nil {
 		lp, err := longpoll.NewLongPoll(c.vk, int(c.groupID))
@@ -300,7 +337,9 @@ func (c *Client) Run(ctx context.Context, handler func(context.Context, Message)
 			backoff = min(backoff*2, 30*time.Second)
 			continue
 		}
+		resumeFrom(lp, lastTs)
 		backoff = time.Second
+
 		lp.MessageNew(func(ctx context.Context, obj events.MessageNewObject) {
 			msg := fromMessage(obj)
 			if msg.PeerID == 0 || msg.FromID <= 0 || msg.Out {
@@ -331,7 +370,12 @@ func (c *Client) Run(ctx context.Context, handler func(context.Context, Message)
 				log.Warn().Err(err).Int64("peer", msg.PeerID).Msg("VK handler failed")
 			}
 		})
-		if err := lp.RunWithContext(ctx); err != nil {
+		err = lp.RunWithContext(ctx)
+		// Capture the cursor even when the session failed: the SDK only advances
+		// it for responses it processed, so it still points at the last event we
+		// actually handled.
+		lastTs = lp.Ts
+		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}

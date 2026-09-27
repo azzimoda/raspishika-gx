@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/SevereCloud/vksdk/v3/api"
+	"github.com/SevereCloud/vksdk/v3/longpoll-bot"
 )
 
 func TestNewValidation(t *testing.T) {
@@ -36,6 +37,30 @@ func TestNewDefaultVersion(t *testing.T) {
 	}
 	if withVersion.vk.Version != "5.131" {
 		t.Fatalf("version override = %q", withVersion.vk.Version)
+	}
+}
+
+// The SDK posts photo uploads through vk.Client with no context. Without a
+// timeout here a stalled upload blocks the synchronous Long Poll event loop
+// forever, so the deadline is load-bearing rather than cosmetic.
+func TestNewBoundsHTTPClient(t *testing.T) {
+	c, err := New("tok", 42, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.vk.Client == nil {
+		t.Fatal("vk.Client must be set, otherwise SDK falls back to the untimed http.DefaultClient")
+	}
+	if c.vk.Client.Timeout <= 0 {
+		t.Fatalf("vk.Client.Timeout = %s, want a positive deadline", c.vk.Client.Timeout)
+	}
+	if c.vk.Client.Timeout != vkHTTPTimeout {
+		t.Fatalf("vk.Client.Timeout = %s, want %s", c.vk.Client.Timeout, vkHTTPTimeout)
+	}
+	// A nil Transport keeps the shared default transport, so connection pooling
+	// across calls is preserved.
+	if c.vk.Client.Transport != nil {
+		t.Fatal("vk.Client.Transport should stay nil to reuse http.DefaultTransport")
 	}
 }
 
@@ -151,5 +176,22 @@ func TestPause(t *testing.T) {
 	}
 	if err := pause(context.Background(), -1); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Reconnecting from "now" silently dropped every event that arrived in the gap,
+// so a reconnected session must resume from the previous cursor.
+func TestResumeFromCarriesCursor(t *testing.T) {
+	lp := &longpoll.LongPoll{Ts: "fresh-from-server"}
+	resumeFrom(lp, "42")
+	if lp.Ts != "42" {
+		t.Fatalf("ts = %q, want the previous cursor %q", lp.Ts, "42")
+	}
+
+	// No previous session yet: keep whatever the server handed us.
+	first := &longpoll.LongPoll{Ts: "fresh-from-server"}
+	resumeFrom(first, "")
+	if first.Ts != "fresh-from-server" {
+		t.Fatalf("ts = %q, want the server cursor untouched", first.Ts)
 	}
 }
