@@ -168,8 +168,11 @@ test-race:
 # exercised by a plain `make test`. Point this at a scratch database: the tests
 # write rows and delete them again.
 TEST_PG_DSN ?= host=127.0.0.1 port=5432 user=postgres password=raspishika dbname=raspishika sslmode=disable
+# -p 1 serializes the two packages: both migrate the same database, and go test
+# runs package binaries in parallel. On an empty database they raced and the
+# loser saw `relation "goose_db_version" does not exist`.
 test-pg:
-	TEST_POSTGRES_DSN="$(TEST_PG_DSN)" $(GO) test -count=1 -v -run Postgres ./pkg/database/ ./internal/repository/
+	TEST_POSTGRES_DSN="$(TEST_PG_DSN)" $(GO) test -count=1 -p 1 -v -run Postgres ./pkg/database/ ./internal/repository/
 
 check: fmt-check vet test build
 
