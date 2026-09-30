@@ -92,12 +92,15 @@ jobs:
       # намеренно не вычищаются: prune делал откат невозможным.
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          DEPLOY_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          # The SHA is interpolated here, not passed through the environment: a
+          # step-level `env:` only reaches the action's own container, and
+          # ssh-action exports a variable into the remote shell only if it is
+          # listed in `envs`. The first deploy died on `DEPLOY_SHA: unbound
+          # variable` because of exactly that, under `set -u`.
           script: |
             set -eu
             cd ~/raspishika-gx
@@ -105,7 +108,7 @@ jobs:
             # Точечно обновляем только IMAGE_TAG, не трогая секреты в .env.
             touch .env
             sed -i '/^IMAGE_TAG=/d' .env
-            echo "IMAGE_TAG=${DEPLOY_SHA}" >> .env
+            echo "IMAGE_TAG=${{ github.sha }}" >> .env
             docker compose pull
             docker compose down
             docker compose up -d
