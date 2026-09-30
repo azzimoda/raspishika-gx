@@ -55,6 +55,7 @@ const (
 	KeyProxyBanCooldown = "proxy_ban_cooldown"
 
 	KeyJustrayBin              = "justray_bin"
+	KeyJustrayProbeProxy       = "justray_probe_proxy"
 	KeyJustrayProbeURL         = "justray_probe_url"
 	KeyJustrayCheckInterval    = "justray_check_interval"
 	KeyJustrayFailureThreshold = "justray_failure_threshold"
@@ -141,6 +142,12 @@ func Init() {
 	viper.SetDefault(KeyProxyBanCooldown, 5*time.Minute)
 
 	viper.SetDefault(KeyJustrayBin, "justray")
+	// The rotator runs on the host, so it probes justray's loopback in-bound.
+	// It must not reuse KeyJustrayProxyAddr: in Docker that key is
+	// host.docker.internal, which only resolves inside the containers, and a
+	// probe that cannot resolve its proxy would rotate a perfectly healthy
+	// node every cooldown.
+	viper.SetDefault(KeyJustrayProbeProxy, "127.0.0.1:10808")
 	// Keep in sync with justrayrotate.DefaultProbeURL. A Bot API method, not the
 	// bare host: the root answers 302 to core.telegram.org.
 	viper.SetDefault(KeyJustrayProbeURL, "https://api.telegram.org/bot0/getMe")

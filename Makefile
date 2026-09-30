@@ -9,11 +9,17 @@ STACK       ?=
 STACK_FLAG   = $(if $(STACK),-f compose.$(STACK).yaml,)
 
 # Compose stacks: up-fake/up-local, torn down with down-fake-ro/down-local-ro.
-.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate test test-race test-pg docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down down-fake-ro down-local-ro rollback logs clean
+.PHONY: all help deps fmt fmt-check vet build build-bot build-adminbot build-api build-fakeapi build-fakebot build-vkbot build-fakevkbot build-justray-rotate install-justray-rotate uninstall-justray-rotate install-justray-inbound-proxy uninstall-justray-inbound-proxy test test-race test-pg docs check run-api run-fakeapi run-fakebot run-adminbot run-vkbot run-fakevkbot bump-proxy up up-fake up-local down down-fake-ro down-local-ro rollback logs clean
 
 BIN_DIR   ?= $(HOME)/.local/bin
 UNIT_DIR  ?= $(HOME)/.config/systemd/user
 UNIT_NAME := justray-rotate.service
+
+# The docker bridge to justray forwarder, and the justray in-bound port it
+# serves. Override PORT only if justray's own connection.port was changed.
+INBOUND_UNIT_SOCKET  := justray-inbound-proxy.socket
+INBOUND_UNIT_SERVICE := justray-inbound-proxy.service
+INBOUND_PORT         ?= 10808
 
 all: check
 
@@ -34,6 +40,8 @@ help:
 	@echo "  build-justray-rotate  build the justray node rotator (./cmd/justray-rotate)"
 	@echo "  install-justray-rotate  build + install rotator as a systemd user unit"
 	@echo "  uninstall-justray-rotate  stop and remove the rotator systemd unit"
+	@echo "  install-justray-inbound-proxy  bridge the docker network to justray's loopback in-bound"
+	@echo "  uninstall-justray-inbound-proxy  remove the in-bound bridge units"
 	@echo "  test         go test ./..."
 	@echo "  test-pg       Postgres-backed tests (TEST_PG_DSN=... to point elsewhere)"
 	@echo "  test-race    go test -race (bot and fakescraper)"
@@ -110,6 +118,42 @@ uninstall-justray-rotate:
 	rm -f $(UNIT_DIR)/$(UNIT_NAME) $(BIN_DIR)/justray-rotate
 	systemctl --user daemon-reload
 	@echo "Removed justray-rotate unit and binary"
+
+# justray with `allow_lan` off listens on 127.0.0.1 only, so the containers
+# cannot reach it. This installs a systemd socket-proxyd pair on the docker
+# bridge gateway, which is what host.docker.internal resolves to in the
+# containers. Nothing then listens on the host's public interface, so no
+# firewall rule is needed for the port.
+install-justray-inbound-proxy:
+	@set -e; \
+	bridge=$$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true); \
+	if [ -z "$$bridge" ] || [ "$$bridge" = "0.0.0.0" ]; then \
+		echo "error: cannot use the docker bridge gateway (got '$$bridge')."; \
+		echo "       Start docker, and never let this fall back to 0.0.0.0: that publishes an open SOCKS5."; \
+		exit 1; \
+	fi; \
+	proxyd=$$(command -v systemd-socket-proxyd 2>/dev/null || true); \
+	if [ -z "$$proxyd" ]; then proxyd=/lib/systemd/systemd-socket-proxyd; fi; \
+	if [ ! -x "$$proxyd" ]; then \
+		echo "error: systemd-socket-proxyd not found at $$proxyd."; \
+		echo "       Install the systemd package, or bridge the port with socat instead."; \
+		exit 1; \
+	fi; \
+	mkdir -p $(UNIT_DIR); \
+	sed -e "s|__BRIDGE_IP__|$$bridge|g" -e "s|__PORT__|$(INBOUND_PORT)|g" configs/justray-inbound-proxy.socket > $(UNIT_DIR)/$(INBOUND_UNIT_SOCKET); \
+	sed -e "s|__PROXYD__|$$proxyd|g" -e "s|__PORT__|$(INBOUND_PORT)|g" configs/justray-inbound-proxy.service > $(UNIT_DIR)/$(INBOUND_UNIT_SERVICE); \
+	systemctl --user daemon-reload; \
+	systemctl --user enable --now $(INBOUND_UNIT_SOCKET); \
+	loginctl enable-linger $$(id -un) 2>/dev/null || echo "warning: could not enable linger; the bridge stops on logout"; \
+	echo "Forwarding $$bridge:$(INBOUND_PORT) -> 127.0.0.1:$(INBOUND_PORT)"; \
+	echo "Point the containers at host.docker.internal:$(INBOUND_PORT) (JUSTRAY_PROXY_ADDR)"
+
+uninstall-justray-inbound-proxy:
+	systemctl --user disable --now $(INBOUND_UNIT_SOCKET) || true
+	systemctl --user stop $(INBOUND_UNIT_SERVICE) 2>/dev/null || true
+	rm -f $(UNIT_DIR)/$(INBOUND_UNIT_SOCKET) $(UNIT_DIR)/$(INBOUND_UNIT_SERVICE)
+	systemctl --user daemon-reload
+	@echo "Removed the justray in-bound bridge units"
 
 test:
 	$(GO) test ./...

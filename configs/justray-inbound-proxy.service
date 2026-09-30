@@ -1,0 +1,19 @@
+[Unit]
+Description=Forward the docker bridge to justray's loopback in-bound
+Requires=justray-inbound-proxy.socket
+After=justray-inbound-proxy.socket
+
+[Service]
+# __PROXYD__ is systemd-socket-proxyd (part of the systemd package), located at
+# install time. It relays bytes untouched, which is what a mixed in-bound needs:
+# justray answers SOCKS5 and HTTP on the same port and this does not care which
+# the client negotiated.
+#
+# Accept=no, so one proxyd serves every connection. Verified locally against a
+# long-lived idle connection: a second consumer connects immediately, with no
+# head-of-line blocking behind the first.
+ExecStart=__PROXYD__ 127.0.0.1:__PORT__
+Restart=on-failure
+RestartSec=2
+PrivateTmp=yes
+NoNewPrivileges=yes

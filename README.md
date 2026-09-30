@@ -227,20 +227,34 @@ docker compose ps         # убедиться, что migrate завершил�
 `host.docker.internal:10808` (`extra_hosts: host-gateway` в compose).
 
 1. **justray в режиме прокси.** Включить mixed in-bound на `127.0.0.1:10808`
-   в режиме прокси. `allow_lan` включать **только** на docker-мост
-   (`172.17.0.0/16` и, при нестандартной сети, адрес compose-сети): с
-   `allow_lan` на всех интерфейсах публичный SOCKS5 получается на любом
-   свободном порту. Ограничить вход файрволом (ufw/firewalld) до адресов
-   docker-моста и `127.0.0.1` — внешние подключения к 10808 должны отбрасываться.
-2. **Ротатор.** `make build-justray-rotate` и `make install-justray-rotate`
+   в режиме прокси, **оставив `allow_lan` выключенным**: в justray это булев
+   переключатель без адреса, поэтому `on` слушает `0.0.0.0` и публичный SOCKS5
+   оказывается на IP VPS. Проверить: `ss -ltnp | grep 10808` должен показать
+   только `127.0.0.1:10808`.
+2. **Мост docker → justray.** Контейнеры до `127.0.0.1` не достучатся, а
+   `allow_lan` включать нельзя, поэтому docker-мост пробрасывается на loopback
+   in-bound: `make install-justray-inbound-proxy` (снять —
+   `make uninstall-justray-inbound-proxy`). Ставится пара
+   `justray-inbound-proxy.socket` + `.service`: сокет слушает **только** адрес
+   docker-моста (то, во что резолвится `host.docker.internal` в контейнерах), а
+   `systemd-socket-proxyd` перекладывает байты в `127.0.0.1:10808`. Байты
+   идут как есть, поэтому смешанному in-bound не важно, SOCKS5 там был или HTTP.
+   На публичном интерфейсе не слушает ничего, правило файрвола на 10808 не
+   нужно. Адрес и наличие `systemd-socket-proxyd` берутся из живой системы, а
+   при неудаче установка падает, а не подставляет `0.0.0.0`.
+3. **Ротатор.** `make build-justray-rotate` и `make install-justray-rotate`
    ставят `justray-rotate.service` как systemd **user**-юнит
    (`configs/justray-rotate.service`); `make uninstall-justray-rotate` его
-   снимает. Он дергает `JUSTRAY_PROBE_URL` и после `JUSTRAY_FAILURE_THRESHOLD`
-   неудач переключает justray на следующий живой не-RU узел по кругу
-   (`justray subscription list --json`, `JUSTRAY_EXCLUDE` добавляет свои
-   подстроки к исключениям по умолчанию). Проверка вживую: `systemctl --user
-   status justray-rotate`, журнал — `journalctl --user -u justray-rotate`.
-3. **Переменные.** В `.env` на VPS: `JUSTRAY_PROXY_ADDR` (для контейнеров
+   снимает. Он дергает `JUSTRAY_PROBE_URL` через `JUSTRAY_PROBE_PROXY` и после
+   `JUSTRAY_FAILURE_THRESHOLD` неудач переключает justray на следующий живой
+   не-RU узел по кругу (`justray subscription list --json`, `JUSTRAY_EXCLUDE`
+   добавляет свои подстроки к исключениям по умолчанию). `JUSTRAY_PROBE_PROXY`
+   — адрес с самого хоста (по умолчанию `127.0.0.1:10808`), и он намеренно не
+   равен `JUSTRAY_PROXY_ADDR`: ротатор крутится на хосте, где
+   `host.docker.internal` не резолвится, и проба падала бы всегда. Проверка
+   вживую: `systemctl --user status justray-rotate`, журнал —
+   `journalctl --user -u justray-rotate`.
+4. **Переменные.** В `.env` на VPS: `JUSTRAY_PROXY_ADDR` (для контейнеров
    `host.docker.internal:10808`), секреты VK (`VK_GROUP_TOKEN`, `VK_GROUP_ID`) и
    `IMAGE_TAG` последнего рабочего SHA.
 

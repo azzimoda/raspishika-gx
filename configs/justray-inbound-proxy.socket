@@ -1,0 +1,17 @@
+[Unit]
+Description=Docker bridge to the justray in-bound for Распиши-ка
+# justray itself keeps `allow_lan` off, so it listens on 127.0.0.1 only and is
+# unreachable from the containers. This socket is the single way in: it binds
+# the docker bridge gateway, which is what host.docker.internal resolves to
+# inside the containers, and nothing else. justray's `allow_lan` is a bare
+# boolean with no bind address, so turning it on would listen on every
+# interface and publish an open SOCKS5 on the VPS public IP.
+
+[Socket]
+# __BRIDGE_IP__ is detected from the live docker bridge at install time
+# (make install-justray-inbound-proxy) and must never be guessed as 0.0.0.0.
+ListenStream=__BRIDGE_IP__:__PORT__
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

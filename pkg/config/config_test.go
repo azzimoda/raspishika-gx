@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -33,5 +34,26 @@ func TestAllowEmptyEnvKeepsUnsetDefault(t *testing.T) {
 
 	if got := viper.GetString(KeyJustrayProxyAddr); got != "127.0.0.1:10808" {
 		t.Fatalf("unset variable resolved to %q, want the default", got)
+	}
+}
+
+// The rotator probes justray from the host. Pointing it at the container
+// address (host.docker.internal) makes every probe fail on DNS, and the
+// rotator then rotates a healthy node every cooldown. Pin the loopback default
+// so that mistake cannot come back unnoticed.
+func TestJustrayProbeProxyDefaultsToLoopback(t *testing.T) {
+	if prev, ok := os.LookupEnv("JUSTRAY_PROBE_PROXY"); ok {
+		t.Setenv("JUSTRAY_PROBE_PROXY", prev) // restored at cleanup
+		if err := os.Unsetenv("JUSTRAY_PROBE_PROXY"); err != nil {
+			t.Fatalf("unset JUSTRAY_PROBE_PROXY: %v", err)
+		}
+	}
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	Init()
+
+	if got := viper.GetString(KeyJustrayProbeProxy); got != "127.0.0.1:10808" {
+		t.Fatalf("JUSTRAY_PROBE_PROXY defaults to %q, want the loopback in-bound 127.0.0.1:10808", got)
 	}
 }

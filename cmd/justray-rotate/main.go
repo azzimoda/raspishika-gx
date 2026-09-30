@@ -23,7 +23,10 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	proxyAddr := viper.GetString(config.KeyJustrayProxyAddr)
+	// The probe address is deliberately not KeyJustrayProxyAddr: that one is
+	// meant for the bot containers (host.docker.internal under Docker) and does
+	// not resolve on this host, which would fail every probe.
+	proxyAddr := viper.GetString(config.KeyJustrayProbeProxy)
 	probeURL := viper.GetString(config.KeyJustrayProbeURL)
 
 	exclude := defaultExcludes()

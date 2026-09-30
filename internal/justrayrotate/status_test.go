@@ -7,24 +7,65 @@ import (
 	"testing"
 )
 
+// Verbatim output of `justray status --json` (1.6.6) on a connected daemon in
+// proxy mode. The full shape is only reported while connected: a disconnected
+// daemon reports last_node and drops node/server/port, see
+// TestParseStatusDisconnected.
+const connectedStatusJSON = `{
+  "connected": true,
+  "mode": "proxy",
+  "node": "Финляндия",
+  "server": "finla.ali-bard.ru",
+  "port": 443,
+  "proxy_port": 10808,
+  "protocol": "vless",
+  "uptime": 753
+}`
+
 func TestParseStatus(t *testing.T) {
-	// Shape taken from `justray status --json`.
-	raw := `{"connected":true,"mode":"tun","node":"Швеция","server":"govpoel.ggisopi.su","port":443,"protocol":"vless","uptime":3668}`
-	st, err := ParseStatus([]byte(raw))
+	st, err := ParseStatus([]byte(connectedStatusJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !st.Connected {
 		t.Error("Connected = false, want true")
 	}
-	if st.Mode != "tun" {
-		t.Errorf("Mode = %q, want tun", st.Mode)
+	if st.Mode != "proxy" {
+		t.Errorf("Mode = %q, want proxy", st.Mode)
 	}
-	if st.Server != "govpoel.ggisopi.su" || st.Port != 443 {
-		t.Errorf("endpoint = %s:%d, want govpoel.ggisopi.su:443", st.Server, st.Port)
+	if st.Server != "finla.ali-bard.ru" || st.Port != 443 {
+		t.Errorf("endpoint = %s:%d, want finla.ali-bard.ru:443", st.Server, st.Port)
 	}
-	if st.Uptime != 3668 {
-		t.Errorf("Uptime = %d, want 3668", st.Uptime)
+	if st.Uptime != 753 {
+		t.Errorf("Uptime = %d, want 753", st.Uptime)
+	}
+}
+
+// A disconnected daemon reports the last used node by name and no endpoint, so
+// there is no node to match against the subscription and CurrentNode reports
+// "unknown". That is the wanted outcome: with nothing connected, any eligible
+// node is fair game, and the previous one must not be excluded for free.
+func TestParseStatusDisconnected(t *testing.T) {
+	raw := `{
+  "connected": false,
+  "last_node": "Финляндия"
+}`
+	st, err := ParseStatus([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Connected {
+		t.Error("Connected = true, want false")
+	}
+	if st.Server != "" || st.Port != 0 {
+		t.Errorf("endpoint = %s:%d, want an empty endpoint", st.Server, st.Port)
+	}
+
+	nodes := []Node{
+		{ID: "a", Server: "finla.ali-bard.ru", Port: 443, Name: "🇫🇮 Финляндия"},
+	}
+	if node, ok := CurrentNode(nodes, st); ok {
+		t.Errorf("CurrentNode matched %q on a disconnected daemon, want no match", node.ID)
 	}
 }
 
@@ -158,10 +199,10 @@ func TestRotationProceedsWhenStatusUnavailable(t *testing.T) {
 func TestCLIRunnerStatus(t *testing.T) {
 	// Guard against the JSON tags drifting from justray's actual output shape.
 	var st Status
-	if err := json.Unmarshal([]byte(`{"connected":true,"node":"n","server":"s","port":1}`), &st); err != nil {
+	if err := json.Unmarshal([]byte(connectedStatusJSON), &st); err != nil {
 		t.Fatal(err)
 	}
-	if !st.Connected || st.Node != "n" || st.Server != "s" || st.Port != 1 {
+	if !st.Connected || st.Node != "Финляндия" || st.Server != "finla.ali-bard.ru" || st.Port != 443 {
 		t.Fatalf("decoded %+v", st)
 	}
 }
