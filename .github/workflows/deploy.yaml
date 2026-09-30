@@ -11,6 +11,8 @@ on:
       - 'migrations/*'
       - 'templates/*'
       - 'compose.yaml'
+      - 'configs/**'
+      - 'Makefile'
       - '*.Dockerfile'
       - 'go.*'
 
