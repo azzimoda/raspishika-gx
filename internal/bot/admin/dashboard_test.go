@@ -114,8 +114,15 @@ func TestBuildDashboard(t *testing.T) {
 
 	spec := periodSpec{start: time.Now().Add(-24 * time.Hour), end: time.Now(), isRelative: true}
 	blocks := buildDashboard(general, config, spec)
-	if len(blocks) < 10 {
-		t.Fatalf("expected many blocks, got %d", len(blocks))
+	if len(blocks) != 2 {
+		t.Fatalf("expected 2 top-level blocks (heading + details), got %d", len(blocks))
+	}
+	inner := blocks[1].InputRichBlockDetails
+	if inner == nil {
+		t.Fatalf("expected second block to be details, got %+v", blocks[1])
+	}
+	if len(inner.Blocks) < 10 {
+		t.Fatalf("expected many inner blocks, got %d", len(inner.Blocks))
 	}
 
 	out, err := json.Marshal(models.InputRichMessage{Blocks: blocks})
