@@ -78,6 +78,7 @@ func NewVKApp(scraperAPI service.APIClient) (*VKApp, error) {
 	if viper.GetString(config.KeyAdminBotToken) != "" && viper.GetInt64(config.KeyAdminID) != 0 {
 		adminReporterBot = botservice.NewBotService(
 			func(p string, _ func()) (*bot.Bot, error) {
+				log.Info().Str("proxy", p).Msg("Admin reporter using proxy")
 				httpClient, err := proxyutil.NewHTTPProxyClient(p)
 				if err != nil {
 					return nil, err

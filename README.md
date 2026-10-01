@@ -257,6 +257,25 @@ docker compose ps         # убедиться, что migrate завершил�
 4. **Переменные.** В `.env` на VPS: `JUSTRAY_PROXY_ADDR` (для контейнеров
    `host.docker.internal:10808`), секреты VK (`VK_GROUP_TOKEN`, `VK_GROUP_ID`) и
    `IMAGE_TAG` последнего рабочего SHA.
+5. **Проверка, что боты реально пошли через justray.**
+
+   ```sh
+   docker compose up -d
+   docker compose logs bot vkbot adminbot | grep -i "using proxy"
+   ```
+
+   Ожидается в каждом процессе строка с `proxy=host.docker.internal:10808`:
+   `Telegram bot using proxy` — основной бот, `Admin reporter using proxy` —
+   админ-бот (он поднимается и в `bot`, и в `vkbot`).
+
+   **Не считать проблемой `WRN Pool proxy dropped error="proxy unavailable"`.**
+   `go-tg-proxy` при каждой ревалидации тёплого пула проверяет его целиком и
+   пишет такую строку на каждый мёртвый бесплатный прокси, а бан-лист
+   (`internal/proxyfail`) живёт в памяти, поэтому после рестарта контейнера
+   проверяется весь список заново. Пока justray жив, бесплатные прокси
+   не используются, но продолжают опрашиваться: эти предупреждения — фон, а не
+   признак поломки justray. Признак настоящей проблемы — в строках `using proxy`
+   вместо justray стоит чужой адрес.
 
 ---
 

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -100,6 +101,36 @@ type Rotator struct {
 	picker *Picker
 
 	failures atomic.Int32
+
+	// lastProbeErr is the most recent probe failure, replayed on the rotation
+	// line as its cause. It used to be discarded, so a rotation said only that
+	// it happened: a node that had gone bad, justray being down, and a probe
+	// broken by an unresolvable proxy address all looked identical in the
+	// journal. The loop ticks every CheckInterval, so a plain mutex is enough.
+	lastProbeErrMutex sync.Mutex
+	lastProbeErr      error
+}
+
+// noteProbeFailure records a failed probe and reports the running failure count.
+func (r *Rotator) noteProbeFailure(err error) int32 {
+	r.setProbeErr(err)
+	return r.failures.Add(1)
+}
+
+// setProbeErr stores the failure a rotation reports as its cause, or nil once a
+// probe recovers so a stale cause cannot outlive the incident.
+func (r *Rotator) setProbeErr(err error) {
+	r.lastProbeErrMutex.Lock()
+	r.lastProbeErr = err
+	r.lastProbeErrMutex.Unlock()
+}
+
+// probeCause returns the last probe failure, or nil when there is none.
+// zerolog drops a nil error, so callers can attach it unconditionally.
+func (r *Rotator) probeCause() error {
+	r.lastProbeErrMutex.Lock()
+	defer r.lastProbeErrMutex.Unlock()
+	return r.lastProbeErr
 }
 
 // NewRotator builds a rotator over the given runner and picker. A probe is
@@ -147,13 +178,17 @@ func (r *Rotator) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		if err := r.cfg.Probe(ctx); err == nil {
+		probeErr := r.cfg.Probe(ctx)
+		if probeErr == nil {
 			r.failures.Store(0)
 			lastRotation = time.Time{}
 			rotations = 0
+			r.setProbeErr(nil)
 			continue
 		}
-		if r.failures.Add(1) < int32(r.cfg.FailureThreshold) {
+		n := r.noteProbeFailure(probeErr)
+		log.Debug().Err(probeErr).Int("failures", int(n)).Msg("justray probe failed")
+		if n < int32(r.cfg.FailureThreshold) {
 			continue
 		}
 
@@ -202,6 +237,11 @@ func (r *Rotator) rotate(ctx context.Context) error {
 		Str("node", next.Name).
 		Str("id", next.ID).
 		Str("previous", current).
+		// previous is empty whenever justray was down, which is a different
+		// situation from "the active node answered but its traffic broke", and
+		// the line looked identical in both cases.
+		Bool("disconnected", current == "").
+		Err(r.probeCause()).
 		Msg("Rotating justray to node")
 
 	if err := r.runner.Down(ctx); err != nil {

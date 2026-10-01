@@ -1,12 +1,17 @@
 package justrayrotate
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 type fakeRunner struct {
@@ -83,8 +88,9 @@ func subFixture() []Sub {
 	return subs
 }
 
-func runFor(t *testing.T, ctx context.Context, r *Rotator, d time.Duration) {
+func runFor(t *testing.T, r *Rotator, d time.Duration) {
 	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
 		_ = r.Run(ctx)
@@ -94,16 +100,19 @@ func runFor(t *testing.T, ctx context.Context, r *Rotator, d time.Duration) {
 	case <-done:
 	case <-time.After(d):
 	}
+
+	// Cancel and wait for the loop to exit before returning. A loop left
+	// running keeps logging after its test is over, which races any later test
+	// that swaps the global logger to capture output.
+	cancel()
+	<-done
 }
 
 func TestRotatorNoRotateWhenProbeOK(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &fakeRunner{subs: subFixture()}
 	r := newTestRotator(t, runner, probeOK)
 
-	runFor(t, ctx, r, 50*time.Millisecond)
-	cancel()
+	runFor(t, r, 50*time.Millisecond)
 
 	if calls := runner.upCalls(); len(calls) != 0 {
 		t.Fatalf("unexpected rotations: %v", calls)
@@ -111,8 +120,6 @@ func TestRotatorNoRotateWhenProbeOK(t *testing.T) {
 }
 
 func TestRotatorRotatesAfterThreshold(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &fakeRunner{subs: subFixture()}
 	// Cooldown short so the loop can rotate; threshold 1 for a fast test.
 	r := newTestRotator(t, runner, probeFail)
@@ -120,8 +127,7 @@ func TestRotatorRotatesAfterThreshold(t *testing.T) {
 	r.cfg.FailureThreshold = 1
 	r.cfg.Cooldown = time.Millisecond
 
-	runFor(t, ctx, r, 100*time.Millisecond)
-	cancel()
+	runFor(t, r, 100*time.Millisecond)
 
 	calls := runner.upCalls()
 	if len(calls) == 0 {
@@ -135,8 +141,6 @@ func TestRotatorRotatesAfterThreshold(t *testing.T) {
 }
 
 func TestRotatorConsecutiveRotationsCycle(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &fakeRunner{subs: subFixture()}
 	r := newTestRotator(t, runner, probeFail)
 	r.cfg.CheckInterval = time.Millisecond
@@ -144,8 +148,7 @@ func TestRotatorConsecutiveRotationsCycle(t *testing.T) {
 	r.cfg.Cooldown = 0 // rotate on every failed probe
 	r.cfg.MaxRotations = 100
 
-	runFor(t, ctx, r, 80*time.Millisecond)
-	cancel()
+	runFor(t, r, 80*time.Millisecond)
 
 	calls := runner.upCalls()
 	if len(calls) < 4 {
@@ -167,8 +170,6 @@ func TestRotatorConsecutiveRotationsCycle(t *testing.T) {
 }
 
 func TestRotatorBacksOffAfterMaxRotations(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &fakeRunner{subs: subFixture()}
 	r := newTestRotator(t, runner, probeFail)
 	r.cfg.CheckInterval = time.Millisecond
@@ -177,8 +178,7 @@ func TestRotatorBacksOffAfterMaxRotations(t *testing.T) {
 	r.cfg.MaxRotations = 2
 	r.cfg.LongBackoff = 100 * time.Millisecond
 
-	runFor(t, ctx, r, 60*time.Millisecond)
-	cancel()
+	runFor(t, r, 60*time.Millisecond)
 
 	if calls := runner.upCalls(); len(calls) > 4 {
 		t.Fatalf("expected backoff to pause rotations, got %v", calls)
@@ -186,8 +186,6 @@ func TestRotatorBacksOffAfterMaxRotations(t *testing.T) {
 }
 
 func TestRotatorNoEligibleNode(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &fakeRunner{subs: subFixture()}
 	r := newTestRotator(t, runner, probeFail)
 	r.cfg.CheckInterval = time.Millisecond
@@ -195,8 +193,7 @@ func TestRotatorNoEligibleNode(t *testing.T) {
 	r.cfg.Cooldown = 0
 	r.picker = NewPicker(ruFlag, "Россия", "Sweden", "Netherlands", "mobile operators")
 
-	runFor(t, ctx, r, 30*time.Millisecond)
-	cancel()
+	runFor(t, r, 30*time.Millisecond)
 
 	if calls := runner.upCalls(); len(calls) != 0 {
 		t.Fatalf("rotated with no eligible node: %v", calls)
@@ -207,8 +204,6 @@ func TestRotatorNoEligibleNode(t *testing.T) {
 // justray CLI was retried on every single tick, spawning several processes a
 // minute and logging an error each time. Failed attempts have to be paced too.
 func TestRotatorPacesFailedRotations(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &fakeRunner{subs: subFixture(), upErr: errors.New("justray exploded")}
 	r := newTestRotator(t, runner, probeFail)
 	r.cfg.CheckInterval = time.Millisecond
@@ -218,8 +213,7 @@ func TestRotatorPacesFailedRotations(t *testing.T) {
 	r.cfg.LongBackoff = time.Hour
 
 	// ~200 ticks in 200ms. Without pacing this would attempt ~200 rotations.
-	runFor(t, ctx, r, 200*time.Millisecond)
-	cancel()
+	runFor(t, r, 200*time.Millisecond)
 
 	calls := runner.upCalls()
 	if len(calls) > 8 {
@@ -234,8 +228,6 @@ func TestRotatorPacesFailedRotations(t *testing.T) {
 // history, otherwise one earlier incident leaves the daemon refusing to rotate
 // for the rest of the long backoff window even after the proxy recovers.
 func TestRotatorResetsBackoffAfterRecovery(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	runner := &fakeRunner{subs: subFixture()}
 
 	const (
@@ -265,8 +257,7 @@ func TestRotatorResetsBackoffAfterRecovery(t *testing.T) {
 		return errors.New("down")
 	}
 
-	runFor(t, ctx, r, downBefore+upFor+downAfter)
-	cancel()
+	runFor(t, r, downBefore+upFor+downAfter)
 
 	// MaxRotations attempts, then the long backoff holds until the probe
 	// recovers, then the budget is restored and the next outage is handled.
@@ -275,5 +266,95 @@ func TestRotatorResetsBackoffAfterRecovery(t *testing.T) {
 	}
 	if got := runner.upCallsLen(); got != 4 {
 		t.Fatalf("rotations after recovery = %d, want 4 (backoff was not reset)", got)
+	}
+}
+
+// lockedBuffer collects log output while the rotator goroutine is still
+// running, so the race detector stays quiet on the assertion side.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// A rotation used to report only that it happened. A node that had gone bad,
+// justray being down entirely, and a probe broken by an unresolvable proxy
+// address all produced the same line, so the journal could not say why the
+// rotator acted - which is the whole reason to keep a rotator running.
+func TestRotatorLogsProbeCauseAndDisconnected(t *testing.T) {
+	runner := &fakeRunner{subs: subFixture()} // zero Status: justray is down
+	cause := errors.New("dial tcp 127.0.0.1:10808: connect: connection refused")
+	r := newTestRotator(t, runner, func(context.Context) error { return cause })
+	r.cfg.FailureThreshold = 1
+	r.cfg.Cooldown = time.Hour
+
+	var logs lockedBuffer
+	prevLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = prevLogger })
+
+	runFor(t, r, 100*time.Millisecond)
+
+	out := logs.String()
+	if !strings.Contains(out, "Rotating justray to node") {
+		t.Fatalf("no rotation was logged; output: %s", out)
+	}
+	if !strings.Contains(out, "connection refused") {
+		t.Fatalf("rotation line omits the probe cause; output: %s", out)
+	}
+	if !strings.Contains(out, `"disconnected":true`) {
+		t.Fatalf("rotation line omits disconnected=true; output: %s", out)
+	}
+}
+
+// A connected justray must not be reported as disconnected: that is the case
+// where the active node answered but its traffic to Telegram broke, and it is
+// the one the node matching exists to get right.
+func TestRotatorDoesNotReportDisconnectedWhileConnected(t *testing.T) {
+	runner := &fakeRunner{
+		subs: subFixture(),
+		status: Status{
+			Connected: true,
+			Node:      "Sweden",
+			// Must match a node in the fixture, since the active node is
+			// identified by server and port.
+			Server: "govpoel.ggisopi.su",
+			Port:   443,
+		},
+	}
+	cause := errors.New("probe read: unexpected EOF")
+	r := newTestRotator(t, runner, func(context.Context) error { return cause })
+	r.cfg.FailureThreshold = 1
+	r.cfg.Cooldown = time.Hour
+
+	var logs lockedBuffer
+	prevLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = prevLogger })
+
+	runFor(t, r, 100*time.Millisecond)
+
+	out := logs.String()
+	if !strings.Contains(out, "Rotating justray to node") {
+		t.Fatalf("no rotation was logged; output: %s", out)
+	}
+	if !strings.Contains(out, `"disconnected":false`) {
+		t.Fatalf("connected justray reported as disconnected; output: %s", out)
+	}
+	// The active node is reported by ID, so this also proves the server and
+	// port in the status were matched to the right node rather than to nothing.
+	if !strings.Contains(out, `"previous":"se1"`) {
+		t.Fatalf("rotation line omits the active node; output: %s", out)
 	}
 }

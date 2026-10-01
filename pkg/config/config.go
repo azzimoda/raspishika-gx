@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/pkg/database"
@@ -86,6 +87,20 @@ const (
 	KeyScheduleTemplateDarkFile = "schedule_template_dark_file"
 )
 
+// dockerEnvPath is where Docker leaves a marker file in the container. It is a
+// variable so tests can point it at a temporary file.
+var dockerEnvPath = "/.dockerenv"
+
+// runningInContainer reports whether the process looks containerized, where the
+// configuration is injected by the environment. Podman sets $container instead
+// of creating the marker file.
+func runningInContainer() bool {
+	if _, err := os.Stat(dockerEnvPath); err == nil {
+		return true
+	}
+	return os.Getenv("container") != ""
+}
+
 func Init() {
 	// Defaults
 	viper.SetDefault(KeyLogLevel, "trace")
@@ -161,7 +176,14 @@ func Init() {
 	viper.SetDefault(KeyVKAPIVersion, "5.199")
 
 	// Environment variables
-	if err := godotenv.Load(); err != nil {
+	//
+	// The load itself stays unconditional: the justray rotator runs on the host
+	// out of the repo directory and needs .env to find its settings. Only the
+	// warning is conditional. In a container the configuration comes from
+	// compose's `environment:`, so a missing .env is expected rather than
+	// misconfiguration, and warning on every start was noise that also broke
+	// `docker compose logs | grep -i error` as a smoke check.
+	if err := godotenv.Load(); err != nil && !runningInContainer() {
 		log.Warn().Err(err).Msg(".env file not found")
 	}
 	viper.AutomaticEnv()

@@ -71,6 +71,10 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 
 	mainBot := botservice.NewBotService(
 		func(p string, onActivity func()) (*bot.Bot, error) {
+			// The pool only logs its choice at debug level, and the free-proxy
+			// list keeps being re-probed even while justray wins, so "which proxy
+			// am I actually on" was unanswerable from a production log.
+			log.Info().Str("proxy", p).Msg("Telegram bot using proxy")
 			services.ProxyFailTracker.SetActive(p)
 			return mainbot.New(services, p, appReporter, onActivity)
 		},
@@ -94,6 +98,7 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 
 	adminReporterBot := botservice.NewBotService(
 		func(p string, _ func()) (*bot.Bot, error) {
+			log.Info().Str("proxy", p).Msg("Admin reporter using proxy")
 			httpClient, err := proxyutil.NewHTTPProxyClient(p)
 			if err != nil {
 				return nil, err
