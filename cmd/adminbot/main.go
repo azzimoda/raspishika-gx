@@ -28,7 +28,6 @@ import (
 const shutdownTimeout = 30 * time.Second
 
 func main() {
-
 	config.Init()
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
 
@@ -67,7 +66,11 @@ func main() {
 		func(proxy string, onActivity func()) (*bot.Bot, error) {
 			log.Info().Str("proxy", proxy).Msg("Admin reporter using proxy")
 			adminBot, err = adminbot.New(services, proxy, appReporter, jobs, onActivity)
-			return adminBot, err
+			if err != nil {
+				return nil, err
+			}
+			appReporter.Reporter = reporter.NewReporter(adminBot, adminID)
+			return adminBot, nil
 		},
 		services.Proxy,
 	)
@@ -98,7 +101,6 @@ func main() {
 // run starts the bot service, waits for the shutdown signal, then stops the
 // bot. Returns an error when the bot goroutine fails.
 func run(botService *botservice.BotService, ctx context.Context, cancel context.CancelFunc) error {
-
 	if err := botService.HealthCheck(); err != nil {
 		return fmt.Errorf("bot health check failed: %w", err)
 	}
