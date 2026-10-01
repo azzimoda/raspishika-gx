@@ -65,6 +65,7 @@ func main() {
 	var appReporter *app.AppReporter
 	botService := botservice.NewBotService(
 		func(proxy string, onActivity func()) (*bot.Bot, error) {
+			log.Info().Str("proxy", proxy).Msg("Admin reporter using proxy")
 			adminBot, err = adminbot.New(services, proxy, appReporter, jobs, onActivity)
 			return adminBot, err
 		},

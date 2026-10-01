@@ -266,7 +266,8 @@ docker compose ps         # убедиться, что migrate завершил�
 
    Ожидается в каждом процессе строка с `proxy=host.docker.internal:10808`:
    `Telegram bot using proxy` — основной бот, `Admin reporter using proxy` —
-   админ-бот (он поднимается и в `bot`, и в `vkbot`).
+   админ-бот (он поднимается во всех трёх: `bot`, `vkbot` и отдельный
+   `adminbot`).
 
    **Не считать проблемой `WRN Pool proxy dropped error="proxy unavailable"`.**
    `go-tg-proxy` при каждой ревалидации тёплого пула проверяет его целиком и
