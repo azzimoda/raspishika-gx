@@ -36,6 +36,17 @@ const (
 	PlatformVK       Platform = "vk"
 )
 
+func (p Platform) Label() string {
+	switch p {
+	case PlatformTelegram:
+		return "Telegram"
+	case PlatformVK:
+		return "VK"
+	default:
+		return string(p)
+	}
+}
+
 const (
 	ChatStateDefault          ChatState = "default"
 	ChatStateSelectingGroup   ChatState = "selecting_group"

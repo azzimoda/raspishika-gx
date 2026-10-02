@@ -60,6 +60,8 @@ type ChatRepository interface {
 	GetChatCountByDepartment(context.Context) ([]NameCount, error)
 	// GetChatsByAccessLevel returns the number of chats per access level.
 	GetChatsByAccessLevel(context.Context) (map[model.ChatAccessLevel]int, error)
+	// GetChatCountByPlatform returns the number of chats per platform.
+	GetChatCountByPlatform(context.Context) (map[model.Platform]int, error)
 	// GetTopGroupsByChatCount returns the configured groups with the most chats.
 	GetTopGroupsByChatCount(ctx context.Context, limit int) ([]NameCount, error)
 	// CountPrivateChatsWithConfiguredGroup returns the number of private chats
@@ -595,6 +597,29 @@ func (r *chatRepository) GetChatsByAccessLevel(ctx context.Context) (map[model.C
 	m := make(map[model.ChatAccessLevel]int, len(result))
 	for _, row := range result {
 		m[row.Access] = row.Count
+	}
+	return m, nil
+}
+
+func (r *chatRepository) GetChatCountByPlatform(ctx context.Context) (map[model.Platform]int, error) {
+	const query = `
+		SELECT platform, count(*) AS count FROM chats
+		%s
+		GROUP BY platform
+		ORDER BY platform
+	`
+	var result []struct {
+		Platform model.Platform
+		Count    int
+	}
+	q, args := r.platformScoped(query, "")
+	err := r.db.WithContext(ctx).Raw(q, args...).Scan(&result).Error
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[model.Platform]int, len(result))
+	for _, row := range result {
+		m[row.Platform] = row.Count
 	}
 	return m, nil
 }

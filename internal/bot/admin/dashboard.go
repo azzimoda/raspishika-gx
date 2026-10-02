@@ -95,6 +95,12 @@ func buildGeneralSection(general *service.GeneralStatsData) []models.InputRichBl
 		blockParagraph(textLabelValue("New registered", fmt.Sprintf("%d", general.ChatsNew))),
 		blockParagraph(textLabelValue("DAU", fmt.Sprintf("%d", general.DistinctChats))),
 	)
+	if len(general.ChatsByPlatform) > 0 {
+		blocks = append(blocks, blockDetails(
+			"Chats by platform", false,
+			blockTable([]string{"Platform", "Chats"}, platformRows(general.ChatsByPlatform), true, false),
+		))
+	}
 	if len(general.Departments) > 0 {
 		blocks = append(blocks, blockDetails(
 			fmt.Sprintf("Chats by department (%d)", len(general.Departments)), false,
@@ -309,6 +315,17 @@ func accessRows(access map[model.ChatAccessLevel]int) [][]string {
 	out := make([][]string, 0, len(levels))
 	for _, level := range levels {
 		out = append(out, []string{accessLevelLabel(level), fmt.Sprintf("%d", access[level])})
+	}
+	return out
+}
+
+func platformRows(platforms map[model.Platform]int) [][]string {
+	keys := []model.Platform{model.PlatformTelegram, model.PlatformVK}
+	out := make([][]string, 0, len(keys))
+	for _, key := range keys {
+		if count, ok := platforms[key]; ok {
+			out = append(out, []string{key.Label(), fmt.Sprintf("%d", count)})
+		}
 	}
 	return out
 }

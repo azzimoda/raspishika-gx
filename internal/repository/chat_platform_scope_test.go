@@ -150,6 +150,14 @@ func TestRawQueriesRespectPlatformScope(t *testing.T) {
 			}
 			return total, err
 		}},
+		{"GetChatCountByPlatform", func(r ChatRepository) (int, error) {
+			m, err := r.GetChatCountByPlatform(ctx)
+			total := 0
+			for _, count := range m {
+				total += count
+			}
+			return total, err
+		}},
 		{"GetTopGroupsByChatCount", func(r ChatRepository) (int, error) {
 			rows, err := r.GetTopGroupsByChatCount(ctx, 100)
 			total := 0

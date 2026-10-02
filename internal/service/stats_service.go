@@ -72,6 +72,10 @@ func (s *StatsService) GetChatStats(ctx context.Context, start, end time.Time) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chats by access level: %w", err)
 	}
+	chatsByPlatform, err := s.chatRepo.GetChatCountByPlatform(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chats by platform: %w", err)
+	}
 	topGroups, err := s.chatRepo.GetTopGroupsByChatCount(ctx, topGroupsLimit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get top groups by chat count: %w", err)
@@ -90,6 +94,7 @@ func (s *StatsService) GetChatStats(ctx context.Context, start, end time.Time) (
 		Departments:     chatsByDepartment,
 		TopGroups:       topGroups,
 		ChatsByAccess:   chatsByAccess,
+		ChatsByPlatform: chatsByPlatform,
 	}
 	return stats, nil
 }
@@ -110,6 +115,7 @@ type ChatStatsData struct {
 	Departments     []repository.NameCount        `json:"departments"`
 	TopGroups       []repository.NameCount        `json:"top_groups"`
 	ChatsByAccess   map[model.ChatAccessLevel]int `json:"chats_by_access"`
+	ChatsByPlatform map[model.Platform]int        `json:"chats_by_platform"`
 }
 
 func (s *StatsService) GetConfigStats(ctx context.Context) (*ConfigStatsData, error) {
