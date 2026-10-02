@@ -104,7 +104,7 @@ jobs:
           script: |
             set -eu
             cd ~/raspishika-gx
-            git pull
+            git pull --rebase
             # Точечно обновляем только IMAGE_TAG, не трогая секреты в .env.
             touch .env
             sed -i '/^IMAGE_TAG=/d' .env

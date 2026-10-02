@@ -317,8 +317,8 @@ func TestRetryTransientNoSleepAfterLastAttempt(t *testing.T) {
 	if calls != sendRetryAttempts {
 		t.Fatalf("upload calls = %d, want %d", calls, sendRetryAttempts)
 	}
-	if want := 3 * time.Second; elapsed > want+500*time.Millisecond {
-		t.Fatalf("exhausted retries took %v, want at most %v (1s + 2s of backoff)", elapsed, want)
+	if want := (sendRetryAttempts - 1) * time.Second; elapsed > want+500*time.Millisecond {
+		t.Fatalf("exhausted retries took %v, want at most %v", elapsed, want)
 	}
 }
 

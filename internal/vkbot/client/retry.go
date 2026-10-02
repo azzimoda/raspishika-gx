@@ -12,7 +12,7 @@ import (
 // sendRetryAttempts bounds retries of a photo upload+send. Upload failures are
 // usually transient VK network/API errors (EOF, flood control), so a short
 // bounded retry is enough; permanent errors fail immediately.
-const sendRetryAttempts = 3
+const sendRetryAttempts = 5
 
 // retryTransient runs upload until it succeeds, retrying transient errors with
 // increasing backoff. Non-transient errors (forbidden, fatal API codes, context
@@ -25,7 +25,7 @@ func retryTransient(ctx context.Context, upload func() error) error {
 			return nil
 		}
 		lastErr = err
-		if !retryableError(ctx, err) {
+		if !isRetryableError(ctx, err) {
 			return err
 		}
 		if attempt == sendRetryAttempts-1 {
@@ -36,23 +36,24 @@ func retryTransient(ctx context.Context, upload func() error) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Duration(attempt+1) * time.Second):
+		case <-time.After(1 * time.Second):
 		}
 	}
 	return lastErr
 }
 
-// retryableError reports whether a photo upload/send failure is worth retrying.
+// isRetryableError reports whether a photo upload/send failure is worth retrying.
 // Upstream network failures and most VK API codes (flood control, temporary
 // limits) are transient; forbidden and fatal-init errors never recover.
-func retryableError(ctx context.Context, err error) bool {
+func isRetryableError(ctx context.Context, err error) bool {
 	if err == nil || ctx.Err() != nil {
 		return false
 	}
 	var apiErr *api.Error
 	if errors.As(err, &apiErr) {
 		switch int(apiErr.Code) {
-		case 5, 15, 27, 100, 900, 901, 902, 917:
+		case 5, 15, 27, 900, 901, 902, 917:
+			log.Debug().Err(err).Int("code", int(apiErr.Code)).Msg("Error is not retryable")
 			return false
 		}
 	}
