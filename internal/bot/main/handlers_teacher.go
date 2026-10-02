@@ -213,6 +213,10 @@ func (h *handler) sendTeacherSchedule(
 	}
 	log.Trace().Msg("Prepared schedule image")
 
+	if err := botutil.SendScheduleLabel(ctx, b, model.ChatID(message.Chat.ID), message.MessageThreadID, chat, conf); err != nil {
+		addHandlerCtxErr(ctx, err)
+	}
+
 	return botutil.SendWeekSchedule(
 		ctx, b, message.MessageThreadID, chat, conf, schedule.Days, imageFilename, imageData,
 		botutil.TeacherSchedulePageURL(ctx, h.Schedule, teacher), schedule.IsOld)

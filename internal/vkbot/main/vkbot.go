@@ -16,7 +16,7 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/service"
-	"github.com/azzimoda/raspishika-gx/internal/vkbot/client"
+	vkclient "github.com/azzimoda/raspishika-gx/internal/vkbot/client"
 	vkbotutil "github.com/azzimoda/raspishika-gx/internal/vkbot/util"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/rs/zerolog/log"
@@ -109,9 +109,8 @@ const helpText = `Расписание во ВКонтакте:
 
 func mainKeyboard() *vkbotutil.Keyboard {
 	return &vkbotutil.Keyboard{Buttons: [][]vkbotutil.Button{
-		{vkbotutil.TextButton("Сегодня", "today"), vkbotutil.TextButton("Завтра", "tomorrow")},
-		{vkbotutil.TextButton("Неделя", "week"), vkbotutil.TextButton("Преподаватель", "teacher")},
-		{vkbotutil.TextButton("Настройки", "settings"), vkbotutil.TextButton("Помощь", "help")},
+		{vkbotutil.TextButton("Моё расписание", "week")},
+		{vkbotutil.TextButton("Настройки", "settings"), vkbotutil.TextButton("Преподаватель", "teacher")},
 	}}
 }
 
@@ -414,7 +413,8 @@ func parseCommand(msg vkclient.Message) (command, arg string, recognized bool) {
 	command = strings.ToLower(strings.TrimPrefix(command, "/"))
 	aliases := map[string]string{
 		"начать": "start", "начало": "start", "помощь": "help", "сегодня": "today",
-		"завтра": "tomorrow", "неделя": "week", "преподаватель": "teacher",
+		"завтра": "tomorrow", "неделя": "week", "расписание": "week",
+		"моё расписание": "week", "мое расписание": "week", "преподаватель": "teacher",
 		"настройки": "settings", "отмена": "cancel",
 	}
 	// no-arg aliases must consume the whole message, so natural-language

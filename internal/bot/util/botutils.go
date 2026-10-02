@@ -232,14 +232,26 @@ func MainMenuMarkup(isPrivate bool) models.ReplyMarkup {
 	if isPrivate {
 		return models.ReplyKeyboardMarkup{
 			Keyboard: [][]models.KeyboardButton{
-				{{Text: "Неделя"}},
-				{{Text: "Сегодня"}, {Text: "Завтра"}, {Text: "Преподаватель"}},
+				{{Text: "Преподаватель"}, {Text: "Моё расписание"}},
 			},
 			ResizeKeyboard: true,
 		}
 	} else {
 		return models.ReplyKeyboardRemove{RemoveKeyboard: true}
 	}
+}
+
+// SendScheduleLabel sends the schedule header message (group/teacher name)
+// with the main menu reply markup before the actual schedule image or day view.
+func SendScheduleLabel(ctx context.Context, b *bot.Bot, chatID model.ChatID, threadID int, chat *model.Chat, conf model.ScheduleConfig) error {
+	_, err := SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
+		ChatID:          int64(chatID),
+		MessageThreadID: threadID,
+		ParseMode:       models.ParseModeHTML,
+		Text:            conf.FormatHTML(),
+		ReplyMarkup:     MainMenuMarkup(chat.IsPrivate()),
+	})
+	return err
 }
 
 func sendSchedulePhoto(

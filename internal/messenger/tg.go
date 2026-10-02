@@ -104,6 +104,9 @@ func (t *Telegram) SendMessagePeer(ctx context.Context, peerID int64, text strin
 		if markup, ok := scheduleMarkupFromOpts(opts); ok {
 			params.ReplyMarkup = markup
 		}
+		if replyMarkup, ok := replyMarkupFromOpts(opts); ok {
+			params.ReplyMarkup = replyMarkup
+		}
 		msg, err := b.SendMessage(ctx, params)
 		if err != nil {
 			return 0, err
@@ -140,6 +143,16 @@ func scheduleMarkupFromOpts(opts []SendOptions) (models.InlineKeyboardMarkup, bo
 		}
 	}
 	return models.InlineKeyboardMarkup{}, false
+}
+
+func replyMarkupFromOpts(opts []SendOptions) (models.ReplyMarkup, bool) {
+	for _, o := range opts {
+		if o.ReplyMarkup != nil {
+			rm, ok := o.ReplyMarkup.(models.ReplyMarkup)
+			return rm, ok
+		}
+	}
+	return nil, false
 }
 
 // scheduleMarkup renders ScheduleButtons as the same inline keyboard used by

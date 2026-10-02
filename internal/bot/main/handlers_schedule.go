@@ -16,7 +16,6 @@ import (
 )
 
 func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.Update) {
-
 	log.Debug().Msg("Handling command week...")
 
 	threadID := update.Message.MessageThreadID
@@ -95,6 +94,10 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 	}
 	log.Trace().Msg("Prepared schedule image")
 
+	if err := botutil.SendScheduleLabel(ctx, b, chat.PeerID, threadID, chat, conf); err != nil {
+		addHandlerCtxErr(ctx, err)
+	}
+
 	err = botutil.SendWeekSchedule(ctx, b, threadID, chat, conf, schedule.Days, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), schedule.IsOld)
 	addHandlerCtxErr(ctx, err)
 
@@ -102,7 +105,6 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 }
 
 func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *models.Update) {
-
 	log.Debug().Msg("Handling command tomorrow...")
 
 	chatID := update.Message.Chat.ID
@@ -172,13 +174,17 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 		idx = 0
 	}
 	text := formatDayHTML(conf.Name(), tomorrow)
-	inlineMarkup := dayMarkup(conf, schedule.Days, idx, botutil.SchedulePageURL(conf, nil))
+
+	if err := botutil.SendScheduleLabel(ctx, b, chat.PeerID, threadID, chat, conf); err != nil {
+		addHandlerCtxErr(ctx, err)
+	}
+
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chat.PeerID,
 		MessageThreadID: threadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            text,
-		ReplyMarkup:     inlineMarkup,
+		ReplyMarkup:     dayMarkup(conf, schedule.Days, idx, botutil.SchedulePageURL(conf, nil)),
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -186,7 +192,6 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 }
 
 func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models.Update) {
-
 	log.Debug().Msg("Handling command today...")
 
 	chatID := update.Message.Chat.ID
@@ -232,7 +237,10 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 
 	// If today is Sunday, send a special message
 	if time.Now().Weekday() == time.Sunday {
-		_, err := botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
+		if err := botutil.SendScheduleLabel(ctx, b, model.ChatID(chatID), threadID, chat, conf); err != nil {
+			addHandlerCtxErr(ctx, err)
+		}
+		_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 			ChatID:          chatID,
 			MessageThreadID: threadID,
 			Text:            "Сегодня воскресенье, отдыхайте!",
@@ -266,6 +274,11 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 	today := schedule.Today()
 
 	text := formatDayDynamicHTML(conf.Name(), today, time.Now())
+
+	if err := botutil.SendScheduleLabel(ctx, b, model.ChatID(chatID), threadID, chat, conf); err != nil {
+		addHandlerCtxErr(ctx, err)
+	}
+
 	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
@@ -279,7 +292,6 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 }
 
 func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *models.Update) {
-
 	log.Debug().Msg("Handling quick group...")
 
 	chatID := update.Message.Chat.ID
@@ -371,6 +383,10 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 		return
 	}
 
+	if err := botutil.SendScheduleLabel(ctx, b, chat.PeerID, threadID, chat, conf); err != nil {
+		addHandlerCtxErr(ctx, err)
+	}
+
 	err = botutil.SendWeekSchedule(ctx, b, threadID, chat, conf, schedule.Days, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), schedule.IsOld)
 	addHandlerCtxErr(ctx, err)
 
@@ -378,13 +394,11 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 }
 
 func getCtxChat(ctx context.Context) (*model.Chat, bool) {
-
 	chat, ok := ctx.Value(keyChat).(*model.Chat)
 	return chat, ok
 }
 
 func sendVacationAnswer(ctx context.Context, b *bot.Bot, update *models.Update, isConfig bool) {
-
 	t := time.Now()
 
 	const configVacationText = "Не могу настроить группу во время каникул, подождите до начала семестра"
@@ -539,7 +553,6 @@ func formatDayHTML(name string, day model.ScheduleDay) string {
 	return text
 }
 func formatDayDynamicHTML(name string, day model.ScheduleDay, t time.Time) string {
-
 	text := fmt.Sprintf("📅 %s — %s, %s%s: ", name, day.Weekday, formatDayDate(day), dayMarker(day))
 
 	if kind := day.CommonKind(); kind != "" {

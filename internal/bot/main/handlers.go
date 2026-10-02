@@ -9,14 +9,13 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v5"
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
-	"github.com/rs/zerolog/log"
-
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
+	"github.com/rs/zerolog/log"
 )
 
 var ErrNoChatContext error = errors.New("failed to get chat from context")
@@ -31,7 +30,6 @@ type handler struct {
 }
 
 func (h *handler) registerHandlers(b *bot.Bot) {
-
 	// Commands
 	{
 		registerCommandHandler(b, "start", h.handleCmdStart, h.checkRegularAccess)
@@ -47,6 +45,8 @@ func (h *handler) registerHandlers(b *bot.Bot) {
 
 	// Text commands
 	{
+		b.RegisterHandlerRegexp(bot.HandlerTypeMessageText, regexp.MustCompile(`(?i)^(мо[ёе]\s+)расписание$`),
+			h.handleCmdWeek, h.checkRegularAccess, h.ensureGroupConfigured)
 		registerTextHandler(b, "неделя", h.handleCmdWeek, h.checkRegularAccess, h.ensureGroupConfigured)
 		registerTextHandler(b, "завтра", h.handleCmdTomorrow, h.checkRegularAccess, h.ensureGroupConfigured)
 		registerTextHandler(b, "сегодня", h.handleCmdToday, h.checkRegularAccess, h.ensureGroupConfigured)

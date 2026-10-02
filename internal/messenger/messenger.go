@@ -16,6 +16,10 @@ type SendOptions struct {
 	// maps it to its native buttons (a Telegram inline keyboard, a VK keyboard
 	// or a plain-text approximation).
 	Buttons *ScheduleButtons
+	// ReplyMarkup, when set, asks the adapter to attach a reply keyboard to
+	// the message. For Telegram this is a models.ReplyMarkup; other platforms
+	// ignore the field.
+	ReplyMarkup interface{}
 }
 
 // ScheduleButtons describes schedule-navigation buttons in a

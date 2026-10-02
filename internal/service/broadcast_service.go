@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
+	"github.com/azzimoda/raspishika-gx/internal/bot/util"
 	"github.com/azzimoda/raspishika-gx/internal/messenger"
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
@@ -334,6 +335,12 @@ func (s *BroadcastService) sendDaily(
 				if chat == nil || chat.DarkMode != img.schedule.Config.IsDark {
 					continue
 				}
+				label := scheduleLabel(schedule)
+				if _, sendErr := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), label, messenger.SendOptions{
+					ReplyMarkup: botutil.MainMenuMarkup(true),
+				}); sendErr != nil {
+					errs = append(errs, sendErr)
+				}
 				err = s.sendSchedule(ctx, chat, img)
 			}
 			s.recordSend(ctx, taskID, chat, err)
@@ -343,6 +350,17 @@ func (s *BroadcastService) sendDaily(
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func scheduleLabel(schedule *model.ScheduleData) string {
+	switch {
+	case schedule.Config.Group != nil:
+		return "Расписание группы " + string(schedule.Config.Group.GroupName)
+	case schedule.Config.Teacher != nil:
+		return "Расписание преподавателя " + schedule.Config.Teacher.TeacherID
+	default:
+		return "Расписание"
+	}
 }
 
 func (s *BroadcastService) schedulePairNotification(ctx context.Context) error {
