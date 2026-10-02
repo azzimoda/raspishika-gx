@@ -149,8 +149,8 @@ func Init() {
 	viper.SetDefault(KeyPairNotificationTTL, 90*time.Minute)
 	viper.SetDefault(KeyUpdateMonitorInterval, 25*time.Minute)
 
-	viper.SetDefault(KeyScheduleTemplateFile, "templates/light.html")
-	viper.SetDefault(KeyScheduleTemplateDarkFile, "templates/dark.html")
+	viper.SetDefault(KeyScheduleTemplateFile, "templates/schedule.html")
+	viper.SetDefault(KeyScheduleTemplateDarkFile, "templates/schedule.html")
 
 	viper.SetDefault(KeyProxySourceURL, "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json")
 	viper.SetDefault(KeyJustrayProxyAddr, "127.0.0.1:10808")

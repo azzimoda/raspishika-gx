@@ -68,7 +68,7 @@ func TestSchedule_HTML(t *testing.T) {
 		},
 	}
 
-	html := s.HTML("HEADER\nTABLE_HEAD\nTABLE_BODY\nTIMESTAMP")
+	html := s.HTML("HEADER\nTABLE_HEAD_ROW1\nTABLE_HEAD_ROW2\nTABLE_BODY\nTIMESTAMP")
 
 	if !strings.Contains(html, "Расписание группы ИСПт-22-(9)-2 — Отделение") {
 		t.Errorf("HTML missing group header: %s", html)
@@ -82,6 +82,9 @@ func TestSchedule_HTML(t *testing.T) {
 	if !strings.Contains(html, `<td class="empty"><span></span></td>`) {
 		t.Errorf("HTML missing empty pair cell: %s", html)
 	}
+	if !strings.Contains(html, "нечетная") || !strings.Contains(html, "четная") {
+		t.Errorf("HTML missing parity row: %s", html)
+	}
 }
 
 func TestSchedule_HTML_Teacher(t *testing.T) {
@@ -93,6 +96,56 @@ func TestSchedule_HTML_Teacher(t *testing.T) {
 	html := s.HTML("HEADER TABLE_BODY")
 	if !strings.Contains(html, "Расписание преподавателя — Иванов") {
 		t.Errorf("HTML missing teacher header: %s", html)
+	}
+}
+
+func TestSchedule_HTML_ParityColspan(t *testing.T) {
+	s := &ScheduleData{
+		Config: ScheduleConfig{Group: &Group{GroupName: "ИСПт-22", DepartmentName: "Отделение"}},
+		Days: []ScheduleDay{
+			{Date: "01.09.2026", Weekday: "вторник", WeekKind: "нечетная",
+				Pairs: []Pair{testPair(1, PairKindSubject, "Математика", "8:00", "9:35")}},
+			{Date: "02.09.2026", Weekday: "среда", WeekKind: "нечетная",
+				Pairs: []Pair{}},
+			{Date: "03.09.2026", Weekday: "четверг", WeekKind: "нечетная",
+				Pairs: []Pair{}},
+			{Date: "04.09.2026", Weekday: "пятница", WeekKind: "четная",
+				Pairs: []Pair{}},
+			{Date: "05.09.2026", Weekday: "суббота", WeekKind: "четная",
+				Pairs: []Pair{}},
+			{Date: "07.09.2026", Weekday: "понедельник", WeekKind: "нечетная",
+				Pairs: []Pair{testPair(1, PairKindSubject, "Физика", "8:00", "9:35")}},
+		},
+	}
+
+	html := s.HTML("HEADER\nTABLE_HEAD_ROW1\nTABLE_HEAD_ROW2\nTABLE_BODY\nTIMESTAMP")
+
+	if !strings.Contains(html, `<th>01.09.2026<br>вторник</th>`) {
+		t.Errorf("HTML missing day header without colspan: %s", html)
+	}
+	if !strings.Contains(html, `<th>02.09.2026<br>среда</th>`) {
+		t.Errorf("HTML missing second day header without colspan: %s", html)
+	}
+	if !strings.Contains(html, `<th>03.09.2026<br>четверг</th>`) {
+		t.Errorf("HTML missing third day header without colspan: %s", html)
+	}
+	if !strings.Contains(html, `class="week_kind" colspan="3">нечетная</th>`) {
+		t.Errorf("HTML missing parity row with colspan=3 and week_kind class: %s", html)
+	}
+	if !strings.Contains(html, `<th>04.09.2026<br>пятница</th>`) {
+		t.Errorf("HTML missing четная day 1 header without colspan: %s", html)
+	}
+	if !strings.Contains(html, `<th>05.09.2026<br>суббота</th>`) {
+		t.Errorf("HTML missing четная day 2 header without colspan: %s", html)
+	}
+	if !strings.Contains(html, `class="week_kind" colspan="2">четная</th>`) {
+		t.Errorf("HTML missing parity row with colspan=2 and week_kind class: %s", html)
+	}
+	if !strings.Contains(html, `<th class="week_separator">07.09.2026<br>понедельник</th>`) {
+		t.Errorf("HTML missing week_separator on Monday after Saturday: %s", html)
+	}
+	if !strings.Contains(html, `<td class='subject week_separator'>`) {
+		t.Errorf("HTML missing week_separator on Monday body cell: %s", html)
 	}
 }
 

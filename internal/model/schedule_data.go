@@ -76,14 +76,48 @@ func (s *ScheduleData) HTML(template string) string {
 		header = "Расписание"
 	}
 
-	var tableHead strings.Builder
+	var tableHeadRow1 strings.Builder
+	var tableHeadRow2 strings.Builder
+
+	type parityGroup struct {
+		weekKind string
+		days     []ScheduleDay
+	}
+
+	var groups []parityGroup
 	for _, day := range s.Days {
-		fmt.Fprintf(&tableHead, "<th>%s<br>%s<br>%s</th>\n", day.Date, day.Weekday, day.WeekKind)
+		if len(groups) > 0 && groups[len(groups)-1].weekKind == day.WeekKind {
+			groups[len(groups)-1].days = append(groups[len(groups)-1].days, day)
+		} else {
+			groups = append(groups, parityGroup{weekKind: day.WeekKind, days: []ScheduleDay{day}})
+		}
+	}
+
+	prevWeekday := ""
+	for i, g := range groups {
+		for _, day := range g.days {
+			cls := ""
+			if prevWeekday == "суббота" {
+				cls = ` class="week_separator"`
+			}
+			fmt.Fprintf(&tableHeadRow1, "<th%s>%s<br>%s</th>\n", cls, day.Date, day.Weekday)
+			prevWeekday = day.Weekday
+		}
+		colspanAttr := ""
+		if len(g.days) > 1 {
+			colspanAttr = fmt.Sprintf(" colspan=\"%d\"", len(g.days))
+		}
+		cssClass := ""
+		if i%2 == 1 {
+			cssClass = ` class="week_separator"`
+		}
+		fmt.Fprintf(&tableHeadRow2, "<th%s%s>%s</th>\n", cssClass, colspanAttr, g.weekKind)
 	}
 
 	html := strings.NewReplacer(
 		"HEADER", header,
-		"TABLE_HEAD", tableHead.String(),
+		"TABLE_HEAD_ROW1", tableHeadRow1.String(),
+		"TABLE_HEAD_ROW2", tableHeadRow2.String(),
 		"TABLE_BODY", s.generateTableBody(),
 		"TIMESTAMP", time.Now().Format(time.RFC3339),
 	).Replace(template)
@@ -121,6 +155,7 @@ func (s *ScheduleData) generateTableBody() string {
 }
 func (s *ScheduleData) generateRowPairs(pairNum int) string {
 	var rowPairs strings.Builder
+	prevWeekday := ""
 
 	for _, day := range s.Days {
 		var pair *Pair
@@ -131,15 +166,26 @@ func (s *ScheduleData) generateRowPairs(pairNum int) string {
 			}
 		}
 
-		if pair == nil {
-			fmt.Fprintf(&rowPairs, `<td class="%s"><span></span></td>`, PairKindEmpty)
-			rowPairs.WriteString("\n")
-			continue
+		cssClass := ""
+		if pair != nil {
+			cssClass = string(pair.Kind)
+			if pair.Replaced {
+				cssClass += " replaced"
+			}
+		} else {
+			cssClass = string(PairKindEmpty)
+		}
+		log.Trace().Str("prevWeekday", prevWeekday).Str("weekday", day.Weekday).Send()
+		if prevWeekday == "суббота" {
+			log.Trace().Msg("Week separator placed")
+			cssClass += " week_separator"
 		}
 
-		cssClass := string(pair.Kind)
-		if pair.Replaced {
-			cssClass += " replaced"
+		if pair == nil {
+			fmt.Fprintf(&rowPairs, `<td class="%s"><span></span></td>`, cssClass)
+			rowPairs.WriteString("\n")
+			prevWeekday = day.Weekday
+			continue
 		}
 
 		switch pair.Kind {
@@ -186,6 +232,7 @@ func (s *ScheduleData) generateRowPairs(pairNum int) string {
 			fmt.Fprintf(&rowPairs, `<td class="%s"><span>%s</span></td>`, cssClass, label)
 		}
 		rowPairs.WriteString("\n")
+		prevWeekday = day.Weekday
 	}
 
 	return rowPairs.String()

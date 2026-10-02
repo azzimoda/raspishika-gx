@@ -1,4 +1,4 @@
-dashboard: "Bot dashboard: general + config stats. Window: 7d (relative), 2026-08-20..2026-08-27 (range), 48h@2026-08-20 12:00 (since a moment); default 24h"
+dashboard: "Stats: 7d, 2026-08-20..2026-08-27, 24h@2026-08-20 12:00; default 24h"
 start: Greet the admin
 broadcast: "Mass message to selected chats (audience wizard)"
 help: "Show this help message with detailed metric descriptions"

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/browser"
@@ -290,12 +291,34 @@ func (s *ScheduleService) HealthCheck() error {
 	return nil
 }
 
+var lightCSSVars = `
+            --background: white;
+            --text-color: black;
+            --border-color: gray;
+            --bg-time: #f2f2f2;
+            --bg-replaced: #fae4d7;
+            --bg-event: #fa8072;
+            --bg-iga: #cfffd9;
+            --bg-practice: #c0d5fa;
+            --bg-exam: #f5d0d0;
+            --bg-consultation: #c9dec3;
+            --bg-session: #fdffe0;`
+
+var darkCSSVars = `
+            --background: #2b2b2b;
+            --text-color: white;
+            --border-color: #444;
+            --bg-time: #333333;
+            --bg-replaced: #786c3b;
+            --bg-event: #8b3f3f;
+            --bg-iga: #3e8e41;
+            --bg-practice: #2f80b2;
+            --bg-exam: #663333;
+            --bg-consultation: #3e5943;
+            --bg-session: #444400;`
+
 func getScheduleTemplate(is_dark bool) (string, error) {
-	fileKey := config.KeyScheduleTemplateFile
-	if is_dark {
-		fileKey = config.KeyScheduleTemplateDarkFile
-	}
-	templateFile := viper.GetString(fileKey)
+	templateFile := viper.GetString(config.KeyScheduleTemplateFile)
 	bytes, err := os.ReadFile(templateFile)
 	if err != nil {
 		return "", fmt.Errorf("read schedule template %s: %w", templateFile, err)
@@ -303,7 +326,13 @@ func getScheduleTemplate(is_dark bool) (string, error) {
 	if len(bytes) == 0 {
 		return "", errors.New("schedule template is empty")
 	}
-	return string(bytes), nil
+	tpl := string(bytes)
+	cssVars := lightCSSVars
+	if is_dark {
+		cssVars = darkCSSVars
+	}
+	tpl = strings.Replace(tpl, "CSS_VARS", cssVars, 1)
+	return tpl, nil
 }
 
 func scheduleScreenshotFileName(conf model.ScheduleConfig) string { return conf.ImageKey() + ".png" }
