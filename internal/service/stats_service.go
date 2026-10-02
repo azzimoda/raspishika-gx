@@ -215,6 +215,10 @@ func (s *StatsService) GetLogStats(ctx context.Context, start, end time.Time) (*
 	if err != nil {
 		return nil, err
 	}
+	broadcastMass, err := s.logRepo.CountBroadcastLogsByPeriodAndKind(ctx, model.BMass, start, end)
+	if err != nil {
+		return nil, err
+	}
 
 	requestsActual, err := s.logRepo.CountActualRequests(ctx, start, end)
 	if err != nil {
@@ -270,6 +274,7 @@ func (s *StatsService) GetLogStats(ctx context.Context, start, end time.Time) (*
 		BroadcastDaily:   broadcastDaily,
 		BroadcastPair:    broadcastPair,
 		BroadcastChange:  broadcastChange,
+		BroadcastMass:    broadcastMass,
 
 		RequestsActual:    requestsActual,
 		RequestsPotential: requestsPotential,
@@ -302,6 +307,7 @@ type LogStatsData struct {
 	BroadcastDaily   int
 	BroadcastPair    int
 	BroadcastChange  int
+	BroadcastMass    int
 
 	RequestsActual    int
 	RequestsPotential int

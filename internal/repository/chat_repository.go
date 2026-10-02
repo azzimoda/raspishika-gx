@@ -141,21 +141,32 @@ func (r *chatRepository) platformScoped(query, alias string, conds ...string) (s
 }
 
 // privateChatCond matches private chats within the repository's platform.
-// Telegram group chats are negative, VK group conversations start at
-// ChatPeerOffset, so a positive peer below the offset is private everywhere.
+// Telegram group chats are negative, so every positive Telegram peer ID is
+// private. VK group conversations start at ChatPeerOffset, so a positive
+// peer below the offset is private there. The all-platform (admin/dashboard)
+// case combines both rules.
 func (r *chatRepository) privateChatCond() (string, []any) {
-	return "tg_chat_id > 0 AND tg_chat_id < ?", []any{model.ChatPeerOffset}
+	switch r.platform {
+	case model.PlatformTelegram:
+		return "tg_chat_id > 0", nil
+	case model.PlatformVK:
+		return "tg_chat_id > 0 AND tg_chat_id < ?", []any{model.ChatPeerOffset}
+	default:
+		return "(platform = 'telegram' AND tg_chat_id > 0) OR (platform = 'vk' AND tg_chat_id > 0 AND tg_chat_id < ?)", []any{model.ChatPeerOffset}
+	}
 }
 
 // groupChatCond matches group chats within the repository's platform.
+// Telegram group chats are negative. VK group conversations start at
+// ChatPeerOffset. The all-platform (admin/dashboard) case combines both rules.
 func (r *chatRepository) groupChatCond() (string, []any) {
 	switch r.platform {
-	case model.PlatformVK:
-		return "tg_chat_id >= ?", []any{model.ChatPeerOffset}
 	case model.PlatformTelegram:
 		return "tg_chat_id < 0", nil
+	case model.PlatformVK:
+		return "tg_chat_id >= ?", []any{model.ChatPeerOffset}
 	default:
-		return "tg_chat_id < 0 OR tg_chat_id >= ?", []any{model.ChatPeerOffset}
+		return "(platform = 'telegram' AND tg_chat_id < 0) OR (platform = 'vk' AND tg_chat_id >= ?)", []any{model.ChatPeerOffset}
 	}
 }
 

@@ -35,6 +35,7 @@ type handler struct {
 func (h *handler) registerHandlers(b *bot.Bot) {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommandStartOnly, h.handleCmdStart)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "dashboard", bot.MatchTypeCommandStartOnly, h.handleCmdDashboard)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "help", bot.MatchTypeCommandStartOnly, h.handleCmdHelp)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "broadcast", bot.MatchTypeCommandStartOnly, h.handleCmdBroadcast)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "cancel", bot.MatchTypeCommandStartOnly, h.handleCmdCancel)
 
@@ -113,6 +114,39 @@ func (h *handler) handleCmdStart(ctx context.Context, b *bot.Bot, update *models
 			Debug("gr", group.GroupID).Debug("sid", group.DepartmentID).
 			Msg("Group found") // TODO: Add data about chats with this group.
 	}
+}
+
+func (h *handler) handleCmdHelp(ctx context.Context, b *bot.Bot, update *models.Update) {
+	helpText := `Dashboard metrics help:
+
+Chats
+  Total — all chats (Telegram + VK).
+  Private/Group — Telegram private vs group chats.
+  Activity — active/semi/inactive based on last update.
+  New registered — chats added since bot launch.
+  DAU — distinct chats with at least one update in the period.
+
+Groups
+  Total — unique schedule groups known to the bot.
+
+Updates
+  Total — all update_logs in the period.
+  Success — updates served from cache (cached = true).
+  Latency — average/p95/max handler latency (ms).
+  By kind — breakdown by update kind (message, callback_query, ...).
+
+Broadcast
+  Tasks/Delivered — total broadcast tasks / total delivered logs (includes mass).
+  Delivered — daily/pair/change/mass breakdown.
+  By kind — tasks, groups sent, avg elapsed per kind.
+
+Requests
+  Potential — chats with a group set (schedule is possible).
+  Actual — manual uncached requests + broadcast group requests.
+  Top requested — most requested groups/teachers.
+  By hour — request count per hour of day.`
+
+	b.SendMessage(ctx, &bot.SendMessageParams{ChatID: update.Message.Chat.ID, Text: helpText})
 }
 
 func (h *handler) handleCmdDashboard(ctx context.Context, b *bot.Bot, update *models.Update) {

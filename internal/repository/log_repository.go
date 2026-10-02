@@ -154,11 +154,13 @@ func (r *logRepository) CountBroadcastTaskLogsByPeriod(ctx context.Context, star
 	return int(count), nil
 }
 func (r *logRepository) CountBroadcastLogsByPeriod(ctx context.Context, start, end time.Time) (int, error) {
+	const query = `
+		SELECT COUNT(*)
+		FROM broadcast_logs bl JOIN broadcast_task_logs btl ON bl.broadcast_task_log_id = btl.id
+		WHERE btl.created_at BETWEEN ? AND ?
+	`
 	var count int64
-	if err := r.db.WithContext(ctx).
-		Model(&model.BroadcastLog{}).
-		Where("created_at BETWEEN ? AND ?", start, end).
-		Count(&count).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(query, start, end).Scan(&count).Error; err != nil {
 		return 0, fmt.Errorf("failed to count broadcast logs: %w", err)
 	}
 	return int(count), nil
@@ -181,7 +183,7 @@ func (r *logRepository) CountBroadcastLogsByPeriodAndKind(ctx context.Context, k
 	const query = `
 		SELECT COUNT(*)
 		FROM broadcast_logs bl JOIN broadcast_task_logs btl ON bl.broadcast_task_log_id = btl.id
-		WHERE bl.created_at BETWEEN ? AND ? AND btl.kind = ?
+		WHERE btl.created_at BETWEEN ? AND ? AND btl.kind = ?
 	`
 	var count int64
 	if err := r.db.WithContext(ctx).Raw(query, start, end, kind).Scan(&count).Error; err != nil {

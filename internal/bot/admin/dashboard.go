@@ -20,7 +20,7 @@ func buildDashboard(general *service.GeneralStatsData, config *service.ConfigSta
 	var blocks []models.InputRichBlock
 	blocks = append(blocks, buildGeneralSection(general)...)
 	blocks = append(blocks, blockDivider())
-	blocks = append(blocks, buildConfigSection(config, general.ChatsPrivate, general.ChatsByAccess)...)
+	blocks = append(blocks, buildConfigSection(config, general.ChatsByAccess)...)
 
 	return []models.InputRichBlock{
 		blockHeading("Dashboard", 1),
@@ -133,11 +133,11 @@ func buildGeneralSection(general *service.GeneralStatsData) []models.InputRichBl
 
 	blocks = append(blocks, blockHeading("Broadcast", 2))
 	blocks = append(blocks,
-		blockParagraph(textLabelValue("Tasks/Sends", fmt.Sprintf("%d/%d · Success %d (%s)",
+		blockParagraph(textLabelValue("Tasks/Delivered", fmt.Sprintf("%d/%d · Success %d (%s)",
 			general.BroadcastTasks, general.BroadcastLogs, general.BroadcastSuccess,
 			percent(general.BroadcastLogs, general.BroadcastSuccess)))),
-		blockParagraph(textLabelValue("Delivered", fmt.Sprintf("daily/pair/change %d/%d/%d",
-			general.BroadcastDaily, general.BroadcastPair, general.BroadcastChange))),
+		blockParagraph(textLabelValue("Delivered", fmt.Sprintf("daily/pair/change/mass %d/%d/%d/%d",
+			general.BroadcastDaily, general.BroadcastPair, general.BroadcastChange, general.BroadcastMass))),
 	)
 	if len(general.BroadcastByKind) > 0 {
 		blocks = append(blocks, blockDetails(
@@ -148,10 +148,8 @@ func buildGeneralSection(general *service.GeneralStatsData) []models.InputRichBl
 
 	blocks = append(blocks, blockHeading("Requests", 2))
 	blocks = append(blocks,
-		blockParagraph(textLabelValue("Schedule requests", fmt.Sprintf("%d (%s from cache)",
-			general.ScheduleRequests, percent(general.ScheduleRequests, general.RequestsCached)))),
-		blockParagraph(textLabelValue("Actual/Potential", fmt.Sprintf("%d/%d",
-			general.RequestsActual, general.RequestsPotential))),
+		blockParagraph(textLabelValue("Potential/Actual", fmt.Sprintf("%d/%d",
+			general.RequestsPotential, general.RequestsActual))),
 	)
 	if len(general.TopRequestedSchedules) > 0 {
 		blocks = append(blocks, blockDetails(
@@ -169,7 +167,7 @@ func buildGeneralSection(general *service.GeneralStatsData) []models.InputRichBl
 	return blocks
 }
 
-func buildConfigSection(config *service.ConfigStatsData, privateChatsTotal int, chatsByAccess map[model.ChatAccessLevel]int) []models.InputRichBlock {
+func buildConfigSection(config *service.ConfigStatsData, chatsByAccess map[model.ChatAccessLevel]int) []models.InputRichBlock {
 	var blocks []models.InputRichBlock
 
 	blocks = append(blocks, blockHeading("Settings", 1))
@@ -182,8 +180,6 @@ func buildConfigSection(config *service.ConfigStatsData, privateChatsTotal int, 
 			config.DailyEnabled, config.PairEnabled, config.ChangeEnabled))),
 		blockParagraph(textLabelValue("Dark theme", fmt.Sprintf("%d (%s)",
 			config.DarkEnabled, percent(config.ChatsTotal, config.DarkEnabled)))),
-		blockParagraph(textLabelValue("Onboarded private chats", fmt.Sprintf("%d/%d (%s)",
-			config.PrivateChatsConfigured, privateChatsTotal, percent(privateChatsTotal, config.PrivateChatsConfigured)))),
 	)
 	if len(chatsByAccess) > 0 {
 		blocks = append(blocks, blockDetails(

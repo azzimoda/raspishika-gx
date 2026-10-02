@@ -90,8 +90,8 @@ func TestBuildDashboard(t *testing.T) {
 		LogStatsData: &service.LogStatsData{
 			UpdatesTotal:   100,
 			UpdatesSuccess: 95,
-			BroadcastTasks: 20, BroadcastLogs: 200, BroadcastSuccess: 190,
-			BroadcastDaily: 100, BroadcastPair: 60, BroadcastChange: 40,
+			BroadcastTasks: 20, BroadcastLogs: 220, BroadcastSuccess: 210,
+			BroadcastDaily: 100, BroadcastPair: 60, BroadcastChange: 40, BroadcastMass: 20,
 			RequestsActual: 50, RequestsPotential: 200,
 			ScheduleRequests: 80, RequestsCached: 60, RequestsUncached: 20,
 			DistinctChats:         6,
@@ -107,9 +107,8 @@ func TestBuildDashboard(t *testing.T) {
 	config := &service.ConfigStatsData{
 		ChatsTotal: 10, ConfiguredGroupsTotal: 8, ConfiguredGroupsUnique: 4,
 		DailyEnabled: 8, PairEnabled: 7, ChangeEnabled: 2, DarkEnabled: 2,
-		ChatCountByTime:        []repository.TimeCount{{Time: "08:00", Count: 3}},
-		PrivateChatsConfigured: 7,
-		WatchedGroups:          2,
+		ChatCountByTime: []repository.TimeCount{{Time: "08:00", Count: 3}},
+		WatchedGroups:   2,
 	}
 
 	spec := periodSpec{start: time.Now().Add(-24 * time.Hour), end: time.Now(), isRelative: true}

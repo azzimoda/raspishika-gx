@@ -60,23 +60,26 @@ func openTestPlatformScopeDB(t *testing.T) *gorm.DB {
 func seedPlatformScopeChats(t *testing.T, db *gorm.DB, now time.Time) {
 	t.Helper()
 	rows := [][]any{
-		// id, platform, department, group, access, daily, pair, update
-		{1, "telegram", "ПО", "Б-11(9)1", 0, "09:00", 0, 1},
-		{2, "telegram", "ПО", "Б-11(9)1", 1, "09:00", 0, 0},
-		{3, "telegram", "ПО", "АиЭС-11(9)1", 2, nil, 1, 1},
-		{11, "vk", "ИС", "НГО-11(11)2", 1, "11:00", 0, 1},
-		{12, "vk", "ИС", "НГО-11(11)2", 2, "11:00", 0, 0},
+		// id, tg_chat_id, platform, department, group, access, daily, pair, update
+		{1, 100, "telegram", "ПО", "Б-11(9)1", 0, "09:00", 0, 1},
+		{2, 200, "telegram", "ПО", "Б-11(9)1", 1, "09:00", 0, 0},
+		{3, 300, "telegram", "ПО", "АиЭС-11(9)1", 2, nil, 1, 1},
+		{4, -100, "telegram", "ПО", "Группа-ТГ", 0, nil, 0, 0},
+		{5, 2000000002, "telegram", "ПО", "Большой-ID", 0, nil, 0, 0},
+		{11, 1000000, "vk", "ИС", "НГО-11(11)2", 1, "11:00", 0, 1},
+		{12, 2000000, "vk", "ИС", "НГО-11(11)2", 2, "11:00", 0, 0},
+		{13, 2000000001, "vk", "ИС", "Группа-VK", 1, nil, 0, 0},
 	}
 	for _, r := range rows {
 		var daily any
-		if r[5] != nil {
-			daily = r[5]
+		if r[6] != nil {
+			daily = r[6]
 		}
 		if err := db.Exec(`
-			INSERT INTO chats (id, platform, department, "group", access, daily_sending_time,
+			INSERT INTO chats (id, tg_chat_id, platform, department, "group", access, daily_sending_time,
 				pair_sending, update_notification, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, r[0], r[1], r[2], r[3], r[4], daily, r[6], r[7], now).Error; err != nil {
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, r[0], r[1], r[2], r[3], r[4], r[5], daily, r[7], r[8], now).Error; err != nil {
 			t.Fatalf("failed to insert chat %v: %v", r[0], err)
 		}
 	}
@@ -158,6 +161,9 @@ func TestRawQueriesRespectPlatformScope(t *testing.T) {
 		{"CountAllConfiguredGroups", func(r ChatRepository) (int, error) {
 			return r.CountAllConfiguredGroups(ctx)
 		}},
+		{"CountPricateChats", func(r ChatRepository) (int, error) {
+			return r.CountPricateChats(ctx)
+		}},
 		{"GetWatchedGroupNames", func(r ChatRepository) (int, error) {
 			names, err := r.GetWatchedGroupNames(ctx)
 			return len(names), err
@@ -198,11 +204,11 @@ func TestGetAvgChatPerGroupPlatformScope(t *testing.T) {
 	seedPlatformScopeChats(t, db, time.Now())
 
 	ctx := context.Background()
-	// Telegram: groups of 2 and 1 chats. VK: one group of 2. Both: 2, 1, 2.
+	// Telegram: groups of 3, 1, 1, 1 chats. VK: groups of 2, 1. Both: 6 groups, 8 chats.
 	want := map[model.Platform]float64{
-		model.PlatformTelegram: 1.5,
-		model.PlatformVK:       2,
-		"":                     5.0 / 3.0,
+		model.PlatformTelegram: 1.25,
+		model.PlatformVK:       1.5,
+		"":                     8.0 / 6.0,
 	}
 	for platform, exp := range want {
 		got, err := NewChatRepository(db, platform).GetAvgChatPerGroup(ctx)
