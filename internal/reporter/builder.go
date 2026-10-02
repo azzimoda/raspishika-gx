@@ -181,8 +181,8 @@ type Report struct {
 	Message *models.Message
 }
 
-// RemoveMessage removes the report message from the chat.
-func (r *Report) RemoveMessage() (isDeleted bool, err error) {
+// DeleteMessage removes the report message from the chat.
+func (r *Report) DeleteMessage() (isDeleted bool, err error) {
 
 	isDeleted, err = r.bot.DeleteMessage(context.Background(), &bot.DeleteMessageParams{
 		ChatID:    r.recipientChatID,

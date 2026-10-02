@@ -71,12 +71,17 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 		return
 	}
 
-	msg := report.Message
 	for range 5 {
 		time.Sleep(20 * time.Second)
 
 		if chat, err = h.Chat.GetChatByChatID(context.Background(), chat.PeerID); err == nil && chat.GroupName != nil {
-			b.DeleteMessage(context.Background(), &bot.DeleteMessageParams{ChatID: msg.Chat.ID, MessageID: msg.ID})
+			if deleted, err := report.DeleteMessage(); err != nil {
+				log.Warn().Err(err).Msg("Failed to delete new chat report")
+			} else if deleted {
+				log.Trace().Msg("New chat report deleted")
+			} else {
+				log.Debug().Msg("New chat report not deleted without error")
+			}
 			h.ReportChat(chat).Msgf("Chat configured group %s", *chat.GroupName)
 			break
 		}
