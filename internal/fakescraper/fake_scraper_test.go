@@ -43,6 +43,13 @@ func TestWithCurrentDates(t *testing.T) {
 		if wantDate.Weekday() == time.Sunday {
 			t.Errorf("days[%d] falls on Sunday", i)
 		}
+		wantKind := weekKindForDate(wantDate)
+		if day.WeekKind != wantKind {
+			t.Errorf("days[%d].WeekKind = %q, want %q (ISO week %d)", i, day.WeekKind, wantKind, func() int {
+				_, w := wantDate.ISOWeek()
+				return w
+			}())
+		}
 	}
 }
 

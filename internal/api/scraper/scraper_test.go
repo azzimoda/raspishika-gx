@@ -373,8 +373,8 @@ func TestScrapeScheduleTeacherMergesCells(t *testing.T) {
 		t.Fatalf("ScrapeSchedule() = %+v, want 1 day", got.Days)
 	}
 	day := got.Days[0]
-	if day.Date != "01.09.2026" || day.Weekday != "Понедельник" {
-		t.Errorf("day = %+v, want 01.09.2026 Понедельник", day)
+	if day.Date != "01.09.2026" || day.Weekday != "понедельник" {
+		t.Errorf("day = %+v, want 01.09.2026 понедельник", day)
 	}
 	if len(day.Pairs) != 1 {
 		t.Fatalf("pairs = %+v, want 1 pair", day.Pairs)

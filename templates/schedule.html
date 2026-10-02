@@ -4,17 +4,7 @@
 <head>
     <style>
         * {
-            --background: white;
-            --text-color: black;
-            --border-color: gray;
-            --bg-time: #f2f2f2;
-            --bg-replaced: #fae4d7;
-            --bg-event: #fa8072;
-            --bg-iga: #cfffd9;
-            --bg-practice: #c0d5fa;
-            --bg-exam: #f5d0d0;
-            --bg-consultation: #c9dec3;
-            --bg-session: #fdffe0;
+            CSS_VARS
         }
 
         body {
@@ -31,11 +21,14 @@
             width: 98%;
         }
 
+        th {
+            text-align: center;
+        }
+
         th,
         td {
             border: 1px solid var(--border-color);
             padding: 4px;
-            text-align: left;
             min-height: 3vw;
         }
 
@@ -88,6 +81,14 @@
             background-color: var(--bg-session);
         }
 
+        .week_kind {
+            font-weight: normal;
+        }
+
+        .week_separator {
+            border-left: 3px solid var(--border-color);
+        }
+
         .example {
             border: 1px solid var(--border-color);
             padding: 0.2vw 0.4vw;
@@ -102,7 +103,12 @@
             <tr>
                 <th class="side_column_number">№</th>
                 <th class="side_column_time">Время</th>
-                TABLE_HEAD
+                TABLE_HEAD_ROW1
+            </tr>
+            <tr>
+                <th class="side_column_number"></th>
+                <th class="side_column_time"></th>
+                TABLE_HEAD_ROW2
             </tr>
         </thead>
         <tbody>

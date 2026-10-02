@@ -19,10 +19,6 @@ func FakeSchedule(key string) (model.ScheduleData, bool) {
 	return withCurrentDates(schedule), true
 }
 
-// withCurrentDates realigns the static demo days so the first day of the
-// schedule is the current calendar day, like the real college site serves the
-// current week. Sundays (when the college is closed) are skipped; weekday names
-// and dates are recomputed from the template pairs.
 func withCurrentDates(schedule model.ScheduleData) model.ScheduleData {
 	days := make([]model.ScheduleDay, len(schedule.Days))
 	copy(days, schedule.Days)
@@ -36,6 +32,7 @@ func withCurrentDates(schedule model.ScheduleData) model.ScheduleData {
 	for i := range days {
 		days[i].Date = date.Format("2006-01-02")
 		days[i].Weekday = model.RussianWeekday(date.Weekday())
+		days[i].WeekKind = weekKindForDate(date)
 		date = date.AddDate(0, 0, 1)
 		if date.Weekday() == time.Sunday {
 			date = date.AddDate(0, 0, 1)
@@ -44,6 +41,13 @@ func withCurrentDates(schedule model.ScheduleData) model.ScheduleData {
 
 	schedule.Days = days
 	return schedule
+}
+
+func weekKindForDate(date time.Time) string {
+	if _, week := date.ISOWeek(); week%2 == 1 {
+		return "нечетная"
+	}
+	return "чётная"
 }
 
 func NewFakeScraper() *FakeScraper { return new(FakeScraper) }

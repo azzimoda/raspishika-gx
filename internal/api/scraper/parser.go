@@ -93,8 +93,8 @@ func parseScheduleDay(
 ) model.RawScheduleDay {
 	day := model.RawScheduleDay{
 		Date:     header["date"],
-		WeekDay:  header["weekday"],
-		WeekKind: header["week_kind"],
+		WeekDay:  strings.ToLower(header["weekday"]),
+		WeekKind: strings.ToLower(header["week_kind"]),
 		Pair:     model.Pair{},
 	}
 
