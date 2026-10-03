@@ -70,9 +70,8 @@ func NewVKApp(scraperAPI service.APIClient) (*VKApp, error) {
 		cancel()
 		return nil, fmt.Errorf("failed to create VK client: %w", err)
 	}
-	vkBot := vkbot.New(vkClient, services)
 
-	appReporter := &AppReporter{Services: services}
+	appReporter := &AppReporter{Services: services, Platform: model.PlatformVK}
 
 	var adminReporterBot *botservice.BotService
 	if viper.GetString(config.KeyAdminBotToken) != "" && viper.GetInt64(config.KeyAdminID) != 0 {
@@ -93,6 +92,8 @@ func NewVKApp(scraperAPI service.APIClient) (*VKApp, error) {
 		)
 		appReporter.getBotUsername = func() string { return adminReporterBot.Username() }
 	}
+
+	vkBot := vkbot.New(vkClient, services, appReporter)
 
 	broadcast := service.NewBroadcastService(messenger.NewVK(vkClient), services, appReporter)
 

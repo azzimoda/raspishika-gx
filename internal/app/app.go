@@ -52,7 +52,7 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 	}
 	container := repository.NewContainer(db, model.PlatformTelegram)
 
-	appReporter := &AppReporter{}
+	appReporter := &AppReporter{Platform: model.PlatformTelegram}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -266,14 +266,16 @@ func (a *App) OnMainBotRestart(ctx context.Context) {
 type AppReporter struct {
 	reporter.Reporter
 	Services       *service.Services
+	Platform       model.Platform
 	getBotUsername func() string
 }
 
-// NewAppReporter builds a lazy reporter for a non-main app process (currently
-// the admin bot). It formats reports like the main app, but stays quiet until
-// the bot connects.
-func NewAppReporter(services *service.Services, getBotUsername func() string) *AppReporter {
-	return &AppReporter{Services: services, getBotUsername: getBotUsername}
+// NewAppReporter builds a lazy reporter for a non-main app process. It formats
+// reports like the main app, but stays quiet until the bot connects. Platform
+// is the default platform label attached to every report from this app; empty
+// means the caller (admin bot) will set it explicitly per chat.
+func NewAppReporter(services *service.Services, platform model.Platform, getBotUsername func() string) *AppReporter {
+	return &AppReporter{Services: services, Platform: platform, getBotUsername: getBotUsername}
 }
 
 // Report returns a report builder that stays quiet until the bot connects —
@@ -281,10 +283,14 @@ func NewAppReporter(services *service.Services, getBotUsername func() string) *A
 // reports go to the configured recipient.
 func (r *AppReporter) Report() reporter.ReportBuilder {
 	format := NewFormatter(r.getBotUsername, r.Services)
-	if r.Reporter == nil {
-		return reporter.EmptyReportBuilder().WithFormatFunc(format)
+	b := reporter.EmptyReportBuilder().WithFormatFunc(format)
+	if r.Reporter != nil {
+		b = r.Reporter.Report().WithFormatFunc(format)
 	}
-	return r.Reporter.Report().WithFormatFunc(format)
+	if r.Platform != "" {
+		b = b.Platform(r.Platform)
+	}
+	return b
 }
 
 // NewFormatter builds the rich HTML formatter that renders bot reports (debug
@@ -292,11 +298,11 @@ func (r *AppReporter) Report() reporter.ReportBuilder {
 // the username of the bot that serves the admin deep links (the admin bot) once
 // it is connected, so the formatter points the "Get chat" buttons back at it.
 func NewFormatter(getBotUsername func() string, services *service.Services) reporter.FormatFunc {
-	return func(msg string, debugValues map[string]any, err error) *bot.SendRichMessageParams {
+	return func(data reporter.ReportData) *bot.SendRichMessageParams {
 
-		log.Trace().Str("msg", msg).Any("debugValues", debugValues).Msg("formatReport called")
+		log.Trace().Str("msg", data.Msg).Any("debugValues", data.DebugValues).Msg("formatReport called")
 
-		debugValues = maps.Clone(debugValues)
+		debugValues := maps.Clone(data.DebugValues)
 
 		var html strings.Builder
 		var buttons [][]models.InlineKeyboardButton
@@ -304,6 +310,11 @@ func NewFormatter(getBotUsername func() string, services *service.Services) repo
 		var botUsername string
 		if getBotUsername != nil {
 			botUsername = getBotUsername()
+		}
+
+		// Platform
+		if data.Platform != "" {
+			fmt.Fprintf(&html, "<p><b>Platform:</b> %s</p>\n", data.Platform.Label())
 		}
 
 		// Chat
@@ -314,7 +325,15 @@ func NewFormatter(getBotUsername func() string, services *service.Services) repo
 		username := extract[string]("username", debugValues)
 		delete(debugValues, "username")
 		if chatID != 0 && botUsername != "" {
-			fmt.Fprintf(&html, "<p><b>Chat:</b> %s / @%s / <code>%d</code></p>\n", fullName, username, chatID)
+			var parts []string
+			if fullName != "" {
+				parts = append(parts, fullName)
+			}
+			if username != "" {
+				parts = append(parts, "@"+username)
+			}
+			parts = append(parts, fmt.Sprintf("<code>%d</code>", int64(chatID)))
+			fmt.Fprintf(&html, "<p><b>Chat:</b> %s</p>\n", strings.Join(parts, " / "))
 
 			cmd := botutil.NewStartCommand("chat", strconv.FormatInt(int64(chatID), 10))
 			url := MakeStartURL(botUsername, cmd)
@@ -350,12 +369,12 @@ func NewFormatter(getBotUsername func() string, services *service.Services) repo
 		}
 
 		// Error
-		if err != nil {
-			fmt.Fprintf(&html, "<blockquote><b>Error:</b><br><code>%s</code></blockquote>\n", err.Error())
+		if data.Err != nil {
+			fmt.Fprintf(&html, "<blockquote><b>Error:</b><br><code>%s</code></blockquote>\n", data.Err.Error())
 		}
 
 		// Message text
-		fmt.Fprintf(&html, "<p>%s</p>", msg)
+		fmt.Fprintf(&html, "<p>%s</p>", data.Msg)
 
 		params := bot.SendRichMessageParams{RichMessage: models.InputRichMessage{HTML: html.String()}}
 		if len(buttons) > 0 {

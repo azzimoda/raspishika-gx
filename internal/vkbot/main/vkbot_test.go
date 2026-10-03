@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/vkbot/client"
 	vkbotutil "github.com/azzimoda/raspishika-gx/internal/vkbot/util"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
@@ -52,6 +54,7 @@ type fakeChats struct {
 	updates, creates, deletes int
 	resets                    int
 	recent                    []*model.RecentTeacher
+	createErr                 error
 }
 
 func (f *fakeChats) ResetGroupSettings(_ context.Context, chat *model.Chat) error {
@@ -79,6 +82,9 @@ func (f *fakeChats) GetChatByChatID(_ context.Context, id model.ChatID) (*model.
 }
 
 func (f *fakeChats) CreateChat(_ context.Context, chat *model.Chat) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
 	f.creates++
 	chat.ID = int64(100 + f.creates)
 	copy := *chat
@@ -111,6 +117,10 @@ func (f *fakeChats) GetRecentTeachers(context.Context, int64) ([]*model.RecentTe
 func (f *fakeChats) AddChatRecentTeacher(_ context.Context, teacher *model.RecentTeacher) error {
 	f.recent = append(f.recent, teacher)
 	return nil
+}
+
+func (f *fakeChats) CountAllChats(context.Context) (int, error) {
+	return len(f.records), nil
 }
 
 type fakeSchedules struct {
@@ -182,6 +192,10 @@ func (f *fakeStats) LogUpdate(_ context.Context, entry model.UpdateLog) error {
 	f.entries = append(f.entries, entry)
 	return f.err
 }
+
+type stubReporter struct{}
+
+func (stubReporter) Report() reporter.ReportBuilder { return reporter.EmptyReportBuilder() }
 
 func testBot() (*Bot, *fakeMessenger, *fakeChats, *fakeSchedules) {
 	m := &fakeMessenger{admins: map[int64]bool{10: true}}
@@ -655,5 +669,51 @@ func TestDaysUntilSeptember(t *testing.T) {
 		if got := daysUntilSeptember(tc.now); got != tc.want {
 			t.Errorf("daysUntilSeptember(%s) = %d, want %d", tc.now, got, tc.want)
 		}
+	}
+}
+
+func TestReportableFiltersBenignErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil is not reportable", nil, false},
+		{"not found is not reportable", apiclient.ErrNotFound, false},
+		{"service unavailable is not reportable", apiclient.ErrServiceUnavailable, false},
+		{"other error is reportable", errors.New("boom"), true},
+		{"wrapped not found is not reportable", fmt.Errorf("wrap: %w", apiclient.ErrNotFound), false},
+		{"wrapped other is reportable", fmt.Errorf("wrap: %w", errors.New("boom")), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reportable(tc.err); got != tc.want {
+				t.Errorf("reportable(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestStopCommandReportsAndDeletesChat(t *testing.T) {
+	b, m, c, _ := testBot()
+	withStats(b)
+	chatID := model.ChatID(2000000001)
+	group := model.GroupName("ИСПт-22-(9)-2")
+	c.records[chatID] = &model.Chat{ID: 1, PeerID: chatID, GroupName: &group, Access: model.ChatAccessAll}
+
+	run(t, b, incoming(int64(chatID), 10, "/stop"))
+
+	if c.deletes != 1 {
+		t.Fatalf("deletes = %d, want 1", c.deletes)
+	}
+	found := false
+	for _, msg := range m.messages {
+		if msg.peerID == int64(chatID) && strings.Contains(msg.text, "Рассылки остановлены") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("stop confirmation not sent, messages = %+v", m.messages)
 	}
 }

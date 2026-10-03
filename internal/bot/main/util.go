@@ -70,5 +70,6 @@ func (h *handler) ReportChat(chat *model.Chat) reporter.ReportBuilder {
 		return r
 	}
 	return r.Debug("chatID", chat.PeerID).Debug("username", refutil.DerefOrTypeDefault(chat.UserName)).
-		Debug("group", refutil.DerefOrTypeDefault(chat.GroupName))
+		Debug("group", refutil.DerefOrTypeDefault(chat.GroupName)).
+		Platform(chat.Platform)
 }

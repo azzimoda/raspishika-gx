@@ -15,6 +15,7 @@ import (
 
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/model"
+	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/service"
 	vkclient "github.com/azzimoda/raspishika-gx/internal/vkbot/client"
 	vkbotutil "github.com/azzimoda/raspishika-gx/internal/vkbot/util"
@@ -40,6 +41,7 @@ type chatService interface {
 	ResetGroupSettings(context.Context, *model.Chat) error
 	GetRecentTeachers(context.Context, int64) ([]*model.RecentTeacher, error)
 	AddChatRecentTeacher(context.Context, *model.RecentTeacher) error
+	CountAllChats(context.Context) (int, error)
 }
 
 type scheduleService interface {
@@ -72,18 +74,20 @@ type Bot struct {
 	chats     chatService
 	schedules scheduleService
 	stats     statsService
+	reporter  reporter.Reporter
 	now       func() time.Time
 	mu        sync.Mutex
 	sessions  map[sessionKey]session
 }
 
-// New builds the bot around a service bundle. Stats are optional and
-// statistics collection is skipped when nil.
-func New(api BotAPI, services *service.Services) *Bot {
+// New builds the bot around a service bundle. Stats and reporter are optional;
+// when reporter is nil, handler reports fall back to log-only.
+func New(api BotAPI, services *service.Services, report reporter.Reporter) *Bot {
 	b := &Bot{
 		api:       api,
 		chats:     services.Chat,
 		schedules: services.Schedule,
+		reporter:  report,
 		now:       time.Now,
 		sessions:  make(map[sessionKey]session),
 	}
@@ -146,10 +150,17 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 			chat.Access = model.ChatAccessConfigAdmin
 		}
 		if err = b.chats.CreateChat(ctx, chat); err != nil {
-			return b.fail(ctx, msg, err)
+			b.reportChat(nil, msg).Err(err).Msg("Failed to create or update chat")
+			_ = b.fail(ctx, msg, err)
+			return nil
+		}
+		if b.reporter != nil {
+			go b.sendNewChatReport(chat, msg)
 		}
 	} else if err != nil {
-		return b.fail(ctx, msg, err)
+		b.reportChat(nil, msg).Err(err).Msg("Failed to create or update chat")
+		_ = b.fail(ctx, msg, err)
+		return nil
 	}
 	log.Trace().Any("message", msg).Msg("Received VK update")
 	started := b.now()
@@ -186,7 +197,13 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 		handlerErrStr := ""
 		if handlerErr != nil {
 			handlerErrStr = handlerErr.Error()
-			log.Debug().Err(handlerErr).Int("message_id", msg.ID).Int64("chat_id", msg.PeerID).Msg("VK handler error")
+			if reportable(handlerErr) {
+				b.reportChat(chat, msg).Err(handlerErr).
+					Debug("update_type", updateKind).Debug("update_data", updateData).
+					Msg("Handler error")
+			} else {
+				log.Debug().Err(handlerErr).Int("message_id", msg.ID).Int64("chat_id", msg.PeerID).Msg("VK handler error")
+			}
 		}
 
 		logEvent := log.Info().Dur("elapsed_time", elapsedTime)
@@ -231,7 +248,6 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 	} else if err := b.requireAccess(ctx, chat, msg, configurationCommand(command)); err != nil {
 		return b.permissionReply(ctx, msg, err)
 	}
-	// UpdateChat stamps updated_at itself.
 	if command != "stop" {
 		if err := b.chats.UpdateChat(ctx, chat); err != nil {
 			return b.fail(ctx, msg, err)
@@ -240,7 +256,11 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 	switch command {
 	case "start":
 		b.clearSession(msg)
-		return b.send(ctx, msg.PeerID, "Привет! Я помогу с расписанием группы и преподавателей. Выберите группу через «Настройки → Выбрать группу», затем запрашивайте расписание кнопками ниже.\n\nМеня также можно добавить в беседу ВК. Все команды — /help.", mainKeyboard())
+		if chat.GroupName == nil || string(*chat.GroupName) == "" {
+			b.offerToSetGroupOnStart(ctx, msg, chat)
+			return nil
+		}
+		return b.send(ctx, msg.PeerID, "Привет! Я помогу с расписанием группы и преподавателей. Используйте команды на клавиатуре или /help.", mainKeyboard())
 	case "help":
 		return b.send(ctx, msg.PeerID, helpText, mainKeyboard())
 	case "cancel":
@@ -251,11 +271,14 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 			return b.fail(ctx, msg, err)
 		}
 		b.clearPeerSessions(msg.PeerID)
+		count, err := b.chats.CountAllChats(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to count all chats")
+		}
+		b.reportChat(chat, msg).Msgf("User stopped the bot ☹ (×%d rests)", count)
 		return b.send(ctx, msg.PeerID, "Настройки и история выбора преподавателей удалены. Рассылки остановлены. Чтобы настроить бота заново, отправьте /start.", &vkbotutil.Keyboard{Buttons: [][]vkbotutil.Button{}})
 	case "settings":
 		b.clearSession(msg)
-		// HANDLE_VACATION gates the menu, as in the Telegram bot: during the
-		// holidays there is nothing to configure.
 		if viper.GetBool(config.KeyHandleVacation) && b.vacationActive(ctx) {
 			return b.sendVacationAnswer(ctx, msg.PeerID, true)
 		}
@@ -295,6 +318,15 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 		}
 		return nil
 	}
+}
+
+// reportable returns true for errors worth sending to the admin — i.e. every
+// handler error except the two benign cases the bot already handled for the
+// user (not-found and scraper unavailable). Matching the Telegram bot avoids
+// flooding the admin with typos in group names and vacation windows. A nil
+// error is never reportable.
+func reportable(err error) bool {
+	return err != nil && !errors.Is(err, apiclient.ErrNotFound) && !errors.Is(err, apiclient.ErrServiceUnavailable)
 }
 
 func configurationCommand(command string) bool {
@@ -345,6 +377,65 @@ func (b *Bot) fail(ctx context.Context, msg vkclient.Message, err error) error {
 		text = "Группа или преподаватель не найдены. Проверьте название или выберите их заново."
 	}
 	return errors.Join(err, b.send(ctx, msg.PeerID, text, nil))
+}
+
+func (b *Bot) reportChat(chat *model.Chat, msg vkclient.Message) reporter.ReportBuilder {
+	if b.reporter == nil || chat == nil {
+		return reporter.EmptyReportBuilder()
+	}
+	return b.reporter.Report().
+		Debug("chatID", chat.PeerID).
+		Debug("user_id", msg.FromID).
+		Debug("group", refDerefOrEmpty(chat.GroupName))
+}
+
+func refDerefOrEmpty[T any](ptr *T) string {
+	if ptr == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", *ptr)
+}
+
+func (b *Bot) offerToSetGroupOnStart(ctx context.Context, msg vkclient.Message, chat *model.Chat) {
+	err := b.departments(ctx, chat, msg, 0)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to send department selection menu")
+		b.send(ctx, msg.PeerID, "Не удалось открыть настройки группы. Попробуйте позже.", mainKeyboard())
+	}
+}
+
+// sendNewChatReport sends a "new chat" report to the admin and then waits
+// (up to ~100 s) for the chat to finish configuring its group. Once the group
+// and department are set the initial report is replaced with a "finished
+// configuration" report, mirroring the Telegram bot's sendNewChatReport.
+func (b *Bot) sendNewChatReport(chat *model.Chat, msg vkclient.Message) {
+	count, err := b.chats.CountAllChats(context.Background())
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to count all chats")
+		count = 0
+	}
+
+	report, err := b.reportChat(chat, msg).Msgf("New chat registered (×%d)", count)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to send new chat report")
+		return
+	}
+
+	for range 10 {
+		time.Sleep(10 * time.Second)
+
+		updated, err := b.chats.GetChatByChatID(context.Background(), chat.PeerID)
+		if err != nil {
+			continue
+		}
+		if updated.GroupName != nil && updated.DepartmentName != nil {
+			if _, err := report.DeleteMessage(); err != nil {
+				log.Warn().Err(err).Msg("Failed to delete new chat report")
+			}
+			b.reportChat(updated, msg).Msgf("New chat (×%d) finished configuration: %s — %s", count, *updated.GroupName, *updated.DepartmentName)
+			return
+		}
+	}
 }
 
 func (b *Bot) getSession(msg vkclient.Message) session {
@@ -417,8 +508,6 @@ func parseCommand(msg vkclient.Message) (command, arg string, recognized bool) {
 		"моё расписание": "week", "мое расписание": "week", "преподаватель": "teacher",
 		"настройки": "settings", "отмена": "cancel",
 	}
-	// no-arg aliases must consume the whole message, so natural-language
-	// sentences like "завтра в 9 собираемся..." do not turn into commands.
 	noArgAliases := map[string]bool{"start": true, "help": true, "cancel": true, "settings": true, "today": true, "tomorrow": true, "week": true}
 	if alias, ok := aliases[command]; ok {
 		if noArgAliases[alias] && arg != "" {

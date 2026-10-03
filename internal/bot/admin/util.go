@@ -196,5 +196,6 @@ func (h *handler) reportChat(chat *model.Chat) reporter.ReportBuilder {
 		Debug("access", chat.Access).
 		Debug("dark_mode", chat.DarkMode).
 		Debug("created_at", formatMomentLocal(chat.CreatedAt)).
-		Debug("updated_at", formatMomentLocal(chat.UpdatedAt))
+		Debug("updated_at", formatMomentLocal(chat.UpdatedAt)).
+		Platform(chat.Platform)
 }

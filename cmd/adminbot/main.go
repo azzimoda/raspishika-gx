@@ -74,7 +74,7 @@ func main() {
 		},
 		services.Proxy,
 	)
-	appReporter = app.NewAppReporter(services, func() string { return botService.Username() })
+	appReporter = app.NewAppReporter(services, "", func() string { return botService.Username() })
 	botService.OnRestart(func(context.Context) {
 		if adminBot != nil {
 			appReporter.Reporter = reporter.NewReporter(adminBot, adminID)
