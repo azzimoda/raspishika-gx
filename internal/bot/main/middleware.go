@@ -71,10 +71,13 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 		return
 	}
 
-	for range 5 {
-		time.Sleep(20 * time.Second)
+	// Wait for the chat group to be configured (up to 100 seconds)
+	for range 10 {
+		time.Sleep(10 * time.Second)
 
-		if chat, err = h.Chat.GetChatByChatID(context.Background(), chat.PeerID); err == nil && chat.GroupName != nil {
+		if chat, err = h.Chat.GetChatByChatID(
+			context.Background(), chat.PeerID,
+		); err == nil && chat.GroupName != nil && chat.DepartmentName != nil {
 			if deleted, err := report.DeleteMessage(); err != nil {
 				log.Warn().Err(err).Msg("Failed to delete new chat report")
 			} else if deleted {
@@ -82,7 +85,7 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 			} else {
 				log.Debug().Msg("New chat report not deleted without error")
 			}
-			h.ReportChat(chat).Msgf("Chat configured group %s", *chat.GroupName)
+			h.ReportChat(chat).Msgf("New chat (×%d) finished configuration: %s — %s", count, *chat.GroupName, *chat.DepartmentName)
 			break
 		}
 	}
