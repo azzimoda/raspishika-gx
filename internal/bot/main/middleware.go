@@ -85,7 +85,7 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 			} else {
 				log.Debug().Msg("New chat report not deleted without error")
 			}
-			h.ReportChat(chat).Silent(true).Msgf("New chat (×%d) finished configuration: %s — %s", count, *chat.GroupName, *chat.DepartmentName)
+			h.ReportChat(chat).Silent(true).Msgf("New chat (×%d) finished configuration", count)
 			break
 		}
 	}
