@@ -65,7 +65,7 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 		count = 0
 	}
 
-	report, err := h.ReportChat(chat).Msgf("New chat registered (×%d)", count)
+	report, err := h.ReportChat(chat).Silent(true).Msgf("New chat registered (×%d)", count)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to send new chat report")
 		return
@@ -85,7 +85,7 @@ func (h *handler) sendNewChatReport(chat *model.Chat, b *bot.Bot) {
 			} else {
 				log.Debug().Msg("New chat report not deleted without error")
 			}
-			h.ReportChat(chat).Msgf("New chat (×%d) finished configuration: %s — %s", count, *chat.GroupName, *chat.DepartmentName)
+			h.ReportChat(chat).Silent(true).Msgf("New chat (×%d) finished configuration: %s — %s", count, *chat.GroupName, *chat.DepartmentName)
 			break
 		}
 	}

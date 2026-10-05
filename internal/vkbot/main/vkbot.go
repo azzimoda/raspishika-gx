@@ -275,7 +275,7 @@ func (b *Bot) Handle(ctx context.Context, msg vkclient.Message) (result error) {
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to count all chats")
 		}
-		b.reportChat(chat, msg).Msgf("User stopped the bot ☹ (×%d rests)", count)
+		b.reportChat(chat, msg).Silent(true).Msgf("User stopped the bot ☹ (×%d rests)", count)
 		return b.send(ctx, msg.PeerID, "Настройки и история выбора преподавателей удалены. Рассылки остановлены. Чтобы настроить бота заново, отправьте /start.", &vkbotutil.Keyboard{Buttons: [][]vkbotutil.Button{}})
 	case "settings":
 		b.clearSession(msg)
@@ -415,7 +415,7 @@ func (b *Bot) sendNewChatReport(chat *model.Chat, msg vkclient.Message) {
 		count = 0
 	}
 
-	report, err := b.reportChat(chat, msg).Msgf("New chat registered (×%d)", count)
+	report, err := b.reportChat(chat, msg).Silent(true).Msgf("New chat registered (×%d)", count)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to send new chat report")
 		return
@@ -432,7 +432,7 @@ func (b *Bot) sendNewChatReport(chat *model.Chat, msg vkclient.Message) {
 			if _, err := report.DeleteMessage(); err != nil {
 				log.Warn().Err(err).Msg("Failed to delete new chat report")
 			}
-			b.reportChat(updated, msg).Msgf("New chat (×%d) finished configuration: %s — %s", count, *updated.GroupName, *updated.DepartmentName)
+			b.reportChat(updated, msg).Silent(true).Msgf("New chat (×%d) finished configuration: %s — %s", count, *updated.GroupName, *updated.DepartmentName)
 			return
 		}
 	}

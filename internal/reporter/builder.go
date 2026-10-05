@@ -52,6 +52,7 @@ type ReportBuilder struct {
 	error       error
 	platform    model.Platform
 	debugValues map[string]any
+	silent      bool
 }
 
 // WithFormatFunc sets the format function for the report builder.
@@ -68,6 +69,12 @@ func (r ReportBuilder) Platform(p model.Platform) ReportBuilder {
 	if p != "" {
 		r.platform = p
 	}
+	return r
+}
+
+// Silent sets whether the report should be sent without notification.
+func (r ReportBuilder) Silent(s bool) ReportBuilder {
+	r.silent = s
 	return r
 }
 
@@ -150,7 +157,6 @@ func errorRichBlock(errText string) models.InputRichBlock {
 // callerSkipFrames is the number of frames between the actual call site and
 // this logger: 2 for Msg/Msgf/Send, 3 for MsgRichWithMarkup.
 func (rc ReportBuilder) send(data ReportData, params *bot.SendRichMessageParams, callerSkipFrames int) (*Report, error) {
-
 	log.Trace().Msg("Sending report...")
 
 	{
@@ -175,6 +181,7 @@ func (rc ReportBuilder) send(data ReportData, params *bot.SendRichMessageParams,
 	}
 
 	params.ChatID = rc.recipientChatID
+	params.DisableNotification = rc.silent
 
 	// Send the message
 	var message *models.Message
@@ -190,9 +197,10 @@ func (rc ReportBuilder) send(data ReportData, params *bot.SendRichMessageParams,
 	})
 	if err != nil {
 		rc.bot.SendMessage(context.Background(), &bot.SendMessageParams{
-			ChatID:    rc.recipientChatID,
-			Text:      fmt.Sprintf("Failed to send report:\n<pre>%s</pre>", err),
-			ParseMode: models.ParseModeHTML,
+			ChatID:              rc.recipientChatID,
+			Text:                fmt.Sprintf("Failed to send report:\n<pre>%s</pre>", err),
+			ParseMode:           models.ParseModeHTML,
+			DisableNotification: rc.silent,
 		})
 		log.Error().Err(err).Str("msg", data.Msg).Int("blocks", len(params.RichMessage.Blocks)).Msg("Failed to send report message")
 	}

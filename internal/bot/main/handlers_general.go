@@ -126,7 +126,7 @@ func (h *handler) handleCmdStop(ctx context.Context, b *bot.Bot, update *models.
 		log.Error().Err(err).Msg("Failed to count all chats")
 	}
 
-	h.ReportChat(chat).Msgf("User stopped the bot ☹ (×%d rests)", count)
+	h.ReportChat(chat).Silent(true).Msgf("User stopped the bot ☹ (×%d rests)", count)
 	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: chatID, MessageThreadID: messageThreadID,
 		Text:        "Ваши данные удалены и рассылки остановлены. Спасибо, что пользовались ботом!",
