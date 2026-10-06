@@ -42,6 +42,7 @@ const (
 	KeyBrowserHeight          = "browser_height"
 	KeyBrowserScale           = "browser_scale"
 	KeyBrowserRestartInterval = "browser_restart_interval"
+	KeyAPIRequestTimeout = "api_request_timeout"
 
 	KeyBotToken      = "bot_token"
 	KeyAdminBotToken = "admin_bot_token"
@@ -135,6 +136,7 @@ func Init() {
 	viper.SetDefault(KeyBrowserHeight, 1080)
 	viper.SetDefault(KeyBrowserScale, 1.0)
 	viper.SetDefault(KeyBrowserRestartInterval, 24*time.Hour)
+	viper.SetDefault(KeyAPIRequestTimeout, 10*time.Second)
 
 	viper.SetDefault(KeyScreenshotDir, "storage/screenshots")
 	viper.SetDefault(KeyChatStateTTL, 10*time.Minute)
