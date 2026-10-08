@@ -66,6 +66,11 @@ func (h *handler) handleCmdWeek(ctx context.Context, b *bot.Bot, update *models.
 			return
 		}
 
+		// Try to serve a stale cached schedule when the API is unavailable.
+		if h.trySendStaleWeek(ctx, b, chat, threadID, conf, string(*chat.GroupName)) {
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -151,6 +156,31 @@ func (h *handler) handleCmdTomorrow(ctx context.Context, b *bot.Bot, update *mod
 	if err != nil {
 		if errors.Is(err, apiclient.ErrServiceUnavailable) {
 			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
+		// Try to serve a stale cached schedule when the API is unavailable.
+		if stale := h.staleScheduleFor(ctx, conf); stale != nil {
+			setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), true)
+
+			idx := 1
+			if time.Now().Weekday() == time.Sunday {
+				idx = 0
+			}
+			text := botutil.MsgStaleSchedule + "\n\n" + formatDayHTML(conf.Name(), stale.Tomorrow(time.Now()))
+
+			if err := botutil.SendScheduleLabel(ctx, b, chat.PeerID, threadID, chat, conf); err != nil {
+				addHandlerCtxErr(ctx, err)
+			}
+
+			_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
+				ChatID:          chat.PeerID,
+				MessageThreadID: threadID,
+				ParseMode:       models.ParseModeHTML,
+				Text:            text,
+				ReplyMarkup:     dayMarkup(conf, stale.Days, idx, botutil.SchedulePageURL(conf, nil)),
+			})
+			addHandlerCtxErr(ctx, err)
 			return
 		}
 
@@ -258,6 +288,27 @@ func (h *handler) handleCmdToday(ctx context.Context, b *bot.Bot, update *models
 			return
 		}
 
+		// Try to serve a stale cached schedule when the API is unavailable.
+		if stale := h.staleScheduleFor(ctx, conf); stale != nil {
+			setGroupOrTeacherAndCached(ctx, string(*chat.GroupName), true)
+
+			text := botutil.MsgStaleSchedule + "\n\n" + formatDayDynamicHTML(conf.Name(), stale.Today(), time.Now())
+
+			if err := botutil.SendScheduleLabel(ctx, b, model.ChatID(chatID), threadID, chat, conf); err != nil {
+				addHandlerCtxErr(ctx, err)
+			}
+
+			_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
+				ChatID:          chatID,
+				MessageThreadID: threadID,
+				ParseMode:       models.ParseModeHTML,
+				Text:            text,
+				ReplyMarkup:     dayMarkup(conf, stale.Days, 0, botutil.SchedulePageURL(conf, nil)),
+			})
+			addHandlerCtxErr(ctx, err)
+			return
+		}
+
 		log.Error().Err(err).Msg("Failed to get schedule")
 		addHandlerCtxErr(ctx, err)
 		botutil.SendErrorMessage(ctx, b, &bot.SendMessageParams{
@@ -354,6 +405,11 @@ func (h *handler) handleTextQuickGroup(ctx context.Context, b *bot.Bot, update *
 	if err != nil {
 		if errors.Is(err, apiclient.ErrServiceUnavailable) {
 			sendVacationAnswer(ctx, b, update, false)
+			return
+		}
+
+		// Try to serve a stale cached schedule when the API is unavailable.
+		if h.trySendStaleWeek(ctx, b, chat, threadID, conf, string(groupName)) {
 			return
 		}
 
@@ -595,4 +651,45 @@ func (h *handler) resetChatForExpiredGroup(ctx context.Context, b *bot.Bot, chat
 		Text:            fmt.Sprintf(botutil.MsgGroupRemoved, groupName),
 		ReplyMarkup:     botutil.MainMenuMarkup(chat.IsPrivate()),
 	})
+}
+
+// staleScheduleFor returns the stale cached schedule for conf, if one exists.
+// The schedule is reconfigured with conf so it renders with the caller's
+// current settings (e.g. dark mode) and is marked as old. It returns nil
+// when there is no cached schedule to fall back to.
+func (h *handler) staleScheduleFor(ctx context.Context, conf model.ScheduleConfig) *model.ScheduleData {
+	stale, _ := h.Schedule.GetScheduleCache(ctx, conf.ScheduleKey())
+	if stale == nil {
+		log.Debug().Msg("No stale schedule cache available for fallback")
+		return nil
+	}
+	stale.Config = conf
+	stale.IsOld = true
+	return stale
+}
+
+// trySendStaleWeek serves a stale cached week schedule with a rendered image
+// when the schedule API is unavailable. It reports whether the user was
+// served from the cache; when it returns false the caller should fall back
+// to its regular error handling.
+func (h *handler) trySendStaleWeek(ctx context.Context, b *bot.Bot, chat *model.Chat, threadID int, conf model.ScheduleConfig, groupOrTeacher string) bool {
+	stale := h.staleScheduleFor(ctx, conf)
+	if stale == nil {
+		return false
+	}
+	setGroupOrTeacherAndCached(ctx, groupOrTeacher, true)
+
+	imageFilename, imageData, err := h.Schedule.PrepareScheduleImage(ctx, stale)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to prepare stale schedule image")
+		return false
+	}
+
+	if err := botutil.SendScheduleLabel(ctx, b, chat.PeerID, threadID, chat, conf); err != nil {
+		addHandlerCtxErr(ctx, err)
+	}
+	if err := botutil.SendWeekSchedule(ctx, b, threadID, chat, conf, stale.Days, imageFilename, imageData, botutil.SchedulePageURL(conf, nil), true); err != nil {
+		addHandlerCtxErr(ctx, err)
+	}
+	return true
 }

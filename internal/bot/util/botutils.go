@@ -23,6 +23,8 @@ const (
 	ErrMsgCouldNotSendSchedule = "Не удалось отправить расписание, попробуте позже"
 	ErrMsgSelectGroupAgain     = "Не удалось найти группу, выберите группу ещё раз"
 
+	MsgStaleSchedule = "<i>Не удалось обновить расписание, информация может быть не актуальной!</i>"
+
 	MsgGroupRemoved = "Группа %s больше не существует на сайте колледжа.\n\nНастройки сброшены — выберите новую группу через /settings"
 )
 
@@ -272,7 +274,7 @@ func sendSchedulePhoto(
 		ReplyMarkup:     replyMarkup,
 	}
 	if isOld {
-		photoParams.Caption = "<i>Не удалось обновить расписание, информация может быть не актуальной!</i>"
+		photoParams.Caption = MsgStaleSchedule
 		photoParams.ParseMode = models.ParseModeHTML
 	}
 	_, err := b.SendPhoto(ctx, photoParams)
