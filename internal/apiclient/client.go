@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
-	"github.com/rs/zerolog/log"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 )
 
 func New(addr string) *Client { return &Client{addr: addr} }
@@ -165,6 +166,9 @@ func (c *Client) request(ctx context.Context, url *url.URL) ([]byte, error) {
 	log.Trace().Str("url", url.String()).Msg("Requesting API...")
 
 	timeout := viper.GetDuration(config.KeyAPIRequestTimeout)
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
