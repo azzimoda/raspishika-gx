@@ -11,7 +11,7 @@ import (
 
 	"github.com/azzimoda/raspishika-gx/internal/messenger"
 	"github.com/azzimoda/raspishika-gx/internal/model"
-	"github.com/azzimoda/raspishika-gx/internal/vkbot/client"
+	vkclient "github.com/azzimoda/raspishika-gx/internal/vkbot/client"
 	vkbotutil "github.com/azzimoda/raspishika-gx/internal/vkbot/util"
 	"github.com/rs/zerolog/log"
 )
@@ -25,7 +25,8 @@ func (b *Bot) groupSchedule(ctx context.Context, chat *model.Chat, msg vkclient.
 	b.clearSession(msg)
 	if strings.TrimSpace(name) == "" {
 		if chat.GroupName == nil {
-			return b.send(ctx, msg.PeerID, "Группа ещё не выбрана. Откройте /settings или укажите её в команде, например /week испт 22 9 2.", mainKeyboard())
+			b.offerToSetGroupOnStart(ctx, msg, chat)
+			return nil
 		}
 		name = string(*chat.GroupName)
 	}
@@ -51,7 +52,8 @@ func (b *Bot) keyboardSchedule(ctx context.Context, chat *model.Chat, msg vkclie
 	value := strings.TrimSpace(arg)
 	if value == "" {
 		if chat.GroupName == nil {
-			return b.send(ctx, msg.PeerID, "Группа ещё не выбрана. Откройте /settings или выберите её через кнопки.", mainKeyboard())
+			b.offerToSetGroupOnStart(ctx, msg, chat)
+			return nil
 		}
 		value = string(*chat.GroupName)
 	}
@@ -172,7 +174,7 @@ func (b *Bot) sendSchedule(ctx context.Context, msg vkclient.Message, conf model
 	keyboard := vkbotutil.ScheduleKeyboard(navigatorValue(conf), schedule.Days, -1, link)
 	note := ""
 	if schedule.IsOld {
-		note = "\n\nПоказана сохранённая копия расписания: сайт временно не обновил данные."
+		note = "\n\nНе удалось обновить расписание, информация может быть неактуальной."
 	}
 	if kind == "week" {
 		filename, data, imageErr := b.schedules.PrepareScheduleImage(ctx, schedule)

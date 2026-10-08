@@ -171,6 +171,16 @@ func (h *handler) handleTextTime(ctx context.Context, b *bot.Bot, update *models
 		MessageThreadID: update.Message.MessageThreadID,
 		ParseMode:       models.ParseModeHTML,
 		Text:            fmt.Sprintf("Время рассылки установлено на <u>%s</u>", timeStr),
+		ReplyMarkup:     botutil.MainMenuMarkup(chat.IsPrivate()),
+	})
+	addHandlerCtxErr(ctx, err)
+
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
+		ChatID:          update.Message.Chat.ID,
+		MessageThreadID: update.Message.MessageThreadID,
+		ParseMode:       models.ParseModeHTML,
+		Text:            settingsMenuText(chat),
+		ReplyMarkup:     settingsMenuMarkup(chat),
 	})
 	addHandlerCtxErr(ctx, err)
 
@@ -546,6 +556,15 @@ func (h *handler) handleTextGroup(ctx context.Context, b *bot.Bot, update *model
 		MessageThreadID: update.Message.MessageThreadID,
 		Text:            fmt.Sprintf("Теперь вы в группе %s", group.GroupName),
 		ReplyMarkup:     botutil.MainMenuMarkup(chat.IsPrivate()),
+	})
+	addHandlerCtxErr(ctx, err)
+
+	_, err = botutil.SendMessageWithRetry(ctx, b, &bot.SendMessageParams{
+		ChatID:          update.Message.Chat.ID,
+		MessageThreadID: update.Message.MessageThreadID,
+		ParseMode:       models.ParseModeHTML,
+		Text:            settingsMenuText(chat),
+		ReplyMarkup:     settingsMenuMarkup(chat),
 	})
 	addHandlerCtxErr(ctx, err)
 

@@ -339,7 +339,7 @@ func TestSessionsAreBoundToUserAndRecheckPermissions(t *testing.T) {
 }
 
 func TestDailyTimeValidationAndDisable(t *testing.T) {
-	for _, bad := range []string{"7:30", "24:00", "12:60", "00:0", "tomorrow"} {
+	for _, bad := range []string{"24:00", "12:60", "00:0", "tomorrow"} {
 		b, _, c, _ := testBot()
 		addChat(c, 10, model.ChatAccessAll)
 		run(t, b, incoming(10, 10, "/daily "+bad))
@@ -352,6 +352,10 @@ func TestDailyTimeValidationAndDisable(t *testing.T) {
 	run(t, b, incoming(10, 10, "/daily 00:00"))
 	if c.records[10].DailySendingTime == nil {
 		t.Fatal("midnight rejected")
+	}
+	run(t, b, incoming(10, 10, "/daily 7:30"))
+	if got := c.records[10].DailySendingTime; got == nil || *got != "07:30" {
+		t.Fatalf("unpadded time not normalized: %v", got)
 	}
 	run(t, b, incoming(10, 10, "/daily off"))
 	if c.records[10].DailySendingTime != nil {

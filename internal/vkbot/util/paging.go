@@ -56,7 +56,7 @@ func PagedKeyboard(items []MenuItem, page int, pageCommand, backCommand string) 
 	if len(nav) > 0 {
 		rows = append(rows, nav)
 	}
-	rows = append(rows, []Button{TextButton("Вернуться", backCommand)})
+	rows = append(rows, []Button{TextButton("Назад", backCommand)})
 	return &Keyboard{Inline: true, Buttons: rows}
 }
 

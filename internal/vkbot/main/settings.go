@@ -31,11 +31,30 @@ func (b *Bot) settings(ctx context.Context, chat *model.Chat) error {
 	text := fmt.Sprintf("Настройки\n\nГруппа: %s\nЕжедневное расписание: %s\nНапоминания о парах: %s\nИзменения расписания: %s\nТёмная тема: %s",
 		group, daily, onOff(chat.PairSending), onOff(chat.ChangeAlert), onOff(chat.DarkMode))
 	rows := [][]vkbotutil.Button{
-		{vkbotutil.TextButton("Выбрать группу", "departments\n0")},
-		{vkbotutil.TextButton("Ежедневная рассылка", "daily")},
-		{vkbotutil.TextButton("Пары: "+onOff(chat.PairSending), "pair")},
-		{vkbotutil.TextButton("Изменения: "+onOff(chat.ChangeAlert), "change")},
-		{vkbotutil.TextButton("Тёмная тема: "+onOff(chat.DarkMode), "dark")},
+		{vkbotutil.TextButton("Изменить группу", "departments\n0")},
+	}
+	if chat.DailySendingTime == nil {
+		rows = append(rows, []vkbotutil.Button{vkbotutil.TextButton("Вкл. ежедневную рассылку", "daily")})
+	} else {
+		rows = append(rows, []vkbotutil.Button{
+			vkbotutil.TextButton("Изменить время", "daily"),
+			vkbotutil.TextButton("Выкл. рассылку", "daily\noff"),
+		})
+	}
+	if chat.PairSending {
+		rows = append(rows, []vkbotutil.Button{vkbotutil.TextButton("Выкл. напоминания перед парами", "pair")})
+	} else {
+		rows = append(rows, []vkbotutil.Button{vkbotutil.TextButton("Вкл. напоминания перед парами", "pair")})
+	}
+	if chat.ChangeAlert {
+		rows = append(rows, []vkbotutil.Button{vkbotutil.TextButton("Выкл. уведомления об изменениях", "change")})
+	} else {
+		rows = append(rows, []vkbotutil.Button{vkbotutil.TextButton("Вкл. уведомления об изменениях", "change")})
+	}
+	if chat.DarkMode {
+		rows = append(rows, []vkbotutil.Button{vkbotutil.TextButton("Вкл. светлую тему", "dark")})
+	} else {
+		rows = append(rows, []vkbotutil.Button{vkbotutil.TextButton("Вкл. тёмную тему", "dark")})
 	}
 	if !chat.IsPrivate() {
 		rows = append(rows, []vkbotutil.Button{vkbotutil.TextButton("Права участников", "access")})
@@ -135,10 +154,11 @@ func (b *Bot) daily(ctx context.Context, chat *model.Chat, msg vkclient.Message,
 			return b.send(ctx, msg.PeerID, "Отправьте время ежедневного расписания в формате ЧЧ:ММ, например 07:30. Время — Екатеринбург (UTC+5).\nОтмена — /cancel.", &vkbotutil.Keyboard{Inline: true, Buttons: [][]vkbotutil.Button{{vkbotutil.TextButton("Выключить рассылку", "daily\noff")}, {vkbotutil.TextButton("Отмена", "cancel")}}})
 		}
 		parsed, err := time.Parse("15:04", arg)
-		if err != nil || len(arg) != 5 || parsed.Format("15:04") != arg {
+		if err != nil {
 			return b.send(ctx, msg.PeerID, "Неверное время. Используйте ЧЧ:ММ от 00:00 до 23:59, например 07:30.", nil)
 		}
-		chat.DailySendingTime = &arg
+		normalized := parsed.Format("15:04")
+		chat.DailySendingTime = &normalized
 	}
 	chat.State = model.ChatStateDefault
 	if err := b.chats.UpdateChat(ctx, chat); err != nil {
