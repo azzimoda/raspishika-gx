@@ -42,7 +42,7 @@ const (
 	KeyBrowserHeight          = "browser_height"
 	KeyBrowserScale           = "browser_scale"
 	KeyBrowserRestartInterval = "browser_restart_interval"
-	KeyAPIRequestTimeout = "api_request_timeout"
+	KeyAPIRequestTimeout      = "api_request_timeout"
 
 	KeyBotToken      = "bot_token"
 	KeyAdminBotToken = "admin_bot_token"

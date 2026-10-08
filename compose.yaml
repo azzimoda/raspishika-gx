@@ -27,6 +27,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-secret}
       - REDIS_DB=0
       - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - LOG_DIR=${API_LOG_DIR:-/app/storage/logs/api/}
       - TZ=Asia/Yekaterinburg
     depends_on:
       redis:
@@ -67,6 +68,7 @@ services:
       - SCRAPER_HOST=api
       - SCRAPER_PORT=8080
       - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - LOG_DIR=${BOT_LOG_DIR:-/app/storage/logs/bot/}
       - TZ=Asia/Yekaterinburg
       - BROWSER_SCALE=${BROWSER_SCALE:-1}
       - HANDLE_VACATION=${HANDLE_VACATION:-true}
@@ -98,6 +100,7 @@ services:
       - SCRAPER_HOST=api
       - SCRAPER_PORT=8080
       - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - LOG_DIR=${ADMIN_LOG_DIR:-/app/storage/logs/admin/}
       - TZ=Asia/Yekaterinburg
       - DB_DRIVER=sqlite3
       - DB_FILE=/app/storage/database/data.db
@@ -133,6 +136,7 @@ services:
       - SCRAPER_HOST=api
       - SCRAPER_PORT=8080
       - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - LOG_DIR=${VK_LOG_DIR:-/app/storage/logs/vk/}
       - TZ=Asia/Yekaterinburg
       - BROWSER_SCALE=${BROWSER_SCALE:-1}
       - HANDLE_VACATION=${HANDLE_VACATION:-true}
