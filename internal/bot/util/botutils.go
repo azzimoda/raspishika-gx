@@ -130,7 +130,7 @@ func ParseCallbackData(data string) CallbackCommand {
 	return CallbackCommand{Command: command, Args: args}
 }
 
-// TODO: Use it for building callback data.
+// NewCallbackCommand builds callback data for an inline button.
 func NewCallbackCommand(command string, args ...string) CallbackCommand {
 	return CallbackCommand{Command: command, Args: args}
 }

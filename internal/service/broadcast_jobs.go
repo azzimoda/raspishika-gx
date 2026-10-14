@@ -10,14 +10,11 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// initialBroadcastPlatforms is the set of platforms a manual broadcast is
-// enqueued for.
-//
-// TODO: the admin enqueuer passes nil platforms and takes this list, so every
-// manual broadcast also creates a pending platform=vk job even when the VK
-// process is not running, leaving stalled rows in the admin audit. Consider
-// scoping the platforms on the enqueuer side.
-var initialBroadcastPlatforms = []model.Platform{model.PlatformTelegram, model.PlatformVK}
+// defaultBroadcastPlatforms is the fallback set of platforms a manual broadcast
+// is enqueued for when the caller passes none. Telegram always runs, while VK
+// is opt-in (its process may not be running), so the safe default excludes it;
+// callers should scope the platforms explicitly.
+var defaultBroadcastPlatforms = []model.Platform{model.PlatformTelegram}
 
 // MassBroadcastEnqueuer records a manual broadcast for the schedule-bot
 // workers instead of sending it directly.
@@ -34,7 +31,7 @@ type BroadcastJobs struct {
 
 func NewBroadcastJobs(repo repository.BroadcastJobRepository, platforms []model.Platform) *BroadcastJobs {
 	if len(platforms) == 0 {
-		platforms = initialBroadcastPlatforms
+		platforms = defaultBroadcastPlatforms
 	}
 	return &BroadcastJobs{repo: repo, platforms: platforms}
 }

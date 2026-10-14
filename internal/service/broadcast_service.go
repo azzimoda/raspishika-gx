@@ -399,7 +399,7 @@ func (s *BroadcastService) handlePairNotification(ctx context.Context, t time.Ti
 		s.reportError(err, "Failed to log pair broadcast task")
 		return
 	}
-	if err := s.sendPairNotificatins(ctx, task.ID, schedules, grouped, groups, t.Add(15*time.Minute)); err != nil {
+	if err := s.sendPairNotificatins(ctx, task.ID, schedules, grouped, t.Add(15*time.Minute)); err != nil {
 		s.reportError(err, "Failed to send pair notifications")
 	}
 	s.finishTask(ctx, &task, start)
@@ -410,7 +410,6 @@ func (s *BroadcastService) sendPairNotificatins(
 	taskID int64,
 	schedules []*model.ScheduleData,
 	grouped map[model.GroupName][]*model.Chat,
-	_ []model.GroupName, // TODO: Remove this parameter.
 	t time.Time,
 ) error {
 	var errs []error

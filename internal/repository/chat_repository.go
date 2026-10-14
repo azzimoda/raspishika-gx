@@ -676,7 +676,6 @@ func (r *chatRepository) CountAllConfiguredGroups(ctx context.Context) (int, err
 	return count, err
 }
 
-// TODO: Use in config stats
 func (r *chatRepository) GetWatchedGroupNames(ctx context.Context) ([]string, error) {
 	const query = `
 		SELECT DISTINCT "group" FROM chats

@@ -252,7 +252,7 @@ func TestBroadcastPairUsesScheduleGroupAndActualDate(t *testing.T) {
 			now := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
 			err := service.sendPairNotificatins(context.Background(), 3,
 				[]*model.ScheduleData{nil, schedule}, map[model.GroupName][]*model.Chat{group: {chat}},
-				[]model.GroupName{"unrelated"}, now)
+				now)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -272,7 +272,6 @@ func TestBroadcastPairUsesScheduleGroupAndActualDate(t *testing.T) {
 				4,
 				[]*model.ScheduleData{schedule},
 				map[model.GroupName][]*model.Chat{group: {chat}},
-				nil,
 				now.AddDate(0, 0, 1),
 			); err != nil {
 				t.Fatal(err)
@@ -546,7 +545,6 @@ func TestBroadcastQueuedPairOptOutIsHonored(t *testing.T) {
 			1,
 			[]*model.ScheduleData{schedule},
 			map[model.GroupName][]*model.Chat{group: {first, second}},
-			nil,
 			time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC),
 		)
 	}()
@@ -602,7 +600,7 @@ func TestBroadcastPairNotificationAutoDelete(t *testing.T) {
 	}
 	now := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
 	if err := service.sendPairNotificatins(context.Background(), 7, []*model.ScheduleData{schedule},
-		map[model.GroupName][]*model.Chat{group: {chat}}, nil, now); err != nil {
+		map[model.GroupName][]*model.Chat{group: {chat}}, now); err != nil {
 		t.Fatal(err)
 	}
 	if len(messenger.sent()) != 1 || len(messenger.sent()[0].text) == 0 {

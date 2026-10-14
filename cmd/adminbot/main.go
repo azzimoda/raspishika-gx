@@ -13,6 +13,7 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/apiclient"
 	"github.com/azzimoda/raspishika-gx/internal/app"
 	adminbot "github.com/azzimoda/raspishika-gx/internal/bot/admin"
+	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/internal/repository"
 	"github.com/azzimoda/raspishika-gx/internal/service"
@@ -57,8 +58,14 @@ func main() {
 	defer cancel()
 
 	// Enqueues broadcast jobs instead of sending messages directly: the
-	// per-platform schedule bots pick them up and deliver them.
-	jobs := service.NewBroadcastJobs(container.Job, nil)
+	// per-platform schedule bots pick them up and deliver them. Only enqueue
+	// for platforms whose bots actually run, so a manual broadcast never leaves
+	// a pending job for a process that is not there to consume it.
+	platforms := []model.Platform{model.PlatformTelegram}
+	if viper.GetString(config.KeyVKToken) != "" && viper.GetInt64(config.KeyVKGroupID) != 0 {
+		platforms = append(platforms, model.PlatformVK)
+	}
+	jobs := service.NewBroadcastJobs(container.Job, platforms)
 
 	var adminBot *bot.Bot
 	var appReporter *app.AppReporter
