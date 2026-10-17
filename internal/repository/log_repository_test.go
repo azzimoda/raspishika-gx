@@ -40,6 +40,7 @@ func openTestLogDB(t *testing.T) *gorm.DB {
 			chat_id INTEGER NOT NULL,
 			group_or_teacher TEXT,
 			cached BOOLEAN NOT NULL DEFAULT 0,
+			error TEXT,
 			created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 		);
 		CREATE TABLE broadcast_task_logs (
@@ -496,5 +497,90 @@ func TestCountBroadcastLogsByPeriodAndKind(t *testing.T) {
 	// taskC (now-3h) and taskD (23:59:59) are outside [now-2h, now+1h].
 	if anyGot != 5 {
 		t.Fatalf("any logs = %d, want 5", anyGot)
+	}
+}
+
+func TestGetUpdateErrorStatsByPeriod(t *testing.T) {
+	db := openTestLogDB(t)
+	now := time.Now().UTC()
+	start := now.Add(-time.Hour)
+	end := now.Add(time.Hour)
+
+	insertErr := func(errVal any, at time.Time) {
+		t.Helper()
+		if err := db.Exec(`
+			INSERT INTO update_logs (chat_id, error, created_at) VALUES (1, ?, ?)
+		`, errVal, at).Error; err != nil {
+			t.Fatalf("failed to insert update log: %v", err)
+		}
+	}
+	insertErr("boom", now.Add(-30*time.Minute))
+	insertErr("boom", now.Add(-20*time.Minute))
+	insertErr("bang", now.Add(-10*time.Minute))
+	insertErr(nil, now.Add(-5*time.Minute))  // NULL — successful update
+	insertErr("", now.Add(-4*time.Minute))   // empty — successful update
+	insertErr("boom", now.Add(-2*time.Hour)) // out of period
+
+	repo := &logRepository{db: db}
+	rows, err := repo.GetUpdateErrorStatsByPeriod(context.Background(), start, end)
+	if err != nil {
+		t.Fatalf("GetUpdateErrorStatsByPeriod() error: %v", err)
+	}
+
+	got := make(map[string]int, len(rows))
+	for _, row := range rows {
+		got[row.Name] = row.Count
+	}
+	want := map[string]int{"boom": 2, "bang": 1}
+	if len(got) != len(want) {
+		t.Fatalf("grouped errors = %+v, want %+v", got, want)
+	}
+	for name, count := range want {
+		if got[name] != count {
+			t.Fatalf("grouped errors = %+v, want %+v", got, want)
+		}
+	}
+}
+
+func TestGetBroadcastErrorStatsByPeriod(t *testing.T) {
+	db := openTestLogDB(t)
+	now := time.Now().UTC()
+	start := now.Add(-time.Hour)
+	end := now.Add(time.Hour)
+
+	insertErr := func(errVal any, at time.Time) {
+		t.Helper()
+		if err := db.Exec(`
+			INSERT INTO broadcast_logs (broadcast_task_log_id, chat_id, error, created_at) VALUES (1, 1, ?, ?)
+		`, errVal, at).Error; err != nil {
+			t.Fatalf("failed to insert broadcast log: %v", err)
+		}
+	}
+	insertErr("flood", now.Add(-30*time.Minute))
+	insertErr("flood", now.Add(-20*time.Minute))
+	insertErr("flood", now.Add(-15*time.Minute))
+	insertErr("timeout", now.Add(-10*time.Minute))
+	insertErr(nil, now.Add(-5*time.Minute))   // NULL — successful delivery
+	insertErr("", now.Add(-4*time.Minute))    // empty — successful delivery
+	insertErr("flood", now.Add(-2*time.Hour)) // out of period
+
+	repo := &logRepository{db: db}
+	rows, err := repo.GetBroadcastErrorStatsByPeriod(context.Background(), start, end)
+	if err != nil {
+		t.Fatalf("GetBroadcastErrorStatsByPeriod() error: %v", err)
+	}
+
+	got := make(map[string]int, len(rows))
+	for _, row := range rows {
+		got[row.Name] = row.Count
+	}
+	want := map[string]int{"flood": 3, "timeout": 1}
+	if len(got) != len(want) {
+		t.Fatalf("grouped errors = %+v, want %+v", got, want)
+	}
+	for name, count := range want {
+		if got[name] != count {
+			t.Fatalf("grouped errors = %+v, want %+v", got, want)
+		}
 	}
 }

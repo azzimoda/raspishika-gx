@@ -28,21 +28,57 @@ func buildDashboard(general *service.GeneralStatsData, config *service.ConfigSta
 	}
 }
 
+// buildErrorsMessage assembles the rich message blocks of the /errors report:
+// the most frequent update-handler and broadcast-delivery errors for the
+// period, each source as its own fold sorted by frequency.
+func buildErrorsMessage(stats *service.ErrorStatsData, spec periodSpec) []models.InputRichBlock {
+	var blocks []models.InputRichBlock
+	blocks = append(blocks,
+		blockParagraph(textLabelValue("Period", generalPeriodLabel(spec))),
+		blockParagraph(textLabelValue("Errors", fmt.Sprintf("updates %d · broadcast %d",
+			stats.UpdatesTotal, stats.BroadcastTotal))),
+	)
+
+	if len(stats.Updates) > 0 {
+		blocks = append(blocks, blockDetails(
+			fmt.Sprintf("Updates (%d)", stats.UpdatesTotal), false,
+			blockTableRich([]string{"Error", "Count", "%"}, errorRichRows(stats.Updates, stats.UpdatesTotal), true, false),
+		))
+	}
+	if len(stats.Broadcast) > 0 {
+		blocks = append(blocks, blockDetails(
+			fmt.Sprintf("Broadcast (%d)", stats.BroadcastTotal), false,
+			blockTableRich([]string{"Error", "Count", "%"}, errorRichRows(stats.Broadcast, stats.BroadcastTotal), true, false),
+		))
+	}
+	if len(stats.Updates) == 0 && len(stats.Broadcast) == 0 {
+		blocks = append(blocks, blockParagraph(textPlain("No errors in the selected period.")))
+	}
+
+	return []models.InputRichBlock{
+		blockHeading("Errors", 1),
+		blockDetails(fmt.Sprintf("Summary: %s", generalPeriodLabel(spec)), true, blocks...),
+	}
+}
+
 // dashboardExport is the JSON file payload exported from a dashboard: the
 // general+config statistics for the given period plus its human label.
 type dashboardExport struct {
 	Period  string                    `json:"period"`
 	General *service.GeneralStatsData `json:"general"`
 	Config  *service.ConfigStatsData  `json:"config"`
+	Errors  *service.ErrorStatsData   `json:"errors,omitempty"`
 }
 
 // exportStatsPayload renders the dashboard statistics as an indented JSON file
-// payload ready to be sent as a document.
-func exportStatsPayload(general *service.GeneralStatsData, config *service.ConfigStatsData, spec periodSpec) ([]byte, error) {
+// payload ready to be sent as a document. The errors statistics are optional
+// and omitted when nil.
+func exportStatsPayload(general *service.GeneralStatsData, config *service.ConfigStatsData, errors *service.ErrorStatsData, spec periodSpec) ([]byte, error) {
 	payload, err := json.MarshalIndent(dashboardExport{
 		Period:  generalPeriodLabel(spec),
 		General: general,
 		Config:  config,
+		Errors:  errors,
 	}, "", "  ")
 	if err != nil {
 		return nil, err
@@ -281,6 +317,20 @@ func nameCountRows(items []repository.NameCount) [][]string {
 	return out
 }
 
+// errorRichRows renders normalized error rows with their share of the source
+// total. The error text itself is formatted as code.
+func errorRichRows(items []service.ErrorCount, total int) [][]models.RichText {
+	out := make([][]models.RichText, 0, len(items))
+	for _, item := range items {
+		out = append(out, []models.RichText{
+			textCode(item.Message),
+			textPlain(fmt.Sprintf("%d", item.Count)),
+			textPlain(percent(total, item.Count)),
+		})
+	}
+	return out
+}
+
 func timeCountRows(items []repository.TimeCount) [][]string {
 	out := make([][]string, 0, len(items))
 	for _, item := range items {
@@ -356,6 +406,13 @@ func textBold(s string) models.RichText {
 	}
 }
 
+func textCode(s string) models.RichText {
+	return models.RichText{
+		Type:         models.RichTextTypeCode,
+		RichTextCode: &models.RichTextCode{Type: models.RichTextTypeCode, Text: textPlain(s)},
+	}
+}
+
 // textLabelValue is a rich text fragment rendered as a bold label followed by
 // a plain value, e.g. "Total: 42".
 func textLabelValue(label, value string) models.RichText {
@@ -392,6 +449,20 @@ func blockDetails(summary string, isOpen bool, blocks ...models.InputRichBlock) 
 }
 
 func blockTable(header []string, rows [][]string, bordered, striped bool) models.InputRichBlock {
+	richRows := make([][]models.RichText, 0, len(rows))
+	for _, row := range rows {
+		richRow := make([]models.RichText, 0, len(row))
+		for _, v := range row {
+			richRow = append(richRow, textPlain(v))
+		}
+		richRows = append(richRows, richRow)
+	}
+	return blockTableRich(header, richRows, bordered, striped)
+}
+
+// blockTableRich is like blockTable but takes pre-built rich text cells, so a
+// caller can format individual cells (e.g. error text as code).
+func blockTableRich(header []string, rows [][]models.RichText, bordered, striped bool) models.InputRichBlock {
 	limit := 100
 	if striped {
 		limit = 12
@@ -412,8 +483,9 @@ func blockTable(header []string, rows [][]string, bordered, striped bool) models
 	for _, row := range rows {
 		cellsRow := make([]models.RichBlockTableCell, 0, len(row))
 		for _, v := range row {
+			cellText := v
 			cellsRow = append(cellsRow, models.RichBlockTableCell{
-				Text: &models.RichText{PlainText: v}, Align: "left", Valign: "top",
+				Text: &cellText, Align: "left", Valign: "top",
 			})
 		}
 		cells = append(cells, cellsRow)

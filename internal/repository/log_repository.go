@@ -16,6 +16,10 @@ type UpdateLogRepository interface {
 	GetUpdateLogsByPeriod(ctx context.Context, start, end time.Time) ([]model.UpdateLog, error)
 	CountUpdateLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
 	CountSuccessfulUpdateLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
+	// GetUpdateErrorStatsByPeriod returns update handler errors grouped by raw
+	// error text within the period. Rows with an empty/NULL error (successful
+	// updates) are excluded. Callers normalize and re-aggregate the raw texts.
+	GetUpdateErrorStatsByPeriod(ctx context.Context, start, end time.Time) ([]NameCount, error)
 	// CountScheduleRequestsByPeriod returns the number of schedule requests
 	// (update logs with a group or teacher set) split by cache usage.
 	CountScheduleRequestsByPeriod(ctx context.Context, start, end time.Time) (cached, uncached int, err error)
@@ -40,6 +44,10 @@ type BroadcastLogRepository interface {
 	CountBroadcastTaskLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
 	CountBroadcastLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
 	CountSuccessfulBroadcastLogsByPeriod(ctx context.Context, start, end time.Time) (int, error)
+	// GetBroadcastErrorStatsByPeriod returns broadcast delivery errors grouped
+	// by raw error text within the period. Rows with an empty/NULL error are
+	// excluded. Callers normalize and re-aggregate the raw texts.
+	GetBroadcastErrorStatsByPeriod(ctx context.Context, start, end time.Time) ([]NameCount, error)
 	CountBroadcastLogsByPeriodAndKind(ctx context.Context, kind model.BroadcastKind, start, end time.Time) (int, error)
 	// GetBroadcastTaskStatsByKind returns broadcast task stats grouped by kind
 	// (tasks count, total groups sent, average elapsed ms).
@@ -120,6 +128,19 @@ func (r *logRepository) CountSuccessfulUpdateLogsByPeriod(ctx context.Context, s
 	return int(count), nil
 }
 
+func (r *logRepository) GetUpdateErrorStatsByPeriod(ctx context.Context, start, end time.Time) ([]NameCount, error) {
+	const query = `
+		SELECT error AS name, COUNT(*) AS count FROM update_logs
+		WHERE error IS NOT NULL AND error != '' AND created_at BETWEEN ? AND ?
+		GROUP BY error
+	`
+	var rows []NameCount
+	if err := r.db.WithContext(ctx).Raw(query, start, end).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("failed to get update error stats: %w", err)
+	}
+	return rows, nil
+}
+
 func (r *logRepository) LogBroadcastTask(ctx context.Context, taskLog *model.BroadcastTaskLog) error {
 	if taskLog == nil {
 		return nil
@@ -174,6 +195,18 @@ func (r *logRepository) CountSuccessfulBroadcastLogsByPeriod(ctx context.Context
 		return 0, fmt.Errorf("failed to count successful broadcast logs: %w", err)
 	}
 	return int(count), nil
+}
+func (r *logRepository) GetBroadcastErrorStatsByPeriod(ctx context.Context, start, end time.Time) ([]NameCount, error) {
+	const query = `
+		SELECT error AS name, COUNT(*) AS count FROM broadcast_logs
+		WHERE error IS NOT NULL AND error != '' AND created_at BETWEEN ? AND ?
+		GROUP BY error
+	`
+	var rows []NameCount
+	if err := r.db.WithContext(ctx).Raw(query, start, end).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("failed to get broadcast error stats: %w", err)
+	}
+	return rows, nil
 }
 func (r *logRepository) CountBroadcastLogsByPeriodAndKind(ctx context.Context, kind model.BroadcastKind, start, end time.Time) (int, error) {
 	if kind == model.BAny {

@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/azzimoda/raspishika-gx/internal/model"
@@ -328,6 +331,126 @@ type LogStatsData struct {
 	RequestsByHour        []repository.TimeCount
 	TopRequestedSchedules []repository.NameCount
 	BroadcastByKind       []repository.BroadcastTaskKindStats
+}
+
+// topErrorsLimit bounds the number of error rows kept per source in the errors
+// report.
+const topErrorsLimit = 20
+
+// maxErrorMessageLen bounds the length of a normalized error text shown in the
+// report.
+const maxErrorMessageLen = 200
+
+// ErrorCount is one normalized error message with its occurrence count.
+type ErrorCount struct {
+	Message string `json:"message"`
+	Count   int    `json:"count"`
+}
+
+// ErrorStatsData holds errors grouped by source (update handlers vs broadcast
+// delivery) for a period, sorted by descending frequency.
+type ErrorStatsData struct {
+	UpdatesTotal   int          `json:"updates_total"`
+	BroadcastTotal int          `json:"broadcast_total"`
+	Updates        []ErrorCount `json:"updates"`
+	Broadcast      []ErrorCount `json:"broadcast"`
+}
+
+// GetErrorStats returns the most frequent errors per source for the period.
+// Update handler errors and broadcast delivery errors are aggregated
+// separately; within each source the raw texts are normalized and summed, then
+// sorted by frequency.
+func (s *StatsService) GetErrorStats(ctx context.Context, start, end time.Time) (*ErrorStatsData, error) {
+	updates, err := s.logRepo.GetUpdateErrorStatsByPeriod(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	broadcast, err := s.logRepo.GetBroadcastErrorStatsByPeriod(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := &ErrorStatsData{
+		Updates:   mergeErrorCounts(updates, topErrorsLimit),
+		Broadcast: mergeErrorCounts(broadcast, topErrorsLimit),
+	}
+	for _, row := range updates {
+		stats.UpdatesTotal += row.Count
+	}
+	for _, row := range broadcast {
+		stats.BroadcastTotal += row.Count
+	}
+	return stats, nil
+}
+
+// mergeErrorCounts normalizes raw error texts, sums counts per normalized
+// message, sorts by descending frequency (message ascending as a tiebreak) and
+// keeps at most limit rows.
+func mergeErrorCounts(rows []repository.NameCount, limit int) []ErrorCount {
+	byMessage := make(map[string]int, len(rows))
+	for _, row := range rows {
+		message := normalizeErrorMessage(row.Name)
+		if message == "" {
+			continue
+		}
+		byMessage[message] += row.Count
+	}
+
+	out := make([]ErrorCount, 0, len(byMessage))
+	for message, count := range byMessage {
+		out = append(out, ErrorCount{Message: message, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Message < out[j].Message
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+// normalizeErrorRules collapse dynamic fragments of an error message so that
+// occurrences differing only in incidental details (retry delays, identifiers,
+// bot tokens, generated file names) end up in the same bucket.
+var normalizeErrorRules = []struct {
+	re   *regexp.Regexp
+	repl string
+}{
+	{regexp.MustCompile(`(?i)retry[ _]after \d+`), "retry after N"},
+	{regexp.MustCompile(`\b\d{6,}\b`), "N"},
+	{regexp.MustCompile(`\bbot[^/ ]+`), "bot***"},
+	{regexp.MustCompile(`schedule_.*?\.png`), "schedule_*.png"},
+}
+
+// normalizeErrorMessage turns a raw error text into a stable, comparable form:
+// it drops whitespace noise, deduplicates the repeated causes produced by
+// errors.Join, masks dynamic fragments and truncates overlong messages.
+func normalizeErrorMessage(s string) string {
+	seen := make(map[string]struct{})
+	lines := make([]string, 0, 4)
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.Join(strings.Fields(line), " ")
+		if line == "" {
+			continue
+		}
+		if _, ok := seen[line]; ok {
+			continue
+		}
+		seen[line] = struct{}{}
+		lines = append(lines, line)
+	}
+
+	message := strings.Join(lines, " | ")
+	for _, rule := range normalizeErrorRules {
+		message = rule.re.ReplaceAllString(message, rule.repl)
+	}
+	if len(message) > maxErrorMessageLen {
+		message = message[:maxErrorMessageLen] + "…"
+	}
+	return message
 }
 
 func (s *StatsService) GetGeneralStats(ctx context.Context, start, end time.Time) (*GeneralStatsData, error) {

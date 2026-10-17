@@ -148,10 +148,16 @@ func TestExportStatsPayload(t *testing.T) {
 		},
 	}
 	config := &service.ConfigStatsData{ChatsTotal: 10, ConfiguredGroupsUnique: 4}
+	errors := &service.ErrorStatsData{
+		UpdatesTotal:   6,
+		BroadcastTotal: 4,
+		Updates:        []service.ErrorCount{{Message: "retry after N", Count: 5}},
+		Broadcast:      []service.ErrorCount{{Message: "flood", Count: 4}},
+	}
 
 	now := time.Now()
 	spec := periodSpec{start: now.Add(-24 * time.Hour), end: now, isRelative: true}
-	payload, err := exportStatsPayload(general, config, spec)
+	payload, err := exportStatsPayload(general, config, errors, spec)
 	if err != nil {
 		t.Fatalf("exportStatsPayload() error: %v", err)
 	}
@@ -160,6 +166,7 @@ func TestExportStatsPayload(t *testing.T) {
 		Period  string                    `json:"period"`
 		General *service.GeneralStatsData `json:"general"`
 		Config  *service.ConfigStatsData  `json:"config"`
+		Errors  *service.ErrorStatsData   `json:"errors"`
 	}
 	if err := json.Unmarshal(payload, &out); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
@@ -172,6 +179,9 @@ func TestExportStatsPayload(t *testing.T) {
 	}
 	if out.Config == nil || out.Config.ConfiguredGroupsUnique != 4 {
 		t.Fatalf("config = %+v, want configured_groups_unique 4", out.Config)
+	}
+	if out.Errors == nil || out.Errors.UpdatesTotal != 6 || len(out.Errors.Updates) != 1 {
+		t.Fatalf("errors = %+v, want updates_total 6 with one update row", out.Errors)
 	}
 }
 
@@ -220,5 +230,54 @@ func TestFormattingHelpers(t *testing.T) {
 	}
 	if got := latencyLabel(repository.LatencyStats{Count: 3, AvgMs: 10, P95Ms: 50, MaxMs: 200}); got != "avg/p95/max 10/50/200 ms" {
 		t.Fatalf("latencyLabel = %q", got)
+	}
+}
+
+func TestBuildErrorsMessage(t *testing.T) {
+	stats := &service.ErrorStatsData{
+		UpdatesTotal:   6,
+		BroadcastTotal: 4,
+		Updates: []service.ErrorCount{
+			{Message: "retry after N", Count: 5},
+			{Message: "boom", Count: 1},
+		},
+		Broadcast: []service.ErrorCount{{Message: "flood", Count: 4}},
+	}
+	spec := periodSpec{start: time.Now().Add(-24 * time.Hour), end: time.Now(), isRelative: true}
+
+	blocks := buildErrorsMessage(stats, spec)
+	if len(blocks) != 2 {
+		t.Fatalf("expected 2 top-level blocks (heading + details), got %d", len(blocks))
+	}
+	inner := blocks[1].InputRichBlockDetails
+	if inner == nil {
+		t.Fatalf("expected second block to be details, got %+v", blocks[1])
+	}
+
+	out, err := json.Marshal(models.InputRichMessage{Blocks: blocks})
+	if err != nil {
+		t.Fatalf("marshal errors message: %v", err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		`"type":"heading"`, `"type":"table"`, `"type":"code"`,
+		"updates 6 · broadcast 4", "retry after N", "flood",
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in errors message", want)
+		}
+	}
+}
+
+func TestBuildErrorsMessageEmpty(t *testing.T) {
+	spec := periodSpec{start: time.Now().Add(-24 * time.Hour), end: time.Now(), isRelative: true}
+	blocks := buildErrorsMessage(&service.ErrorStatsData{}, spec)
+
+	out, err := json.Marshal(models.InputRichMessage{Blocks: blocks})
+	if err != nil {
+		t.Fatalf("marshal errors message: %v", err)
+	}
+	if !strings.Contains(string(out), "No errors in the selected period.") {
+		t.Fatalf("expected empty-state text in %s", out)
 	}
 }

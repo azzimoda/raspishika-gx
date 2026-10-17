@@ -35,6 +35,7 @@ type handler struct {
 func (h *handler) registerHandlers(b *bot.Bot) {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommandStartOnly, h.handleCmdStart)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "dashboard", bot.MatchTypeCommandStartOnly, h.handleCmdDashboard)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "errors", bot.MatchTypeCommandStartOnly, h.handleCmdErrors)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "help", bot.MatchTypeCommandStartOnly, h.handleCmdHelp)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "broadcast", bot.MatchTypeCommandStartOnly, h.handleCmdBroadcast)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "cancel", bot.MatchTypeCommandStartOnly, h.handleCmdCancel)
@@ -144,7 +145,12 @@ Requests
   Potential — chats with a group set (schedule is possible).
   Actual — manual uncached requests + broadcast group requests.
   Top requested — most requested groups/teachers.
-  By hour — request count per hour of day.`
+  By hour — request count per hour of day.
+
+Errors (/errors <period>)
+  Updates — handler errors, grouped by normalized text.
+  Broadcast — delivery errors, grouped by normalized text.
+  Count/% — occurrences and share within the source, sorted by frequency.`
 
 	b.SendMessage(ctx, &bot.SendMessageParams{ChatID: update.Message.Chat.ID, Text: helpText})
 }
@@ -181,6 +187,29 @@ func (h *handler) handleCmdDashboard(ctx context.Context, b *bot.Bot, update *mo
 	}
 }
 
+// handleCmdErrors renders the most frequent update-handler and broadcast
+// errors for the requested period, split by source and sorted by frequency.
+func (h *handler) handleCmdErrors(ctx context.Context, b *bot.Bot, update *models.Update) {
+	_, args := botutil.ParseCommand(update.Message.Text)
+
+	spec, ok := parsePeriodSpec(args)
+	if !ok {
+		spec, _ = parsePeriodSpec("1d")
+		args = "1d"
+	}
+
+	errorStats, err := h.Stats.GetErrorStats(ctx, spec.start, spec.end)
+	if err != nil {
+		h.Report().Err(err).Msg("Failed to collect error statistics")
+		return
+	}
+
+	blocks := buildErrorsMessage(errorStats, spec)
+	if _, err := h.Report().MsgRichWithMarkup("Errors", blocks, dashboardExportMarkup(args)); err != nil {
+		h.Report().Err(err).Msg("Failed to send errors report")
+	}
+}
+
 // handleExportStats sends the dashboard statistics as a JSON file in response
 // to pressing the "Export JSON" button on the dashboard message.
 func (h *handler) handleExportStats(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -199,12 +228,17 @@ func (h *handler) handleExportStats(ctx context.Context, b *bot.Bot, update *mod
 	g, gctx := errgroup.WithContext(ctx)
 	var generalStats *service.GeneralStatsData
 	var configStats *service.ConfigStatsData
+	var errorStats *service.ErrorStatsData
 	g.Go(func() (err error) {
 		generalStats, err = h.Stats.GetGeneralStats(gctx, spec.start, spec.end)
 		return err
 	})
 	g.Go(func() (err error) {
 		configStats, err = h.Stats.GetConfigStats(gctx)
+		return err
+	})
+	g.Go(func() (err error) {
+		errorStats, err = h.Stats.GetErrorStats(gctx, spec.start, spec.end)
 		return err
 	})
 	if err := g.Wait(); err != nil {
@@ -215,7 +249,7 @@ func (h *handler) handleExportStats(ctx context.Context, b *bot.Bot, update *mod
 		return
 	}
 
-	payload, err := exportStatsPayload(generalStats, configStats, spec)
+	payload, err := exportStatsPayload(generalStats, configStats, errorStats, spec)
 	if err != nil {
 		h.Report().Err(err).Msg("Failed to build export payload")
 		b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
