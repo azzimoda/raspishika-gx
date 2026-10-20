@@ -51,10 +51,25 @@ func TestJustrayFirstSource(t *testing.T) {
 		}
 	})
 
-	// A degraded list used to be returned without an error, and the pool cached
-	// it for an hour: the bot lost the free-proxy fallback for that whole window.
-	t.Run("fallback error is propagated, not cached as a justray-only list", func(t *testing.T) {
+	// A failed fallback with justray configured degrades to a justray-only
+	// list rather than failing: the checker validates justray and the revalidate
+	// loop retries the fallback on every cycle.
+	t.Run("fallback error with justray degrades to justray-only", func(t *testing.T) {
 		src := newJustrayFirstSource("127.0.0.1:10808", fakeSource{err: errors.New("boom")})
+		addrs, err := src.Fetch(ctx)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{"127.0.0.1:10808"}
+		if !reflect.DeepEqual(addrs, want) {
+			t.Fatalf("got %v, want %v", addrs, want)
+		}
+	})
+
+	// Without justray, a failed fallback is still propagated so a transient
+	// upstream failure retries on the next call instead of caching an empty list.
+	t.Run("fallback error without justray is propagated", func(t *testing.T) {
+		src := newJustrayFirstSource("", fakeSource{err: errors.New("boom")})
 		addrs, err := src.Fetch(ctx)
 		if err == nil {
 			t.Fatal("expected an error so the pool does not cache a degraded list")

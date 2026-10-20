@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/azzimoda/go-tg-proxy/proxy"
+	"github.com/rs/zerolog/log"
 )
 
 // justrayFirstSource prefers a local justray mixed in-bound over a fallback
@@ -28,19 +29,25 @@ func newJustrayFirstSource(justrayAddr string, fallback proxy.Source) proxy.Sour
 
 // Fetch returns justray ahead of the fallback list.
 //
-// A failed fallback fetch is reported as an error rather than downgraded to a
-// justray-only list. proxy.Service caches a successful fetch for an hour, so
-// returning a degraded list without an error replaced the whole repository with
-// justray and marked it fresh: for the next hour the bot ran with no free-proxy
-// fallback even after proxifly had recovered. Propagating the error leaves the
-// previous list in place and the next call retries, which is what a transient
-// upstream failure needs.
+// A failed fallback fetch when justray is configured degrades to a justray-only
+// list rather than failing entirely: the checker will validate justray and drop
+// it from the pool if it cannot reach Telegram, while the pool revalidate loop
+// retries the fallback source on every cycle. Returning an error instead caused
+// a cold-start failure whenever the free-proxy source was down from the start
+// (e.g. proxifly returning 403), because the repository stayed empty and the
+// health check had no proxies at all.
 //
-// The only cost is a cold start while proxifly is down: the repository is still
-// empty, so the bot has no proxy at all until the source answers.
+// When no justray address is configured, a failed fallback fetch is still
+// propagated as an error so a transient upstream failure retries on the next
+// call instead of caching an empty list.
 func (s justrayFirstSource) Fetch(ctx context.Context) ([]string, error) {
 	fallback, err := s.fallback.Fetch(ctx)
 	if err != nil {
+		if s.justrayAddr != "" {
+			log.Warn().Err(err).Str("justray", s.justrayAddr).
+				Msg("Fallback proxy source unavailable; using justray only")
+			return []string{s.justrayAddr}, nil
+		}
 		return nil, fmt.Errorf("fallback proxy source: %w", err)
 	}
 
