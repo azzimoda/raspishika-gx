@@ -33,7 +33,10 @@ func openTestLogDB(t *testing.T) *gorm.DB {
 			"group" TEXT,
 			daily_sending_time TEXT,
 			pair_sending BOOLEAN NOT NULL DEFAULT 0,
-			update_notification BOOLEAN NOT NULL DEFAULT 0
+			update_notification BOOLEAN NOT NULL DEFAULT 0,
+			daily_disabled BOOLEAN NOT NULL DEFAULT 0,
+			pair_disabled BOOLEAN NOT NULL DEFAULT 0,
+			change_disabled BOOLEAN NOT NULL DEFAULT 0
 		);
 		CREATE TABLE update_logs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,

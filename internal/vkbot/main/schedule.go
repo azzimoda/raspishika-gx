@@ -192,7 +192,9 @@ func (b *Bot) sendSchedule(ctx context.Context, msg vkclient.Message, conf model
 		var text strings.Builder
 		fmt.Fprintf(&text, "Расписание — %s\n", conf.Name())
 		for _, day := range schedule.Days {
-			text.WriteString("\n" + formatDay(day, time.Time{}) + "\n")
+			text.WriteString("\n")
+			text.WriteString(formatDay(day, time.Time{}))
+			text.WriteString("\n")
 		}
 		text.WriteString(note)
 		return b.send(ctx, msg.PeerID, text.String(), keyboard)
@@ -306,21 +308,27 @@ func formatDay(day model.ScheduleDay, current time.Time) string {
 			continue
 		}
 		if pair.Title != "" {
-			out.WriteString("\n" + messenger.PlainText(pair.Title))
+			out.WriteString("\n")
+			out.WriteString(messenger.PlainText(pair.Title))
 		}
 		if pair.Discipline != "" {
-			out.WriteString("\n" + messenger.PlainText(pair.Discipline))
+			out.WriteString("\n")
+			out.WriteString(messenger.PlainText(pair.Discipline))
 		} else if pair.Label != "" {
-			out.WriteString("\n" + messenger.PlainText(pair.Label))
+			out.WriteString("\n")
+			out.WriteString(messenger.PlainText(pair.Label))
 		}
 		if pair.Subgroup != "" {
-			out.WriteString("\nПодгруппа: " + messenger.PlainText(pair.Subgroup))
+			out.WriteString("\nПодгруппа: ")
+			out.WriteString(messenger.PlainText(pair.Subgroup))
 		}
 		if pair.Teacher != "" {
-			out.WriteString("\n" + messenger.PlainText(pair.Teacher))
+			out.WriteString("\n")
+			out.WriteString(messenger.PlainText(pair.Teacher))
 		}
 		if pair.Group != "" {
-			out.WriteString("\nГруппа: " + messenger.PlainText(pair.Group))
+			out.WriteString("\nГруппа: ")
+			out.WriteString(messenger.PlainText(pair.Group))
 		}
 	}
 	if count == 0 {

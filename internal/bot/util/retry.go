@@ -13,10 +13,12 @@ import (
 const SendRetryAttempts = 3
 
 // RetryNetwork runs send until it succeeds, retrying network errors with
-// increasing backoff. Non-network errors fail immediately; onNetworkError, when
-// set, is called for every network error before it is retried (e.g. to observe
-// and remember which proxy failed). The retry aborts when ctx is cancelled.
-// After the attempts are exhausted the last error is returned.
+// increasing backoff. Telegram 429 (TooManyRequests) errors are retried after
+// the Retry-After delay reported by Telegram. Non-network, non-429 errors fail
+// immediately; onNetworkError, when set, is called for every network error
+// before it is retried (e.g. to observe and remember which proxy failed).
+// The retry aborts when ctx is cancelled. After the attempts are exhausted the
+// last error is returned.
 func RetryNetwork[T any](
 	ctx context.Context,
 	onNetworkError func(error),
@@ -30,6 +32,20 @@ func RetryNetwork[T any](
 			return v, nil
 		}
 		lastErr = err
+
+		if retryAfter, ok := GetRetryAfter(err); ok {
+			// Telegram rate limit: wait the requested delay before retrying.
+			log.Warn().Err(err).Dur("retry_after", retryAfter).
+				Int("attempt", attempt+1).Int("max", SendRetryAttempts).
+				Msg("Telegram rate limit, retrying after delay...")
+			select {
+			case <-ctx.Done():
+				return zero, ctx.Err()
+			case <-time.After(retryAfter):
+			}
+			continue
+		}
+
 		if !IsNetworkError(err) {
 			return zero, err
 		}

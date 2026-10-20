@@ -39,6 +39,9 @@ func openTestPlatformScopeDB(t *testing.T) *gorm.DB {
 			daily_sending_time TEXT,
 			pair_sending BOOLEAN NOT NULL DEFAULT 0,
 			update_notification BOOLEAN NOT NULL DEFAULT 0,
+			daily_disabled BOOLEAN NOT NULL DEFAULT 0,
+			pair_disabled BOOLEAN NOT NULL DEFAULT 0,
+			change_disabled BOOLEAN NOT NULL DEFAULT 0,
 			created_at DATETIME
 		)`,
 		`CREATE TABLE update_logs (

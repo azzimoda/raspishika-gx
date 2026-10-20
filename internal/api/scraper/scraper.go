@@ -32,6 +32,10 @@ const (
 	retryAttempts = 5
 )
 
+// ErrVacation is returned when the college site responds with 403 on a
+// schedule-related request and vacation mode is confirmed.
+var ErrVacation = errors.New("college site is in vacation mode")
+
 // Package-level endpoint URLs (vars so tests can point them at httptest).
 var (
 	// groupsFunctURL loads the lists of departments and groups.
@@ -40,20 +44,40 @@ var (
 	prepFunctURL = "https://coworking.tyuiu.ru/shs/prep_n/funct.php"
 	// schedulesPageURL is the index page used to check vacation status.
 	schedulesPageURL = "https://coworking.tyuiu.ru/shs/index.php"
+
+	// defaultHTTPClient is used by package-level HTTP helpers when no
+	// Scraper-specific client is supplied.
+	defaultHTTPClient = &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: 10 * time.Second,
+		},
+	}
 )
 
 // Scraper retrieves data from the college website over plain HTTP.
-type Scraper struct{}
+type Scraper struct {
+	httpClient *http.Client
+}
 
-// New creates a Scraper.
-func New() *Scraper { return &Scraper{} }
+// New creates a Scraper with default HTTP timeouts.
+func New() *Scraper {
+	return &Scraper{
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				ResponseHeaderTimeout: 10 * time.Second,
+			},
+		},
+	}
+}
 
 // CheckVacation checks if the college site is in vacation mode.
 func (s *Scraper) CheckVacation() (bool, error) {
 
 	log.Debug().Msg("Checking vacation status...")
 
-	resp, err := httpGetRequestWithHeaders(schedulesPageURL, generateHeaders())
+	resp, err := httpGetRequestWithHeadersClient(s.httpClient, schedulesPageURL, generateHeaders())
 	if err != nil {
 		return false, fmt.Errorf("failed to check vacation status: %w", err)
 	}
@@ -84,7 +108,7 @@ func (s *Scraper) ScrapeDepartments() ([]model.Department, error) {
 
 	log.Debug().Msg("Scraping departments...")
 
-	body, err := postFormRetry(groupsFunctURL, url.Values{"action": {"load_info"}}, retryAttempts)
+	body, err := postFormRetryClient(s.httpClient, groupsFunctURL, url.Values{"action": {"load_info"}}, retryAttempts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch departments: %w", err)
 	}
@@ -122,7 +146,7 @@ func (s *Scraper) ScrapeDepartments() ([]model.Department, error) {
 // departmentByID fetches the department name for the given load_info entry.
 func (s *Scraper) departmentByID(item loadInfoItem) (model.Department, error) {
 
-	body, err := postFormRetry(groupsFunctURL, url.Values{
+	body, err := postFormRetryClient(s.httpClient, groupsFunctURL, url.Values{
 		"action": {"load"}, "act": {"list_groups"}, "otd": {"0"}, "vd": {item.ID},
 	}, retryAttempts)
 	if err != nil {
@@ -161,7 +185,7 @@ func (s *Scraper) ScrapeDepartmentGroups(department *model.Department) ([]model.
 		}
 	}
 
-	body, err := postFormRetry(groupsFunctURL, url.Values{
+	body, err := postFormRetryClient(s.httpClient, groupsFunctURL, url.Values{
 		"action": {"load"}, "act": {"list_groups"}, "otd": {"0"}, "vd": {department.ID},
 	}, retryAttempts)
 	if err != nil {
@@ -250,7 +274,7 @@ func (s *Scraper) ScrapeTeachers() ([]model.Teacher, error) {
 
 	log.Debug().Msg("Scraping teachers...")
 
-	body, err := postFormRetry(prepFunctURL, url.Values{
+	body, err := postFormRetryClient(s.httpClient, prepFunctURL, url.Values{
 		"action": {"load"}, "act": {"list_prepods"}, "otd": {"0"}, "bs": {"0"},
 	}, retryAttempts)
 	if err != nil {
@@ -343,9 +367,7 @@ func (s *Scraper) getScheduleForTeacher(scheduleURL string) (string, error) {
 			}
 			id := fmt.Sprintf("ur%d%s%s", u, dn, ms)
 			old := "<td class=urok id='" + id + "'></td>"
-			if strings.Contains(html, old) {
-				html = strings.Replace(html, old, "<td class=urok id='"+id+"'>"+cellHTML+"</td>", 1)
-			}
+			html = strings.Replace(html, old, "<td class=urok id='"+id+"'>"+cellHTML+"</td>", 1)
 		}
 	}
 	return html, nil
@@ -389,9 +411,16 @@ func buildEkzCell(row []string) string {
 // fetchSchedulePage downloads the schedule page and converts it to UTF-8.
 func (s *Scraper) fetchSchedulePage(scheduleURL string) (string, error) {
 
-	resp, err := httpGetRequestRetryingWithRandomHeaders(scheduleURL, retryAttempts)
+	resp, err := httpGetRequestRetryingWithRandomHeadersClient(s.httpClient, scheduleURL, retryAttempts)
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		defer resp.Body.Close()
+		if isVacation, vacErr := s.CheckVacation(); vacErr == nil && isVacation {
+			return "", ErrVacation
+		}
+		return "", fmt.Errorf("request failed with status %s", resp.Status)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
@@ -417,9 +446,16 @@ func (s *Scraper) fetchUrok(modelURL, pid, chisl, run string) (map[string][]stri
 
 	urokURL := fmt.Sprintf("%s?task=get_urok&format=row&p=%s&c=%s&r=%s", modelURL, pid, chisl, run)
 
-	resp, err := httpGetRequestRetryingWithRandomHeaders(urokURL, retryAttempts, "model")
+	resp, err := httpGetRequestRetryingWithRandomHeadersClient(s.httpClient, urokURL, retryAttempts, "model")
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		defer resp.Body.Close()
+		if isVacation, vacErr := s.CheckVacation(); vacErr == nil && isVacation {
+			return nil, ErrVacation
+		}
+		return nil, fmt.Errorf("request failed with status %s", resp.Status)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
@@ -466,8 +502,15 @@ func modernUserAgent() string {
 // httpGetRequestRetryingWithRandomHeaders retries an HTTP GET until it succeeds
 // or the attempts run out. By default full random browser headers are sent;
 // pass "model" as headerKind for the minimal header set that the Model.php
-// endpoint accepts.
+// endpoint accepts. When client is non-nil it is used instead of the default
+// HTTP client (e.g. Scraper's client with timeouts).
 func httpGetRequestRetryingWithRandomHeaders(url string, attempts int, headerKinds ...string) (*http.Response, error) {
+	return httpGetRequestRetryingWithRandomHeadersClient(nil, url, attempts, headerKinds...)
+}
+
+// httpGetRequestRetryingWithRandomHeadersClient is like
+// httpGetRequestRetryingWithRandomHeaders but accepts an explicit HTTP client.
+func httpGetRequestRetryingWithRandomHeadersClient(client *http.Client, url string, attempts int, headerKinds ...string) (*http.Response, error) {
 	headersFor := generateHeaders
 	if len(headerKinds) > 0 && headerKinds[0] == "model" {
 		headersFor = minimalHeaders
@@ -483,7 +526,7 @@ func httpGetRequestRetryingWithRandomHeaders(url string, attempts int, headerKin
 		}),
 	).Do(func() (errReq error) {
 		headers := headersFor()
-		resp, errReq = httpGetRequestWithHeaders(url, headers)
+		resp, errReq = httpGetRequestWithHeadersClient(client, url, headers)
 		if errReq != nil {
 			e := log.Error().Err(errReq).Str("url", url).Any("headers", headers)
 			if resp != nil {
@@ -495,7 +538,11 @@ func httpGetRequestRetryingWithRandomHeaders(url string, attempts int, headerKin
 		switch resp.StatusCode {
 		case http.StatusOK:
 			return nil
-		case http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound, http.StatusTooManyRequests:
+		case http.StatusForbidden:
+			// 403 may mean vacation mode; return the response so the caller
+			// can check vacation status instead of treating it as fatal.
+			return nil
+		case http.StatusBadRequest, http.StatusNotFound, http.StatusTooManyRequests:
 			errReq = retry.Unrecoverable(fmt.Errorf("unexpected status: %s", resp.Status))
 		default:
 			errReq = fmt.Errorf("unexpected status: %s", resp.Status)
@@ -510,6 +557,11 @@ func httpGetRequestRetryingWithRandomHeaders(url string, attempts int, headerKin
 
 // postFormRetry POSTs the form until it succeeds or the attempts run out.
 func postFormRetry(url string, form url.Values, attempts int) ([]byte, error) {
+	return postFormRetryClient(nil, url, form, attempts)
+}
+
+// postFormRetryClient is like postFormRetry but accepts an explicit HTTP client.
+func postFormRetryClient(client *http.Client, url string, form url.Values, attempts int) ([]byte, error) {
 	var body []byte
 	err := retry.New(
 		retry.Attempts(uint(attempts)),
@@ -519,7 +571,7 @@ func postFormRetry(url string, form url.Values, attempts int) ([]byte, error) {
 			log.Error().Err(err).Str("url", url).Msgf("retry attempt %d", attempt)
 		}),
 	).Do(func() (errReq error) {
-		b, errReq := postForm(url, form)
+		b, errReq := postFormClient(client, url, form)
 		if errReq != nil {
 			log.Error().Err(errReq).Str("url", url).Msg("HTTP POST request failed")
 			return errReq
@@ -532,6 +584,11 @@ func postFormRetry(url string, form url.Values, attempts int) ([]byte, error) {
 
 // postForm sends a POST form to the given url and returns the response body.
 func postForm(url string, form url.Values) ([]byte, error) {
+	return postFormClient(nil, url, form)
+}
+
+// postFormClient is like postForm but accepts an explicit HTTP client.
+func postFormClient(client *http.Client, url string, form url.Values) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -542,7 +599,9 @@ func postForm(url string, form url.Values) ([]byte, error) {
 		req.Header.Add(key, value)
 	}
 
-	client := &http.Client{}
+	if client == nil {
+		client = defaultHTTPClient
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -578,6 +637,12 @@ func generateHeaders() map[string]string {
 }
 
 func httpGetRequestWithHeaders(url string, headers map[string]string) (*http.Response, error) {
+	return httpGetRequestWithHeadersClient(nil, url, headers)
+}
+
+// httpGetRequestWithHeadersClient is like httpGetRequestWithHeaders but
+// accepts an explicit HTTP client.
+func httpGetRequestWithHeadersClient(client *http.Client, url string, headers map[string]string) (*http.Response, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -587,7 +652,9 @@ func httpGetRequestWithHeaders(url string, headers map[string]string) (*http.Res
 		req.Header.Add(key, value)
 	}
 
-	client := &http.Client{}
+	if client == nil {
+		client = defaultHTTPClient
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

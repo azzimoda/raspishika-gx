@@ -71,6 +71,56 @@ func IsMessageNotModified(err error) bool {
 		strings.Contains(strings.ToLower(err.Error()), "message is not modified")
 }
 
+// IsPermanentError reports whether err indicates a permanent failure to send
+// messages to a specific chat, such that the subscription should be disabled.
+// Examples: chat not found, bot blocked by user, not enough rights, etc.
+func IsPermanentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	// Check for known strings indicating chat or user problems.
+	if strings.Contains(msg, "chat not found") ||
+		strings.Contains(msg, "user is deactivated") ||
+		strings.Contains(msg, "bot was blocked by the user") ||
+		strings.Contains(msg, "not enough rights") ||
+		strings.Contains(msg, "group chat was deleted") ||
+		strings.Contains(msg, "supergroup chat was deleted") ||
+		strings.Contains(msg, "channel chat was deleted") {
+		return true
+	}
+	switch {
+	case errors.Is(err, bot.ErrorForbidden):
+		// Forbidden includes bot being kicked, blocked, or not enough rights.
+		return true
+	}
+	return false
+}
+
+// GetRetryAfter extracts the Retry-After delay from a Telegram 429 error,
+// if present. Returns (0, false) for any other error. The returned duration
+// is capped at MaxRetryAfter to avoid unbounded waits.
+func GetRetryAfter(err error) (time.Duration, bool) {
+	if err == nil {
+		return 0, false
+	}
+	var tmr *bot.TooManyRequestsError
+	if !errors.As(err, &tmr) {
+		return 0, false
+	}
+	if tmr.RetryAfter <= 0 {
+		return 0, true
+	}
+	d := time.Duration(tmr.RetryAfter) * time.Second
+	if d > MaxRetryAfter {
+		d = MaxRetryAfter
+	}
+	return d, true
+}
+
+// MaxRetryAfter caps how long we wait for a Telegram 429 before retrying.
+const MaxRetryAfter = 60 * time.Second
+
 // SendMessageWithRetry sends a message, retrying on network errors so replies
 // are not lost when a proxy dies mid-flight.
 func SendMessageWithRetry(ctx context.Context, b *bot.Bot, params *bot.SendMessageParams) (*models.Message, error) {

@@ -79,6 +79,9 @@ type Chat struct {
 	ChangeAlert      bool            `gorm:"column:update_notification"`
 	Access           ChatAccessLevel `gorm:"column:access"`
 	DarkMode         bool            `gorm:"column:dark_mode"`
+	DailyDisabled    bool            `gorm:"column:daily_disabled"`
+	PairDisabled     bool            `gorm:"column:pair_disabled"`
+	ChangeDisabled   bool            `gorm:"column:change_disabled"`
 	CreatedAt        time.Time       `gorm:"column:created_at"`
 	UpdatedAt        time.Time       `gorm:"column:updated_at"`
 }

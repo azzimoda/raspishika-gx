@@ -26,12 +26,16 @@ import (
 	"github.com/azzimoda/raspishika-gx/pkg/config"
 	"github.com/azzimoda/raspishika-gx/pkg/database"
 	"github.com/azzimoda/raspishika-gx/pkg/logger"
+	"github.com/azzimoda/raspishika-gx/pkg/metrics"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
+	"net/http"
 )
 
 // New creates the app with the default API client from configuration.
@@ -43,6 +47,11 @@ func New() (*App, error) {
 // If scraperAPI is nil, the default API client from configuration is used.
 func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 	config.Init()
+
+	// Register Prometheus metrics.
+	if err := metrics.Register(prometheus.DefaultRegisterer); err != nil {
+		return nil, fmt.Errorf("failed to register metrics: %w", err)
+	}
 
 	logger.Init(viper.GetString(config.KeyLogLevel), viper.GetString(config.KeyLogDir))
 
@@ -103,6 +112,10 @@ func NewWithScraper(scraperAPI service.APIClient) (*App, error) {
 			if err != nil {
 				return nil, err
 			}
+			httpClient.Timeout = 60 * time.Second
+			if t, ok := httpClient.Transport.(*http.Transport); ok {
+				t.ResponseHeaderTimeout = 30 * time.Second
+			}
 			return bot.New(viper.GetString(config.KeyAdminBotToken),
 				bot.WithHTTPClient(10*time.Second, httpClient),
 				bot.WithCheckInitTimeout(10*time.Second),
@@ -149,10 +162,37 @@ func (a *App) Run() error {
 	defer a.Cancel()
 
 	log.Info().Msg("Starting app...")
-	ctx, cancel := signal.NotifyContext(a.Ctx, os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 
 	var runErr error
+
+	// Expose Prometheus metrics on a dedicated port.
+	metricsPort := viper.GetString("metrics_port")
+	if metricsPort == "" {
+		metricsPort = "9090"
+	}
+	metricsSrv := &http.Server{
+		Addr:              ":" + metricsPort,
+		Handler:           promhttp.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	g, _ := errgroup.WithContext(a.Ctx)
+	g.Go(func() error {
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("metrics server: %w", err)
+		}
+		return nil
+	})
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = metricsSrv.Shutdown(shutdownCtx)
+		if err := g.Wait(); err != nil {
+			runErr = errors.Join(runErr, err)
+		}
+	}()
+
+	ctx, cancel := signal.NotifyContext(a.Ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
 	if err := a.Services.HealthCheck(); err != nil {
 		runErr = fmt.Errorf("health check failed: %w", err)

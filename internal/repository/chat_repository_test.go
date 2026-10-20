@@ -37,6 +37,9 @@ func openTestChatDBFull(t *testing.T) *gorm.DB {
 			platform TEXT DEFAULT 'telegram',
 			department TEXT,
 			"group" TEXT,
+			daily_disabled BOOLEAN NOT NULL DEFAULT 0,
+			pair_disabled BOOLEAN NOT NULL DEFAULT 0,
+			change_disabled BOOLEAN NOT NULL DEFAULT 0,
 			created_at DATETIME
 		)
 	`).Error; err != nil {
@@ -72,7 +75,10 @@ func openTestChatDB(t *testing.T) *gorm.DB {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			platform TEXT DEFAULT 'telegram',
 			department TEXT,
-			"group" TEXT
+			"group" TEXT,
+			daily_disabled BOOLEAN NOT NULL DEFAULT 0,
+			pair_disabled BOOLEAN NOT NULL DEFAULT 0,
+			change_disabled BOOLEAN NOT NULL DEFAULT 0
 		)
 	`).Error; err != nil {
 		t.Fatalf("failed to create chats table: %v", err)
@@ -112,6 +118,9 @@ func openTestChatDBUnique(t *testing.T) *gorm.DB {
 			update_notification BOOLEAN NOT NULL DEFAULT 0,
 			dark_mode BOOLEAN NOT NULL DEFAULT 0,
 			access INTEGER NOT NULL DEFAULT 0,
+			daily_disabled BOOLEAN NOT NULL DEFAULT 0,
+			pair_disabled BOOLEAN NOT NULL DEFAULT 0,
+			change_disabled BOOLEAN NOT NULL DEFAULT 0,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)

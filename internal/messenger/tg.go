@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sync"
 
 	botutil "github.com/azzimoda/raspishika-gx/internal/bot/util"
+	"github.com/azzimoda/raspishika-gx/pkg/metrics"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
@@ -41,6 +43,9 @@ type Telegram struct {
 	getBot         func() *bot.Bot
 	getProxy       func() string
 	onNetworkError func(error, string)
+
+	mu        sync.Mutex
+	lastProxy string
 }
 
 // NewTelegram wraps a bot accessor. getBot must return the Telegram bot once
@@ -71,7 +76,8 @@ func (t *Telegram) client() (*bot.Bot, error) {
 func sendWithRetry[T any](
 	ctx context.Context,
 	getProxy func() string,
-	onFailure func(error, string),
+	onNetworkError func(error, string),
+	onProxySwitch func(prev, current string),
 	send func() (T, error),
 ) (T, error) {
 	var sawNetworkError bool
@@ -84,14 +90,50 @@ func sendWithRetry[T any](
 			}
 		}
 	}, send)
-	if err != nil && sawNetworkError && onFailure != nil {
-		onFailure(err, failingProxy)
+	if err != nil && sawNetworkError {
+		// Network error exhausted all retries: the bot will be restarted on a
+		// (possibly different) proxy by go-tg-proxy.
+		metrics.ProxyRestartsTotal.WithLabelValues("network").Inc()
+		if onNetworkError != nil {
+			onNetworkError(err, failingProxy)
+		}
+		// Track proxy switch: compare the proxy that failed with the one we
+		// last successfully used.
+		if getProxy != nil {
+			currentProxy := getProxy()
+			if onProxySwitch != nil {
+				onProxySwitch(failingProxy, currentProxy)
+			}
+		}
+	} else if err == nil && getProxy != nil {
+		// Successful send: remember the proxy that worked.
+		currentProxy := getProxy()
+		if onProxySwitch != nil {
+			onProxySwitch("", currentProxy)
+		}
 	}
 	return v, err
 }
 
+// sendWithRetryTracking wraps sendWithRetry with proxy-switch tracking that is
+// safe for concurrent use. It remembers the last proxy used on a successful
+// send and counts a switch whenever the proxy changes between calls.
+func (t *Telegram) sendWithRetryTracking[T any](
+	ctx context.Context,
+	send func() (T, error),
+) (T, error) {
+	return sendWithRetry(ctx, t.getProxy, t.onNetworkError, func(prev, current string) {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if prev != "" && prev != current {
+			metrics.ProxySwitchesTotal.WithLabelValues(prev, current).Inc()
+		}
+		t.lastProxy = current
+	}, send)
+}
+
 func (t *Telegram) SendMessagePeer(ctx context.Context, peerID int64, text string, opts ...SendOptions) (int, error) {
-	return sendWithRetry(ctx, t.getProxy, t.onNetworkError, func() (int, error) {
+	return t.sendWithRetryTracking(ctx, func() (int, error) {
 		b, err := t.client()
 		if err != nil {
 			return 0, err
@@ -116,7 +158,7 @@ func (t *Telegram) SendMessagePeer(ctx context.Context, peerID int64, text strin
 }
 
 func (t *Telegram) SendPhotoPeer(ctx context.Context, peerID int64, filename string, data []byte, caption string, opts ...SendOptions) error {
-	_, err := sendWithRetry(ctx, t.getProxy, t.onNetworkError, func() (struct{}, error) {
+	_, err := t.sendWithRetryTracking(ctx, func() (struct{}, error) {
 		b, err := t.client()
 		if err != nil {
 			return struct{}{}, err
@@ -166,7 +208,7 @@ func scheduleMarkup(b *ScheduleButtons) models.InlineKeyboardMarkup {
 }
 
 func (t *Telegram) DeleteMessage(ctx context.Context, chatID int64, messageID int) error {
-	_, err := sendWithRetry(ctx, t.getProxy, t.onNetworkError, func() (struct{}, error) {
+	_, err := t.sendWithRetryTracking(ctx, func() (struct{}, error) {
 		b, err := t.client()
 		if err != nil {
 			return struct{}{}, err

@@ -41,6 +41,9 @@ func openTestChatDB(t *testing.T) *gorm.DB {
 			dark_mode BOOLEAN NOT NULL DEFAULT 0,
 			access INTEGER NOT NULL DEFAULT 0,
 			platform TEXT NOT NULL DEFAULT 'telegram',
+			daily_disabled BOOLEAN NOT NULL DEFAULT 0,
+			pair_disabled BOOLEAN NOT NULL DEFAULT 0,
+			change_disabled BOOLEAN NOT NULL DEFAULT 0,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)

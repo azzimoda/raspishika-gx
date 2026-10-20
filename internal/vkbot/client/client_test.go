@@ -3,7 +3,6 @@ package vkclient
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +10,16 @@ import (
 	"github.com/SevereCloud/vksdk/v3/api"
 	"github.com/SevereCloud/vksdk/v3/longpoll-bot"
 )
+
+// testWrap wraps an error so that %w chains can be tested without triggering
+// go vet's complaint about wrapping a pointer type with %w.
+type testWrap struct {
+	msg string
+	err error
+}
+
+func (e *testWrap) Error() string { return e.msg }
+func (e *testWrap) Unwrap() error { return e.err }
 
 func TestNewValidation(t *testing.T) {
 	if _, err := New("", 1, ""); err == nil {
@@ -86,7 +95,7 @@ func TestIsForbidden(t *testing.T) {
 	}
 	// Wrapped and formatted forms must still be recognised, since the VK
 	// broadcast path inspects errors coming back through fmt.Errorf chains.
-	wrapped := fmt.Errorf("send VK message: %w", &api.Error{Code: 917})
+	wrapped := &testWrap{msg: "send VK message", err: &api.Error{Code: 917}}
 	if !IsForbidden(wrapped) {
 		t.Fatal("wrapped *api.Error not detected")
 	}
@@ -108,13 +117,13 @@ func TestIsFatalInitError(t *testing.T) {
 			t.Errorf("input %#v must not be fatal", input)
 		}
 	}
-	if !isFatalInitError(fmt.Errorf("init long poll: %w", &api.Error{Code: 5})) {
+	if !isFatalInitError(&testWrap{msg: "init long poll", err: &api.Error{Code: 5}}) {
 		t.Fatal("wrapped fatal *api.Error not detected")
 	}
 }
 
 func TestRandomIDWithinRange(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		id := randomID()
 		if id <= 0 {
 			t.Fatalf("randomID <= 0: %d", id)

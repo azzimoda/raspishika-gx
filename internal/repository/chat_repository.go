@@ -241,6 +241,9 @@ func (r *chatRepository) UpdateChat(ctx context.Context, chat *model.Chat) error
 			"update_notification": chat.ChangeAlert,
 			"access":              chat.Access,
 			"dark_mode":           chat.DarkMode,
+			"daily_disabled":      chat.DailyDisabled,
+			"pair_disabled":       chat.PairDisabled,
+			"change_disabled":     chat.ChangeDisabled,
 			"updated_at":          time.Now(),
 		}).Error
 }
@@ -313,20 +316,20 @@ func (r *chatRepository) GetChatsByWatchedGroup(ctx context.Context, group model
 func (r *chatRepository) GetChatsWithDailyTime(ctx context.Context, time string) ([]*model.Chat, error) {
 	var chats []*model.Chat
 	err := r.scoped().WithContext(ctx).
-		Where(`"group" IS NOT NULL AND daily_sending_time = ?`, time).
+		Where(`"group" IS NOT NULL AND daily_sending_time = ? AND daily_disabled IS FALSE`, time).
 		Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithPairNotification(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
 	err := r.scoped().WithContext(ctx).
-		Where(`"group" IS NOT NULL AND "group" != '' AND pair_sending IS TRUE`).
+		Where(`"group" IS NOT NULL AND "group" != '' AND pair_sending IS TRUE AND pair_disabled IS FALSE`).
 		Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithChangeAlert(ctx context.Context) ([]*model.Chat, error) {
 	var chats []*model.Chat
-	err := r.scoped().WithContext(ctx).Where("update_notification IS TRUE").Find(&chats).Error
+	err := r.scoped().WithContext(ctx).Where("update_notification IS TRUE AND change_disabled IS FALSE").Find(&chats).Error
 	return chats, err
 }
 func (r *chatRepository) GetChatsWithDarkMode(ctx context.Context) ([]*model.Chat, error) {

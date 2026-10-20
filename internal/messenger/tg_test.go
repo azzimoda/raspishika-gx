@@ -10,7 +10,7 @@ import (
 
 func TestSendWithRetrySucceedsAfterNetworkErrors(t *testing.T) {
 	attempts := 0
-	got, err := sendWithRetry(context.Background(), nil, nil, func() (int, error) {
+	got, err := sendWithRetry(context.Background(), nil, nil, nil, func() (int, error) {
 		attempts++
 		if attempts < 3 {
 			return 0, errors.New("write tcp ... broken pipe")
@@ -28,7 +28,7 @@ func TestSendWithRetrySucceedsAfterNetworkErrors(t *testing.T) {
 func TestSendWithRetryNoRetryOnBusinessError(t *testing.T) {
 	attempts := 0
 	hooked := false
-	_, err := sendWithRetry(context.Background(), nil, func(error, string) { hooked = true }, func() (int, error) {
+	_, err := sendWithRetry(context.Background(), nil, func(error, string) { hooked = true }, nil, func() (int, error) {
 		attempts++
 		return 0, bot.ErrorForbidden
 	})
@@ -46,7 +46,7 @@ func TestSendWithRetryNoRetryOnBusinessError(t *testing.T) {
 func TestSendWithRetryCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := sendWithRetry(ctx, nil, nil, func() (int, error) {
+	_, err := sendWithRetry(ctx, nil, nil, nil, func() (int, error) {
 		return 0, errors.New("write tcp ... connection timed out")
 	})
 	if !errors.Is(err, context.Canceled) {
@@ -61,7 +61,7 @@ func TestSendWithRetryHookAfterExhaustion(t *testing.T) {
 	getProxy := func() string { return "169.58.97.115:1080" }
 	_, err := sendWithRetry(context.Background(), getProxy, func(e error, p string) {
 		hooked, hookedProxy = e, p
-	}, func() (int, error) {
+	}, nil, func() (int, error) {
 		attempts++
 		return 0, errors.New("socks connect ... connection reset by peer")
 	})
@@ -83,7 +83,7 @@ func TestSendWithRetryHookFiresAfterNetworkErrorThenReconnect(t *testing.T) {
 	getProxy := func() string { return "169.58.97.115:1080" }
 	_, err := sendWithRetry(context.Background(), getProxy, func(e error, p string) {
 		hooked, hookedProxy = e, p
-	}, func() (int, error) {
+	}, nil, func() (int, error) {
 		attempts++
 		if attempts == 1 {
 			return 0, errors.New("write tcp ... connection timed out")
@@ -104,7 +104,7 @@ func TestSendWithRetryHookFiresAfterNetworkErrorThenReconnect(t *testing.T) {
 func TestSendWithRetryNoHookOnReconnectingOnly(t *testing.T) {
 	attempts := 0
 	var hooked error
-	_, err := sendWithRetry(context.Background(), nil, func(e error, _ string) { hooked = e }, func() (int, error) {
+	_, err := sendWithRetry(context.Background(), nil, func(e error, _ string) { hooked = e }, nil, func() (int, error) {
 		attempts++
 		return 0, errBotNotConnected
 	})

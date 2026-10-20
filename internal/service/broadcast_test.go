@@ -298,7 +298,7 @@ func TestBroadcastForbiddenDisablesSubscriptionsAndPreservesChat(t *testing.T) {
 				DarkMode:         true,
 			}
 			chats.put(chat)
-			service.recordSend(context.Background(), 9, chat, err)
+			service.recordSend(context.Background(), 9, chat, model.BDaily, err)
 			if errors.Is(err, errTestTransient) {
 				if len(chats.updated) != 0 || !chat.PairSending {
 					t.Fatal("temporary failure disabled subscriptions")
@@ -311,8 +311,16 @@ func TestBroadcastForbiddenDisablesSubscriptionsAndPreservesChat(t *testing.T) {
 				if lookupErr != nil {
 					t.Fatal(lookupErr)
 				}
-				if current.PairSending || current.ChangeAlert || current.DailySendingTime != nil {
-					t.Fatal("forbidden recipient still subscribed")
+				if current.DailySendingTime != nil {
+					t.Fatal("forbidden recipient still subscribed to daily")
+				}
+				// Pair and change subscriptions must stay enabled since the
+				// failure was on a daily broadcast only.
+				if !current.PairSending {
+					t.Fatal("pair subscription was incorrectly disabled")
+				}
+				if !current.ChangeAlert {
+					t.Fatal("change subscription was incorrectly disabled")
 				}
 				if current.ID != 18 || current.GroupName == nil || !current.DarkMode {
 					t.Fatal("recipient preferences were lost")

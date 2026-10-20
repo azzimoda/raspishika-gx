@@ -54,16 +54,12 @@ type ScheduleService struct {
 func (s *ScheduleService) GetSchedule(
 	ctx context.Context, conf model.ScheduleConfig,
 ) (schedule *model.ScheduleData, err error) {
-	schedule, err = s.scraper.GetSchedule(ctx, scheduleConfigToAPIParams(&conf))
-	if err != nil {
-		return
+	key := conf.ScheduleKey()
+	if cached, ok := s.GetScheduleCache(ctx, key); ok {
+		return cached, nil
 	}
-	if schedule == nil {
-		return nil, errors.New("API returned an empty schedule")
-	}
-	copy := schedule.WithConfig(conf)
-	schedule = &copy
-	return
+	// Cache miss or stale, update cache
+	return s.UpdateScheduleCache(ctx, conf)
 }
 
 // GetSchedules returns the schedules for the given configs and uses cache if available.

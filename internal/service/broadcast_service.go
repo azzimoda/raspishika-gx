@@ -13,6 +13,7 @@ import (
 	"github.com/azzimoda/raspishika-gx/internal/model"
 	"github.com/azzimoda/raspishika-gx/internal/reporter"
 	"github.com/azzimoda/raspishika-gx/pkg/config"
+	"github.com/azzimoda/raspishika-gx/pkg/metrics"
 	"github.com/azzimoda/raspishika-gx/pkg/refutil"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
@@ -37,14 +38,16 @@ type BroadcastService struct {
 	Messenger messenger.Messenger
 	*Services
 	reporter.Reporter
-	cron       *cron.Cron
-	ctx        context.Context
-	cancel     context.CancelFunc
-	parentStop func() bool
-	mu         sync.Mutex
-	running    bool
-	stopped    bool
-	jobs       jobGroup
+	cron                *cron.Cron
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	parentStop          func() bool
+	mu                  sync.Mutex
+	running             bool
+	stopped             bool
+	jobs                jobGroup
+	consecutiveFailures int
+	failuresMu          sync.Mutex
 }
 
 // jobGroup allows concurrent waiters and rejects new jobs after shutdown begins.
@@ -156,24 +159,14 @@ func (s *BroadcastService) Run(ctx context.Context, conf BroadcastConfig) error 
 
 func (s *BroadcastService) scheduleDaily(ctx context.Context) error {
 	_, err := s.cron.AddFunc("0 * * * * *", func() {
-		s.runJob(func() { s.handleDailyBroadcast(ctx, time.Now()) })
+		s.runJob(func() {
+			ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Minute)
+			defer cancel()
+			s.handleDailyBroadcast(ctxTimeout, time.Now())
+		})
 	})
 	return err
 }
-
-func (s *BroadcastService) canBroadcast(ctx context.Context) bool {
-	if ctx.Err() != nil || s.Messenger == nil {
-		return false
-	}
-	if vacation, err := s.Schedule.IsVacation(ctx); err != nil {
-		log.Warn().Err(err).Msg("Failed to check vacation status; processing broadcasts")
-	} else if vacation {
-		log.Debug().Msg("Skipped broadcast because of vacation")
-		return false
-	}
-	return true
-}
-
 func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time) {
 	if !s.canBroadcast(ctx) {
 		return
@@ -202,9 +195,36 @@ func (s *BroadcastService) handleDailyBroadcast(ctx context.Context, t time.Time
 		return
 	}
 	if err := s.sendDaily(ctx, task.ID, schedules, grouped); err != nil {
+		s.failuresMu.Lock()
+		s.consecutiveFailures++
+		if s.consecutiveFailures >= 5 {
+			s.failuresMu.Unlock()
+			s.reportError(err, "Errors while sending daily broadcast")
+			s.finishTask(ctx, &task, start)
+			return
+		}
+		s.failuresMu.Unlock()
 		s.reportError(err, "Errors while sending daily broadcast")
+		s.finishTask(ctx, &task, start)
+		return
 	}
+	s.failuresMu.Lock()
+	s.consecutiveFailures = 0
+	s.failuresMu.Unlock()
 	s.finishTask(ctx, &task, start)
+}
+
+func (s *BroadcastService) canBroadcast(ctx context.Context) bool {
+	if ctx.Err() != nil || s.Messenger == nil {
+		return false
+	}
+	if vacation, err := s.Schedule.IsVacation(ctx); err != nil {
+		log.Warn().Err(err).Msg("Failed to check vacation status; processing broadcasts")
+	} else if vacation {
+		log.Debug().Msg("Skipped broadcast because of vacation")
+		return false
+	}
+	return true
 }
 
 type broadcastImage struct {
@@ -343,7 +363,10 @@ func (s *BroadcastService) sendDaily(
 				}
 				err = s.sendSchedule(ctx, chat, img)
 			}
-			s.recordSend(ctx, taskID, chat, err)
+			if err != nil && botutil.IsPermanentError(err) {
+				s.handleForbidden(ctx, err, chat, model.BDaily)
+			}
+			s.recordSend(ctx, taskID, chat, model.BDaily, err)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -464,7 +487,10 @@ func (s *BroadcastService) sendPairNotificatins(
 				pendingDeletes = append(pendingDeletes,
 					messageRef{peerID: int64(chat.PeerID), messageID: messageID})
 			}
-			s.recordSend(ctx, taskID, chat, err)
+			if err != nil && botutil.IsPermanentError(err) {
+				s.handleForbidden(ctx, err, chat, model.BPair)
+			}
+			s.recordSend(ctx, taskID, chat, model.BPair, err)
 			if err != nil {
 				errs = append(errs, err)
 			} else {
@@ -639,7 +665,10 @@ func (s *BroadcastService) sendChangeReports(
 					err = errors.Join(err, sendErr)
 				}
 			}
-			s.recordSend(ctx, taskID, chat, err)
+			if err != nil && botutil.IsPermanentError(err) {
+				s.handleForbidden(ctx, err, chat, model.BChange)
+			}
+			s.recordSend(ctx, taskID, chat, model.BChange, err)
 			if err != nil {
 				errs = append(errs, err)
 			} else {
@@ -650,9 +679,15 @@ func (s *BroadcastService) sendChangeReports(
 	return success, errors.Join(errs...)
 }
 
-func (s *BroadcastService) recordSend(ctx context.Context, taskID int64, chat *model.Chat, err error) {
+func (s *BroadcastService) recordSend(ctx context.Context, taskID int64, chat *model.Chat, kind model.BroadcastKind, err error) {
+	metrics.BroadcastChatsTotal.WithLabelValues(string(kind)).Inc()
 	if s.Messenger.IsForbidden(err) {
-		s.handleForbidden(ctx, err, chat)
+		s.handleForbidden(ctx, err, chat, kind)
+	}
+	if err == nil {
+		metrics.BroadcastSentTotal.WithLabelValues(string(kind)).Inc()
+	} else {
+		metrics.BroadcastFailedTotal.WithLabelValues(string(kind)).Inc()
 	}
 	s.logBroadcast(ctx, taskID, chat, err)
 }
@@ -797,7 +832,7 @@ func (s *BroadcastService) massSend(
 			continue
 		}
 		_, err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), htmlText)
-		s.recordSend(ctx, task.ID, chat, err)
+		s.recordSend(ctx, task.ID, chat, model.BMass, err)
 		if err != nil {
 			log.Error().Err(err).Int64("peerID", int64(chat.PeerID)).Msg("Broadcast send failed")
 		} else {
@@ -859,7 +894,7 @@ func (s *BroadcastService) notifyAndResetInvalidChats(ctx context.Context, inval
 			)
 			_, err := s.Messenger.SendMessagePeer(ctx, int64(chat.PeerID), text)
 			if s.Messenger.IsForbidden(err) {
-				s.handleForbidden(ctx, err, chat)
+				s.handleForbidden(ctx, err, chat, model.BAny)
 			} else if err != nil {
 				s.reportError(err, "Failed to notify about removed group")
 			}
@@ -910,7 +945,7 @@ func (s *BroadcastService) Stop(ctx context.Context) {
 	s.jobs.wait(ctx)
 }
 
-func (s *BroadcastService) handleForbidden(ctx context.Context, sendErr error, chat *model.Chat) {
+func (s *BroadcastService) handleForbidden(ctx context.Context, sendErr error, chat *model.Chat, kind model.BroadcastKind) {
 	current, err := s.currentRecipient(ctx, chat, model.BMass)
 	if err != nil {
 		s.reportError(err, "Failed to recheck unavailable recipient")
@@ -922,9 +957,25 @@ func (s *BroadcastService) handleForbidden(ctx context.Context, sendErr error, c
 	chat = current
 	log.Warn().Err(sendErr).Int64("peerID", int64(chat.PeerID)).
 		Msg("Messaging unavailable; disabling subscriptions")
-	chat.DailySendingTime = nil
-	chat.PairSending = false
-	chat.ChangeAlert = false
+	switch kind {
+	case model.BDaily:
+		chat.DailySendingTime = nil
+		chat.DailyDisabled = true
+	case model.BPair:
+		chat.PairSending = false
+		chat.PairDisabled = true
+	case model.BChange:
+		chat.ChangeAlert = false
+		chat.ChangeDisabled = true
+	default: // BMass, BAny
+		chat.DailySendingTime = nil
+		chat.PairSending = false
+		chat.ChangeAlert = false
+		chat.DailyDisabled = true
+		chat.PairDisabled = true
+		chat.ChangeDisabled = true
+	}
+	metrics.BroadcastChatsDisabledTotal.WithLabelValues(string(kind)).Inc()
 	if err := s.Chat.UpdateChat(ctx, chat); err != nil {
 		s.reportError(err, "Failed to disable unavailable recipient subscriptions")
 	}

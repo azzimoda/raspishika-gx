@@ -8,7 +8,7 @@ import (
 )
 
 // TestSQLiteMigrateUp applies the SQLite migration set to a fresh file and
-// asserts the multi-platform schema shaped by 00005/00006.
+// asserts the multi-platform schema shaped by 00005/00006/00007.
 func TestSQLiteMigrateUp(t *testing.T) {
 	testutil.MoveToProjectRoot()
 	file := filepath.Join(t.TempDir(), "migrated.db")
@@ -22,8 +22,8 @@ func TestSQLiteMigrateUp(t *testing.T) {
 	if err := db.Raw("SELECT MAX(version_id) AS version FROM goose_db_version").Scan(&version).Error; err != nil {
 		t.Fatalf("failed to read goose version: %v", err)
 	}
-	if version.Version != 6 {
-		t.Fatalf("expected 6 SQLite migrations to be applied, got version %d", version.Version)
+	if version.Version != 7 {
+		t.Fatalf("expected 7 SQLite migrations to be applied, got version %d", version.Version)
 	}
 
 	var hasPlatform int
@@ -33,6 +33,17 @@ func TestSQLiteMigrateUp(t *testing.T) {
 	}
 	if hasPlatform != 1 {
 		t.Fatal("chats table has no platform column")
+	}
+
+	for _, col := range []string{"daily_disabled", "pair_disabled", "change_disabled"} {
+		var hasCol int
+		if err := db.Raw(`SELECT COUNT(*) FROM pragma_table_info('chats') WHERE name=?`, col).
+			Scan(&hasCol).Error; err != nil {
+			t.Fatalf("failed to inspect chats columns: %v", err)
+		}
+		if hasCol != 1 {
+			t.Fatalf("chats table has no %s column", col)
+		}
 	}
 
 	if err := db.Exec(`INSERT INTO chats (tg_chat_id, platform) VALUES (?, ?)`, int64(12345), "telegram").Error; err != nil {
