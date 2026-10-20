@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -v -o
 RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -v -o fakeapi ./cmd/fakeapi
 
 
-FROM golang:1.26-alpine
+FROM golang:1.27-alpine
 
 WORKDIR /app
 
