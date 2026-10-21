@@ -35,6 +35,8 @@ require (
 	gorm.io/gorm v1.31.2
 )
 
+replace github.com/azzimoda/go-tg-proxy => /home/mazza/Projects/raspishika/go-tg-proxy
+
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/SyNdicateFoundation/fastrand v1.0.0 // indirect
