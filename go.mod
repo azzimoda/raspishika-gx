@@ -8,7 +8,7 @@ require (
 	github.com/SyNdicateFoundation/legitagent v1.0.3
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/avast/retry-go/v5 v5.0.0
-	github.com/azzimoda/go-tg-proxy v0.1.4
+	github.com/azzimoda/go-tg-proxy v0.1.5
 	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
 	github.com/chromedp/chromedp v0.16.0
 	github.com/corpix/uarand v0.2.0
