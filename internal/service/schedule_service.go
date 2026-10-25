@@ -56,7 +56,13 @@ func (s *ScheduleService) GetSchedule(
 ) (schedule *model.ScheduleData, err error) {
 	key := conf.ScheduleKey()
 	if cached, ok := s.GetScheduleCache(ctx, key); ok {
-		return cached, nil
+		// The cache holds one payload per group/teacher and its key does not
+		// include the theme, so the stored config may carry the dark-mode flag
+		// of whichever chat filled the cache. Re-apply the requested config:
+		// otherwise a dark-mode chat is served a light-theme picture (and vice
+		// versa) until the cache expires.
+		copy := cached.WithConfig(conf)
+		return &copy, nil
 	}
 	// Cache miss or stale, update cache
 	return s.UpdateScheduleCache(ctx, conf)
